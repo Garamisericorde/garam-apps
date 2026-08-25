@@ -1,0 +1,38 @@
+/*
+ * @garam/theme — eski g-note token isimleri icin gecis katmani.
+ *
+ * g-note'un index.css'i --color-* isimlerini kullaniyor. Bu dosya onlari yeni
+ * tokenlara baglar, boylece g-note tek seferde degil, parca parca tasinabilir.
+ * g-note migrasyonu bitince BU DOSYA SILINMELI.
+ */
+
+:root {
+  --color-bg-primary: var(--bg-surface);
+  --color-bg-secondary: var(--bg-hover);
+  --color-bg-tertiary: var(--bg-active);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-text-primary: var(--text);
+  --color-text-secondary: var(--text-muted);
+  --color-border: var(--border);
+  --color-toolbar-bg: var(--bg-elevated);
+  --color-editor-bg: #ffffff;
+  --color-button-hover: var(--accent-soft);
+
+  --spacing-xs: var(--sp-1);
+  --spacing-sm: var(--sp-2);
+  --spacing-md: var(--sp-3);
+  --spacing-lg: var(--sp-4);
+  --spacing-xl: var(--sp-5);
+
+  --border-radius-sm: var(--radius-sm);
+  --border-radius-md: var(--radius);
+  --border-radius-lg: var(--radius-lg);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.28);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.4);
+
+  --transition-fast: var(--t-fast);
+  --transition-normal: var(--t);
+}

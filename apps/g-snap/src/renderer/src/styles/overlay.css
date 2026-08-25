@@ -1,0 +1,216 @@
+/* G-Snap overlay — tam ekran secim ve anotasyon yuzeyi */
+
+.overlay-body {
+  background: transparent;
+  overflow: hidden;
+  cursor: crosshair;
+}
+
+.snap-overlay {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+.snap-overlay--loading {
+  background: transparent;
+}
+
+.snap-overlay.is-crosshair {
+  cursor: crosshair;
+}
+
+.snap-overlay.is-drawing {
+  cursor: crosshair;
+}
+
+/* ── Secim yok iken gorunen ipucu ─────────────────────────────────────── */
+
+.snap-hint {
+  position: absolute;
+  transform: translate(18px, -32px);
+  padding: var(--sp-1) var(--sp-3);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: var(--z-overlay);
+}
+
+/* Ctrl basili: birakinca dogrudan panoya kopyalanacak */
+.snap-hint--copy {
+  border-color: var(--accent);
+  color: var(--text);
+  box-shadow:
+    var(--shadow-md),
+    0 0 0 3px var(--accent-soft);
+}
+
+.snap-hint kbd {
+  padding: 1px 5px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  font-family: var(--font);
+  font-size: var(--fs-xs);
+  color: var(--text);
+}
+
+/* ── Buyutec ──────────────────────────────────────────────────────────── */
+
+.snap-magnifier {
+  position: absolute;
+  z-index: var(--z-overlay);
+  pointer-events: none;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.snap-magnifier__canvas {
+  display: block;
+  image-rendering: pixelated;
+}
+
+.snap-magnifier__info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: 3px var(--sp-2);
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.snap-magnifier__coords {
+  color: var(--text-muted);
+}
+
+.snap-magnifier__color {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text);
+  font-family: var(--font-mono);
+}
+
+.snap-magnifier__color::before {
+  content: '';
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  border: 1px solid var(--border-strong);
+  background: var(--swatch, transparent);
+}
+
+/* ── Arac cubuklari ───────────────────────────────────────────────────── */
+
+.snap-toolpanel,
+.snap-actionbar {
+  position: absolute;
+  z-index: var(--z-overlay);
+  cursor: default;
+}
+
+.snap-toolpanel__thickness {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--sp-1) 0;
+  width: 100%;
+}
+
+.snap-toolpanel__slider {
+  width: 30px;
+}
+
+/* Dikey cubukta kaydiriciyi dikey cevir */
+.snap-toolpanel__slider .g-slider__input {
+  min-width: 0;
+  width: 30px;
+}
+
+.snap-toolpanel__thickness-value {
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+/* ── Metin girisi ─────────────────────────────────────────────────────── */
+
+.snap-textinput {
+  position: absolute;
+  z-index: var(--z-overlay);
+  min-width: 120px;
+  min-height: 1.4em;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: 1px dashed var(--accent);
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  font-family: 'Segoe UI', sans-serif;
+  font-weight: 600;
+  line-height: 1.15;
+  white-space: pre;
+  user-select: text;
+}
+
+/* ── Bildirim ─────────────────────────────────────────────────────────── */
+
+.snap-toast {
+  position: fixed;
+  bottom: var(--sp-4);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-tooltip);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-4);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-lg);
+  font-size: var(--fs-md);
+  animation: snap-toast-in var(--t) ease-out;
+}
+
+.snap-toast--success {
+  border-color: var(--success);
+}
+
+.snap-toast--error {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.snap-toast button {
+  color: var(--accent);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+}
+
+.snap-toast button:hover {
+  color: var(--accent-hover);
+}
+
+@keyframes snap-toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}

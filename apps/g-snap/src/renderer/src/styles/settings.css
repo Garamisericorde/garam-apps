@@ -1,0 +1,113 @@
+/* G-Snap ayarlar penceresi */
+
+.snap-settings {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg);
+}
+
+.snap-settings__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+/* Kayit klasoru satiri: uzun yol + "Sec" dugmesi */
+.snap-settings__path {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  max-width: 320px;
+}
+
+.snap-settings__path .g-input {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  /* Uzun yollarda sonu (dosya adini) goster */
+  direction: rtl;
+  text-align: left;
+}
+
+.snap-settings__slider {
+  width: 180px;
+}
+
+.snap-hotkey-input {
+  width: 180px;
+  text-align: center;
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+}
+
+.snap-settings__version {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.snap-settings__about-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding: var(--sp-3) 0;
+}
+
+/* ── Kisayol listesi ──────────────────────────────────────────────────── */
+
+.snap-settings__shortcuts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0;
+}
+
+.snap-settings__shortcut {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.snap-settings__shortcut .g-kbd {
+  flex: 0 0 auto;
+  min-width: 120px;
+}
+
+/* ── Bildirim ─────────────────────────────────────────────────────────── */
+
+.snap-toast {
+  position: fixed;
+  bottom: var(--sp-4);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-tooltip);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-4);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-lg);
+  font-size: var(--fs-md);
+}
+
+.snap-toast--success {
+  border-color: var(--success);
+}
+
+.snap-toast--error {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.snap-toast button {
+  color: var(--accent);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+}

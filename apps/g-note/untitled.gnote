@@ -1,0 +1,42 @@
+{
+  "appVersion": "1.0.0",
+  "documentVersion": 2,
+  "createdAt": "2026-01-23T17:20:35.937Z",
+  "updatedAt": "2026-01-23T17:20:35.937Z",
+  "editorContent": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "paragraph",
+        "content": []
+      }
+    ]
+  },
+  "stickyNotes": [
+    {
+      "id": "dc367cc6-b1ab-462b-a489-eed2b58e03ff",
+      "x": 148.1132049560547,
+      "y": 62.85377502441406,
+      "width": 150,
+      "height": 100,
+      "backgroundColor": "#fef3c7",
+      "title": "adsad",
+      "text": "",
+      "createdAt": "2026-01-23T17:19:16.789Z",
+      "updatedAt": "2026-01-23T17:19:44.778Z"
+    },
+    {
+      "id": "16b866ba-adbe-449d-a1c6-f78998736fe8",
+      "x": 466.1132049560547,
+      "y": 291.85377502441406,
+      "width": 253,
+      "height": 164,
+      "backgroundColor": "#fef3c7",
+      "title": "test",
+      "text": "deneme",
+      "createdAt": "2026-01-23T17:19:21.087Z",
+      "updatedAt": "2026-01-23T17:19:57.238Z"
+    }
+  ],
+  "strokes": []
+}

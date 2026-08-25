@@ -1,0 +1,15 @@
+node_modules/
+dist/
+dist-electron/
+out/
+release/
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
+*.log
+logs/
+.env
+.env.local
+installer/bootstrapper/target/
+resources/ffmpeg/
+catalog.json

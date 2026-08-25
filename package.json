@@ -1,0 +1,40 @@
+{
+  "name": "garam-apps",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Garam masaustu uygulamalari monorepo'su",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:snap": "npm run dev -w g-snap",
+    "dev:note": "npm run dev -w g-note",
+    "dev:recorder": "npm run dev -w g-recorder",
+    "build:snap": "npm run build -w g-snap",
+    "package:snap": "npm run package -w g-snap",
+    "package:note": "npm run package -w g-note",
+    "package:recorder": "npm run package -w g-recorder",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "catalog": "node tools/release/build-catalog.mjs",
+    "clean": "node tools/release/clean.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.9.0",
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "eslint": "^9.9.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-react": "^7.35.0",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "prettier": "^3.3.3",
+    "typescript": "^5.5.4",
+    "typescript-eslint": "^8.0.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

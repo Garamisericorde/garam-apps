@@ -1,0 +1,39 @@
+appId: com.garam.g-recorder
+productName: G-Recorder
+
+directories:
+  output: dist
+  buildResources: resources
+
+files:
+  - out/**/*
+
+extraResources:
+  # FFmpeg is optional at package time — the app downloads it on first run when
+  # this folder is empty, which keeps the installer small.
+  - from: resources/ffmpeg
+    to: ffmpeg
+    filter:
+      - "**/*"
+      - "!.gitkeep"
+  # Tray and window icons are loaded from disk at runtime.
+  - from: resources/icons
+    to: icons
+    filter:
+      - "**/*.png"
+      - "**/*.ico"
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: resources/icons/icon.ico
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: G-Recorder

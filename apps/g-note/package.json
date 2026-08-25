@@ -1,0 +1,57 @@
+{
+  "name": "g-note",
+  "version": "1.0.0",
+  "description": "A production-quality note-taking desktop application",
+  "main": "backend/main.js",
+  "scripts": {
+    "dev": "concurrently \"vite\" \"electron .\"",
+    "start": "npm run dev",
+    "dev:vite": "vite",
+    "build": "vite build && electron-builder",
+    "preview": "vite preview",
+    "package": "npm run build"
+  },
+  "dependencies": {
+    "@tiptap/core": "^2.1.13",
+    "@tiptap/extension-color": "^2.1.13",
+    "@tiptap/extension-font-family": "^2.1.13",
+    "@tiptap/extension-highlight": "^2.1.13",
+    "@tiptap/extension-text-style": "^2.1.13",
+    "@tiptap/extension-underline": "^2.1.13",
+    "@tiptap/pm": "^2.1.13",
+    "@tiptap/react": "^2.1.13",
+    "@tiptap/starter-kit": "^2.1.13",
+    "konva": "^9.2.3",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-konva": "^18.2.10",
+    "uuid": "^9.0.0",
+    "zustand": "^4.4.7"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@types/uuid": "^9.0.7",
+    "@vitejs/plugin-react": "^4.2.1",
+    "concurrently": "^8.2.2",
+    "electron": "^28.3.3",
+    "electron-builder": "^24.9.1",
+    "typescript": "^5.3.2",
+    "vite": "^5.0.8"
+  },
+  "build": {
+    "appId": "com.gnote.app",
+    "productName": "G-Note",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "win": {
+      "target": "nsis"
+    }
+  }
+}

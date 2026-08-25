@@ -1,0 +1,266 @@
+/*
+ * Garam Setup stilleri.
+ *
+ * Tokenler @garam/theme ile AYNI degerlerdir; setup kurdugu uygulamalarla ayni
+ * gorunsun diye. Paket olarak import etmiyoruz — bootstrapper npm workspace'ine
+ * bagli olmadan tek basina derlenebilmeli. Renk degistirirsen ikisini birlikte
+ * guncelle: packages/theme/src/tokens.css
+ */
+
+:root {
+  --bg: #14142a;
+  --bg-surface: #1a1a2e;
+  --bg-elevated: #1e1e3f;
+  --bg-hover: #16213e;
+  --bg-inset: rgba(0, 0, 0, 0.22);
+
+  --border: #2d3748;
+  --border-strong: #3d4a63;
+
+  --text: #eaeaea;
+  --text-muted: #a0a0a0;
+  --text-on-accent: #ffffff;
+
+  --accent: #e94560;
+  --accent-hover: #ff6b6b;
+  --accent-soft: rgba(233, 69, 96, 0.15);
+  --danger: #ef4444;
+  --success: #4ade80;
+
+  --font: 'Segoe UI', -apple-system, sans-serif;
+  --radius-sm: 4px;
+  --radius: 8px;
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.28);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  overflow: hidden;
+}
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 24px;
+  gap: 12px;
+}
+
+.screen--list {
+  gap: 8px;
+}
+
+h1 {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.muted {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.error-text {
+  color: var(--danger);
+  font-size: 12px;
+  word-break: break-word;
+}
+
+/* ── Uygulama listesi ─────────────────────────────────────────────────── */
+
+.list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease;
+}
+
+.row:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+.row:has(.checkbox:checked) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.checkbox {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.row__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.row__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.badge {
+  padding: 1px 6px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.row__desc {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.row__size {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Alt bar ──────────────────────────────────────────────────────────── */
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.btn {
+  height: 32px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--bg-elevated);
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.btn--primary {
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ── Ilerleme ─────────────────────────────────────────────────────────── */
+
+.bar {
+  height: 6px;
+  background: var(--bg-inset);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.bar__fill {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 200ms ease;
+}
+
+.log {
+  flex: 1;
+  overflow-y: auto;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.log__line {
+  padding: 2px 0;
+}
+
+.spinner {
+  width: 22px;
+  height: 22px;
+  margin: auto auto 0;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.tick {
+  width: 46px;
+  height: 46px;
+  margin: auto auto 4px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--success);
+  color: #14142a;
+  font-size: 24px;
+  font-weight: 700;
+}

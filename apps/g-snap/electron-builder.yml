@@ -1,0 +1,35 @@
+appId: com.garam.g-snap
+productName: G-Snap
+copyright: Copyright (c) 2026 Garam
+
+directories:
+  output: release
+  buildResources: resources
+
+files:
+  - out/**/*
+  - package.json
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: resources/icons/icon.ico
+  artifactName: ${productName}-${version}-setup.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: G-Snap
+  # Bootstrapper sessiz kurulum icin /S bayragini kullanir.
+  deleteAppDataOnUninstall: false
+
+publish:
+  provider: github
+  owner: GARAM_GITHUB_KULLANICI_ADI
+  repo: garam-apps
+  releaseType: release

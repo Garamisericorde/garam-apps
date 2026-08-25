@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": [
+    "src/renderer/src/**/*",
+    "src/preload/*.d.ts",
+    "src/shared/**/*",
+    "../../packages/ui/src/**/*",
+    "../../packages/theme/src/**/*"
+  ],
+  "compilerOptions": {
+    "composite": true,
+    "types": ["vite/client"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/renderer/src/*"],
+      "@shared/*": ["src/shared/*"],
+      "@garam/ui": ["../../packages/ui/src/index.ts"],
+      "@garam/theme": ["../../packages/theme/src/index.ts"]
+    }
+  }
+}

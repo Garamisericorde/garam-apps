@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "strict": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "outDir": "out",
+    "rootDir": ".",
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": [
+    "electron.vite.config.*",
+    "app/main/**/*",
+    "app/preload/**/*",
+    "app/shared/**/*",
+    "src/main/**/*",
+    "src/preload/**/*"
+  ],
+  "exclude": ["node_modules", "app/renderer"]
+}

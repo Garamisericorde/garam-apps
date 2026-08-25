@@ -1,0 +1,30 @@
+[package]
+name = "garam-setup"
+version = "0.1.0"
+description = "Garam uygulamalari icin kucuk indirici kurulum programi"
+edition = "2021"
+rust-version = "1.70"
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
+
+[dependencies]
+tauri = { version = "1.7", features = ["shell-open"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# rustls: sistem OpenSSL'ine bagimli olmadan HTTPS — tek dosya dagitimi kolaylasir
+reqwest = { version = "0.11", default-features = false, features = ["json", "stream", "rustls-tls"] }
+futures-util = "0.3"
+sha2 = "0.10"
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+# Setup boyutunu kucuk tutmak icin: boyut icin optimize et, LTO ac,
+# panik acilimini ve sembolleri at.
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
