@@ -6,6 +6,7 @@ import { RecorderService } from '../ffmpeg/RecorderService'
 import { isSaving, runSaveReplay } from '../ffmpeg/saveReplayPipeline'
 import { SettingsStore } from '../settings/SettingsStore'
 import { registerClipFile } from '../protocol/clipProtocol'
+import { receiveSystemAudioChunk } from '../audio/SystemAudioBridge'
 import { logger } from '../logging/logger'
 import { broadcast } from './broadcast'
 
@@ -30,6 +31,16 @@ export function registerRecorderIpc(): void {
 
   recorder.onStatusChange((status: RecorderStatus) => {
     broadcast('recorder:statusChange', status)
+  })
+
+  // Raw PCM from the renderer's loopback capture. `on`, not `handle`: this
+  // fires many times a second and has nothing to return.
+  ipcMain.on('systemAudio:chunk', (_event, pcm: ArrayBuffer) => {
+    receiveSystemAudioChunk(Buffer.from(pcm))
+  })
+
+  ipcMain.on('systemAudio:error', (_event, message: string) => {
+    logger.warn('SystemAudio: renderer reported a failure', message)
   })
 
   ipcMain.handle('recorder:start', () => recorder.start())

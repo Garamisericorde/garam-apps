@@ -1,9 +1,9 @@
 import { join } from 'path'
-import { app } from 'electron'
+import { userDataDir as sharedUserDataDir } from '@garam/core'
 
 /** Base user-data directory (%APPDATA%/g-recorder) */
 export function userDataDir(): string {
-  return app.getPath('userData')
+  return sharedUserDataDir()
 }
 
 export function logsDir(): string {

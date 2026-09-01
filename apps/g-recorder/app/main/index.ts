@@ -1,7 +1,10 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, nativeImage, shell } from 'electron'
 import { join, resolve } from 'path'
-import { is } from '@electron-toolkit/utils'
+import { existsSync } from 'fs'
+import { electronApp, is } from '@electron-toolkit/utils'
+import { violetSurfaces } from '@garam/theme'
 import { logger } from './logging/logger'
+import { registerSystemAudioHandler } from './audio/SystemAudioBridge'
 import { localTimestamp } from '../shared/time'
 import { SettingsStore } from './settings/SettingsStore'
 import { FfmpegManager } from './ffmpeg/FfmpegManager'
@@ -40,6 +43,13 @@ if (!app.requestSingleInstanceLock()) {
 
 async function start(): Promise<void> {
   await app.whenReady()
+
+  // Packaged only. Windows resolves a taskbar icon through the AppUserModelID's
+  // registered shortcut, which exists once the app is installed — setting the
+  // ID without one makes Windows fall back to the host executable's icon and
+  // *overrides* the icon the window sets for itself. In development that host
+  // is electron.exe, so the ID is exactly what pins Electron's logo there.
+  if (app.isPackaged) electronApp.setAppUserModelId('com.garam.g-recorder')
 
   const settings = SettingsStore.getInstance()
   await settings.load()
@@ -96,7 +106,7 @@ function createMainWindow(): void {
     minWidth: 900,
     minHeight: 640,
     show: false,
-    backgroundColor: '#1a1a1f',
+    backgroundColor: violetSurfaces.bg,
     autoHideMenuBar: true,
     icon: resolve(app.getAppPath(), 'resources', 'icons', 'icon.png'),
     webPreferences: {
@@ -104,8 +114,15 @@ function createMainWindow(): void {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: false,
+      // This window captures system audio while the buffer runs, and it spends
+      // most of that time hidden behind a game. Chromium throttles hidden
+      // windows hard enough to break the audio graph, so it must not.
+      backgroundThrottling: false,
     },
   })
+
+  applyWindowIcon(mainWindow)
+  registerSystemAudioHandler(mainWindow)
 
   // Launching at login (or with --hidden) should not steal focus
   const startHidden = process.argv.includes('--hidden')
@@ -136,7 +153,46 @@ function createMainWindow(): void {
     void mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
+  // Report the palette the window actually resolved. "The theme did not change"
+  // and "the stylesheet did not load" look identical from the outside, and the
+  // renderer is the only place that can tell them apart.
+  mainWindow.webContents.once('did-finish-load', () => {
+    void mainWindow?.webContents
+      .executeJavaScript(
+        `(() => { const s = getComputedStyle(document.documentElement);
+          return { accent: s.getPropertyValue('--accent').trim(),
+                   bg: s.getPropertyValue('--bg').trim(), url: location.href } })()`,
+      )
+      .then((palette) => logger.info('Renderer palette', palette))
+      .catch(() => undefined)
+  })
+
   logger.info('Main window created')
+}
+
+/**
+ * Set the window icon explicitly, from the .ico.
+ *
+ * The `icon` constructor option takes the 256px PNG, which Windows then has to
+ * downscale for the taskbar; the .ico carries purpose-drawn 16 and 32px frames
+ * and is what the installed app uses, so both paths end up identical. The
+ * result is logged because a missing or unreadable file fails silently — the
+ * window simply keeps the host executable's icon, which in development is
+ * Electron's own and reads as "the icon change did not work".
+ */
+function applyWindowIcon(window: BrowserWindow): void {
+  const path = app.isPackaged
+    ? join(process.resourcesPath, 'icons', 'icon.ico')
+    : resolve(app.getAppPath(), 'resources', 'icons', 'icon.ico')
+
+  const image = nativeImage.createFromPath(path)
+  if (image.isEmpty()) {
+    logger.warn('Window icon could not be loaded', { path, exists: existsSync(path) })
+    return
+  }
+
+  window.setIcon(image)
+  logger.info('Window icon applied', { path })
 }
 
 function showMainWindow(route?: string): void {

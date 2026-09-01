@@ -2,7 +2,7 @@ appId: com.garam.g-recorder
 productName: G-Recorder
 
 directories:
-  output: dist
+  output: release
   buildResources: resources
 
 files:
@@ -29,6 +29,7 @@ win:
       arch:
         - x64
   icon: resources/icons/icon.ico
+  artifactName: ${productName}-${version}-setup.${ext}
 
 nsis:
   oneClick: false

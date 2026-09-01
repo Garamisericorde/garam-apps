@@ -1,6 +1,7 @@
 import { globalShortcut } from 'electron'
 import { SettingsStore } from '../settings/SettingsStore'
 import { logger } from '../logging/logger'
+import type { HotkeyFailure } from '../../shared/types'
 
 export interface HotkeyActions {
   saveReplay: () => void
@@ -10,9 +11,18 @@ export interface HotkeyActions {
 export interface HotkeyRegistrationResult {
   saveReplay: boolean
   toggleRecording: boolean
-  /** Accelerators Windows refused, usually because another app owns them */
-  failed: string[]
+  /**
+   * Accelerators that did not take, with the reason.
+   *
+   * The two causes need different advice: 'taken' means another app owns the
+   * combination, 'invalid' means the string itself is not a legal accelerator.
+   * Reporting both as a conflict sent users hunting for an app that was not
+   * there.
+   */
+  failed: HotkeyFailure[]
 }
+
+
 
 export class HotkeyManager {
   private lastResult: HotkeyRegistrationResult = {
@@ -20,6 +30,9 @@ export class HotkeyManager {
     toggleRecording: false,
     failed: [],
   }
+
+  /** Why the most recent registration attempt failed. */
+  private lastReason: 'taken' | 'invalid' = 'taken'
 
   constructor(private readonly actions: HotkeyActions) {}
 
@@ -31,9 +44,11 @@ export class HotkeyManager {
     const saveReplay = this.tryRegister(hotkeySaveReplay, this.actions.saveReplay)
     const toggleRecording = this.tryRegister(hotkeyToggleRecording, this.actions.toggleRecording)
 
-    const failed: string[] = []
-    if (!saveReplay) failed.push(hotkeySaveReplay)
-    if (!toggleRecording) failed.push(hotkeyToggleRecording)
+    const failed: HotkeyFailure[] = []
+    if (!saveReplay) failed.push({ accelerator: hotkeySaveReplay, reason: this.lastReason })
+    if (!toggleRecording) {
+      failed.push({ accelerator: hotkeyToggleRecording, reason: this.lastReason })
+    }
 
     this.lastResult = { saveReplay, toggleRecording, failed }
     logger.info('Hotkeys registered', {
@@ -58,8 +73,12 @@ export class HotkeyManager {
    */
   private tryRegister(accelerator: string, handler: () => void): boolean {
     try {
-      return globalShortcut.register(accelerator, handler)
+      const ok = globalShortcut.register(accelerator, handler)
+      this.lastReason = 'taken'
+      return ok
     } catch (err) {
+      // A malformed accelerator throws; an accelerator another app owns does not.
+      this.lastReason = 'invalid'
       logger.warn(`Invalid hotkey "${accelerator}"`, String(err))
       return false
     }

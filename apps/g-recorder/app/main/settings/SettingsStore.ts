@@ -1,6 +1,6 @@
 import { app } from 'electron'
-import { dirname } from 'path'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync } from 'fs'
+import { readJson, writeJson } from '@garam/core'
 import type { AppSettings } from '../../shared/types'
 import { settingsFilePath } from '../../shared/paths'
 import { DEFAULT_SETTINGS } from './defaults'
@@ -36,7 +36,9 @@ export class SettingsStore {
     }
 
     try {
-      const raw = JSON.parse(readFileSync(filePath, 'utf8')) as unknown
+      // readJson strips a leading BOM. Windows tools write UTF-8 with one, and
+      // a bare JSON.parse throws on it — which silently reset every setting.
+      const raw = await readJson<unknown>(filePath, null)
       const { settings, warnings } = sanitizeSettings(raw)
 
       if (warnings.length > 0) {
@@ -85,8 +87,10 @@ export class SettingsStore {
   private async persist(): Promise<void> {
     const filePath = settingsFilePath()
     try {
-      mkdirSync(dirname(filePath), { recursive: true })
-      writeFileSync(filePath, JSON.stringify(this.settings, null, 2), 'utf8')
+      // Atomic: writes to a temp file, fsyncs, then renames. The previous
+      // writeFileSync could leave a truncated settings file if the app died
+      // mid-write.
+      await writeJson(filePath, this.settings)
       logger.info('Settings saved')
     } catch (err) {
       logger.error('Failed to save settings', String(err))

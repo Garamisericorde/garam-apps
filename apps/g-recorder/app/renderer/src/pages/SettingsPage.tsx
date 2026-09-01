@@ -7,6 +7,7 @@ import type {
   FfmpegStatus,
 } from '../../../shared/types'
 import { formatBytes } from '../../../shared/time'
+import { resolutionHeight } from '../../../shared/presets'
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 
@@ -21,6 +22,7 @@ export default function SettingsPage(): JSX.Element {
   const [displays, setDisplays] = useState<DisplayInfo[]>([])
   const [cacheSize, setCacheSize] = useState<number | null>(null)
   const [version, setVersion] = useState('')
+  const [reinstalling, setReinstalling] = useState(false)
 
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -47,6 +49,22 @@ export default function SettingsPage(): JSX.Element {
       setFfmpeg(status)
       if (status.state === 'ready') refreshHardware()
     })
+  }, [refreshHardware])
+
+  const reinstallFfmpeg = useCallback(async () => {
+    setReinstalling(true)
+    setError(null)
+    try {
+      const status = await window.api.ffmpeg.reinstall()
+      if (status.state === 'error') setError(status.error ?? 'Could not install FFmpeg')
+      // The main process re-probes the encoders against the new binary; pull the
+      // fresh result so the encoder list stops showing the old one's failures.
+      refreshHardware()
+    } catch (err) {
+      setError(cleanError(err))
+    } finally {
+      setReinstalling(false)
+    }
   }, [refreshHardware])
 
   useEffect(() => () => {
@@ -95,7 +113,7 @@ export default function SettingsPage(): JSX.Element {
           />
         </Field>
 
-        <Field label="Resolution" hint="Source keeps the monitor's own resolution">
+        <Field label="Resolution" hint={resolutionHint(settings, displays, encoders)}>
           <Select
             value={settings.resolution}
             onChange={(value) => void save({ resolution: value as AppSettings['resolution'] })}
@@ -108,14 +126,11 @@ export default function SettingsPage(): JSX.Element {
           />
         </Field>
 
-        <Field label="Frame rate">
+        <Field label="Frame rate" hint={frameRateHint(settings, displays)}>
           <Select
             value={settings.fps}
             onChange={(value) => void save({ fps: Number(value) })}
-            options={[
-              { value: 30, label: '30 fps' },
-              { value: 60, label: '60 fps' },
-            ]}
+            options={[30, 60, 120, 144].map((fps) => ({ value: fps, label: `${fps} fps` }))}
           />
         </Field>
 
@@ -132,6 +147,23 @@ export default function SettingsPage(): JSX.Element {
             ]}
           />
         </Field>
+
+        {needsCompatibleFfmpeg(encoders) && (
+          <div className="banner banner-warning">
+            <span style={{ flex: 1 }}>
+              This copy of FFmpeg needs a newer NVIDIA driver than you have, so it will not use
+              your GPU and recording runs on the CPU. Your card is fine — installing the
+              compatible build fixes it without touching your driver.
+            </span>
+            <button
+              className="btn btn-primary"
+              disabled={reinstalling}
+              onClick={() => void reinstallFfmpeg()}
+            >
+              {reinstalling ? 'Installing…' : 'Install compatible FFmpeg'}
+            </button>
+          </div>
+        )}
 
         {displays.length > 1 && (
           <Field label="Monitor">
@@ -157,9 +189,9 @@ export default function SettingsPage(): JSX.Element {
       {/* ── Audio ── */}
       <Section title="Audio">
         {noLoopback && settings.captureAudio && (
-          <div className="banner banner-warning" style={{ marginBottom: 10 }}>
-            No system-audio device was found. Enable “Stereo Mix” in the Windows sound control
-            panel, or install a virtual audio cable, then click Rescan.
+          <div className="banner banner-info" style={{ marginBottom: 10 }}>
+            Windows exposes no loopback device, so system audio is captured directly instead —
+            nothing to set up. The device list below is only for picking a specific input.
           </div>
         )}
 
@@ -464,17 +496,73 @@ function HotkeyField({
 
 const MODIFIER_KEYS = ['Control', 'Shift', 'Alt', 'Meta']
 
+/**
+ * Physical key -> Electron accelerator name.
+ *
+ * Built from `event.code`, not `event.key`. `event.key` reports the CHARACTER
+ * the combination produces, so Shift+Equal arrives as "+" and the accelerator
+ * became "Ctrl+Shift++" — the trailing plus collides with the separator and
+ * Electron rejects the whole string. `event.code` names the physical key, which
+ * is what an accelerator actually refers to.
+ */
+const CODE_TO_ACCELERATOR: Record<string, string> = {
+  Minus: '-',
+  Equal: '=',
+  BracketLeft: '[',
+  BracketRight: ']',
+  Backslash: '\\',
+  Semicolon: ';',
+  Quote: "'",
+  Backquote: '`',
+  Comma: ',',
+  Period: '.',
+  Slash: '/',
+  Space: 'Space',
+  Enter: 'Return',
+  Escape: 'Esc',
+  Backspace: 'Backspace',
+  Delete: 'Delete',
+  Insert: 'Insert',
+  Home: 'Home',
+  End: 'End',
+  PageUp: 'PageUp',
+  PageDown: 'PageDown',
+  ArrowUp: 'Up',
+  ArrowDown: 'Down',
+  ArrowLeft: 'Left',
+  ArrowRight: 'Right',
+  Tab: 'Tab',
+  PrintScreen: 'PrintScreen',
+  NumpadAdd: 'numadd',
+  NumpadSubtract: 'numsub',
+  NumpadMultiply: 'nummult',
+  NumpadDivide: 'numdiv',
+  NumpadDecimal: 'numdec',
+}
+
+function acceleratorKey(event: KeyboardEvent): string | null {
+  const code = event.code
+
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3)
+  if (/^Digit[0-9]$/.test(code)) return code.slice(5)
+  if (/^Numpad[0-9]$/.test(code)) return `num${code.slice(6)}`
+  if (/^F\d{1,2}$/.test(code)) return code
+
+  return CODE_TO_ACCELERATOR[code] ?? null
+}
+
 /** Build an Electron accelerator from a keyboard event, or null if incomplete */
 function toAccelerator(event: KeyboardEvent): string | null {
   if (MODIFIER_KEYS.includes(event.key)) return null
+
+  const key = acceleratorKey(event)
+  if (!key) return null
 
   const parts: string[] = []
   if (event.ctrlKey) parts.push('Ctrl')
   if (event.shiftKey) parts.push('Shift')
   if (event.altKey) parts.push('Alt')
   if (event.metaKey) parts.push('Super')
-
-  const key = event.key.length === 1 ? event.key.toUpperCase() : event.key
   parts.push(key)
 
   // A bare letter would swallow normal typing everywhere in Windows
@@ -515,6 +603,62 @@ function encoderOption(
   }
 }
 
+/**
+ * Explain what a resolution choice costs, when it costs something.
+ *
+ * Resizing has to happen in a filter, and a filter forces every frame down from
+ * the GPU into system memory — on this hardware that is the difference between
+ * capture being free and capture costing real CPU. Someone on a 1440p monitor
+ * picking "1080p" to save disk space has no way to know they just gave that up,
+ * so the field says so rather than leaving it to be discovered as stutter.
+ */
+function resolutionHint(
+  settings: AppSettings,
+  displays: DisplayInfo[],
+  capabilities: EncoderCapabilities | null,
+): string {
+  const base = "Source keeps the monitor's own resolution"
+  if (!capabilities?.hasD3d11DirectNvenc) return base
+
+  const display = displays[settings.monitorIndex] ?? displays.find((d) => d.isPrimary)
+  const target = resolutionHeight(settings.resolution)
+  // Compared against the display's real pixel height, the same measure the main
+  // process decides on — its DIP size disagrees under fractional scaling.
+  const scaling = target !== null && display?.nativeHeight !== target
+
+  return scaling
+    ? `${base} — and lets capture stay on the GPU. Resizing costs noticeably more CPU.`
+    : `${base} · capture is running entirely on the GPU`
+}
+
+/**
+ * Say what the chosen rate costs, in the terms the user notices.
+ *
+ * Capture samples the screen at this rate, so it is also the ceiling on the
+ * number the on-screen counter can ever show — someone on a 144 Hz display
+ * capturing at 60 sees 60 and reasonably concludes the counter is broken.
+ */
+function frameRateHint(settings: AppSettings, displays: DisplayInfo[]): string {
+  const display = displays[settings.monitorIndex] ?? displays.find((d) => d.isPrimary)
+  const refresh = display?.refreshRate
+
+  if (!refresh || refresh <= settings.fps) return 'Also the ceiling for the on-screen frame counter'
+
+  return `Your display runs at ${refresh} Hz — capturing at ${settings.fps} caps both the recording and the on-screen counter at ${settings.fps}`
+}
+
+/**
+ * Whether the installed FFmpeg is the reason the GPU is idle.
+ *
+ * NVENC reports its own failure precisely — "Required: 13.1 Found: 12.2" — and
+ * that particular failure is fixable by swapping the binary, unlike a machine
+ * that simply has no NVIDIA card. Only offer the reinstall for the former.
+ */
+function needsCompatibleFfmpeg(capabilities: EncoderCapabilities | null): boolean {
+  if (!capabilities || capabilities.bestEncoder !== 'x264') return false
+  return /nvenc api version|driver does not support/i.test(capabilities.nvenc.reason ?? '')
+}
+
 function encoderHint(capabilities: EncoderCapabilities | null): string | undefined {
   if (!capabilities) return undefined
 
@@ -524,8 +668,9 @@ function encoderHint(capabilities: EncoderCapabilities | null): string | undefin
     capabilities.amf.available && 'AMF',
   ].filter(Boolean)
 
+  const zeroCopy = capabilities.hasD3d11DirectNvenc || capabilities.hasCudaZeroCopy
   const capture = capabilities.hasDdagrab
-    ? capabilities.hasCudaZeroCopy
+    ? zeroCopy
       ? 'ddagrab capture (zero-copy)'
       : 'ddagrab capture'
     : 'gdigrab capture'

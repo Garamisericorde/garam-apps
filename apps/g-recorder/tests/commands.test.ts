@@ -64,6 +64,46 @@ describe('buildVideoEncodeArgs', () => {
     expect(buildVideoEncodeArgs({ encoder: 'amf', quality: 23 })).toContain('h264_amf')
     expect(buildVideoEncodeArgs({ encoder: 'nvenc', quality: 23 })).toContain('h264_nvenc')
   })
+
+  it('spends quality on picture by default — exports run once', () => {
+    expect(valueAfter(buildVideoEncodeArgs({ encoder: 'nvenc', quality: 23 }), '-tune')).toBe('hq')
+    expect(valueAfter(buildVideoEncodeArgs({ encoder: 'x264', quality: 23 }), '-preset')).toBe(
+      'veryfast',
+    )
+    expect(valueAfter(buildVideoEncodeArgs({ encoder: 'qsv', quality: 23 }), '-preset')).toBe(
+      'medium',
+    )
+    expect(valueAfter(buildVideoEncodeArgs({ encoder: 'amf', quality: 23 }), '-quality')).toBe(
+      'balanced',
+    )
+  })
+
+  it('spends it on staying out of the way in low-latency mode', () => {
+    const nvenc = buildVideoEncodeArgs({ encoder: 'nvenc', quality: 23, lowLatency: true })
+    expect(valueAfter(nvenc, '-tune')).toBe('ll')
+    expect(valueAfter(nvenc, '-rc-lookahead')).toBe('0')
+    expect(valueAfter(nvenc, '-bf')).toBe('0')
+
+    const x264 = buildVideoEncodeArgs({ encoder: 'x264', quality: 23, lowLatency: true })
+    expect(valueAfter(x264, '-preset')).toBe('ultrafast')
+    expect(valueAfter(x264, '-tune')).toBe('zerolatency')
+
+    expect(
+      valueAfter(buildVideoEncodeArgs({ encoder: 'qsv', quality: 23, lowLatency: true }), '-preset'),
+    ).toBe('veryfast')
+    expect(
+      valueAfter(buildVideoEncodeArgs({ encoder: 'amf', quality: 23, lowLatency: true }), '-quality'),
+    ).toBe('speed')
+  })
+
+  it('caps worker threads for software encoding only', () => {
+    expect(valueAfter(buildVideoEncodeArgs({ encoder: 'x264', quality: 23, threads: 4 }), '-threads'))
+      .toBe('4')
+    // Hardware encoders do the work on the GPU; the flag would only mislead.
+    expect(buildVideoEncodeArgs({ encoder: 'nvenc', quality: 23, threads: 4 })).not.toContain(
+      '-threads',
+    )
+  })
 })
 
 describe('buildCaptureArgs', () => {
@@ -71,10 +111,92 @@ describe('buildCaptureArgs', () => {
     settings: settings(),
     encoder: 'x264' as const,
     useDdagrab: true,
+    useD3d11Direct: false,
     useCudaZeroCopy: false,
     systemAudioDevice: null,
+    systemAudioPipe: null,
     micDevice: null,
   }
+
+  const LOOPBACK = { sampleRate: 48_000, channels: 2, codec: 's16le' }
+
+  describe('system audio over the stdin pipe', () => {
+    it('declares the raw PCM format, since a pipe carries no header', () => {
+      const args = buildCaptureArgs({ ...base, systemAudioPipe: LOOPBACK })
+      expect(valueAfter(args, '-f')).toBeDefined()
+      expect(args).toContain('pipe:0')
+      expect(args).toContain('s16le')
+      expect(valueAfter(args, '-ar')).toBe('48000')
+      expect(valueAfter(args, '-ac')).toBe('2')
+      expect(args).toContain('1:a:0')
+      expect(args).not.toContain('-an')
+    })
+
+    it('mixes loopback with the microphone, loopback first', () => {
+      const args = buildCaptureArgs({
+        ...base,
+        systemAudioPipe: LOOPBACK,
+        micDevice: 'Microphone',
+      })
+      const graph = valueAfter(args, '-filter_complex') ?? ''
+
+      expect(graph).toContain('[1:a][2:a]amix=inputs=2')
+      // Input 1 is the pipe, input 2 the microphone — the order the maps assume
+      expect(args.indexOf('pipe:0')).toBeLessThan(args.indexOf('audio=Microphone'))
+    })
+
+    it('prefers the loopback pipe over a DirectShow device, never both', () => {
+      const args = buildCaptureArgs({
+        ...base,
+        systemAudioPipe: LOOPBACK,
+        systemAudioDevice: 'Stereo Mix',
+      })
+      expect(args).toContain('pipe:0')
+      expect(args).not.toContain('audio=Stereo Mix')
+      // One system-audio input only, or the maps below it shift by one
+      expect(args.filter((a) => a === '-i')).toHaveLength(2)
+    })
+  })
+
+  describe('D3D11-direct path', () => {
+    it('inserts no video filter at all — a filter would undo the whole point', () => {
+      const args = buildCaptureArgs({ ...base, encoder: 'nvenc', useD3d11Direct: true })
+      expect(args).not.toContain('-vf')
+      expect(args).not.toContain('-filter_complex')
+      expect(args).toContain('h264_nvenc')
+      // Video still has to be mapped explicitly now that no filter names it
+      expect(args).toContain('0:v:0')
+    })
+
+    it('still mixes two audio sources without pulling video into the graph', () => {
+      const args = buildCaptureArgs({
+        ...base,
+        encoder: 'nvenc',
+        useD3d11Direct: true,
+        systemAudioDevice: 'Stereo Mix',
+        micDevice: 'Microphone',
+      })
+      const graph = valueAfter(args, '-filter_complex') ?? ''
+
+      expect(graph).toContain('[1:a][2:a]amix=inputs=2')
+      // The moment [0:v] enters the graph the frames leave the GPU
+      expect(graph).not.toContain('[0:v]')
+      expect(args).toContain('0:v:0')
+      expect(args).toContain('[aout]')
+    })
+
+    it('maps a single audio device alongside the unfiltered video', () => {
+      const args = buildCaptureArgs({
+        ...base,
+        encoder: 'nvenc',
+        useD3d11Direct: true,
+        systemAudioDevice: 'Stereo Mix',
+      })
+      expect(args).not.toContain('-filter_complex')
+      expect(args).toContain('1:a:0')
+      expect(args).toContain('0:v:0')
+    })
+  })
 
   it('downloads ddagrab frames before a software encoder touches them', () => {
     const filter = valueAfter(buildCaptureArgs(base), '-vf') ?? ''
@@ -120,6 +242,29 @@ describe('buildCaptureArgs', () => {
       valueAfter(buildCaptureArgs({ ...base, settings: settings({ resolution: 'source' }) }), '-vf') ??
       ''
     expect(filter).not.toContain('scale=')
+  })
+
+  it('encodes for low latency — the buffer runs next to a game, not alone', () => {
+    const args = buildCaptureArgs({ ...base, encoderThreads: 6 })
+    expect(valueAfter(args, '-preset')).toBe('ultrafast')
+    expect(valueAfter(args, '-tune')).toBe('zerolatency')
+    expect(valueAfter(args, '-threads')).toBe('6')
+  })
+
+  it('gives every input a queue deep enough to absorb an encoder stall', () => {
+    const args = buildCaptureArgs({ ...base, systemAudioDevice: 'Stereo Mix', micDevice: 'Mic' })
+    // One per input: video plus the two audio devices. A blocked demuxer thread
+    // stalls the desktop capture, which the user sees as a hitch in the game.
+    const queues = args.filter((a) => a === '-thread_queue_size')
+    expect(queues).toHaveLength(3)
+    for (let i = 0; i < args.length; i++) {
+      if (args[i] === '-thread_queue_size') expect(Number(args[i + 1])).toBeGreaterThan(8)
+    }
+  })
+
+  it('asks for a progress stream — the overlay reads its frame rate from it', () => {
+    const args = buildCaptureArgs(base)
+    expect(valueAfter(args, '-progress')).toBe('pipe:1')
   })
 
   it('records silence when no audio device is selected', () => {

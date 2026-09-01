@@ -15,8 +15,35 @@ import type { FfmpegStatus } from '../../shared/types'
 import { binDir } from '../../shared/paths'
 import { logger } from '../logging/logger'
 
-/** Stable Windows build that ships both ffmpeg.exe and ffprobe.exe */
-const DOWNLOAD_URL = 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip'
+/**
+ * Windows build that ships both ffmpeg.exe and ffprobe.exe.
+ *
+ * PINNED ON PURPOSE — do not "update" this to a rolling `latest` URL.
+ *
+ * FFmpeg's NVENC support is a compile-time contract: a build carries the NVIDIA
+ * Video Codec SDK headers it was built against and refuses to run on a driver
+ * older than those. Recent builds require API 13.1 (driver 570+), so tracking
+ * the newest release silently locked out every machine on an older driver —
+ * hardware perfectly capable of GPU encoding — and dropped it to encoding on
+ * the CPU, which is what made games stutter with the buffer on.
+ *
+ * 7.1 requires API 12.x, covering drivers back to ~551 and GPUs back to Pascal.
+ * Nothing this app uses needs anything newer. Verified against a 3060 Ti on a
+ * driver reporting API 12.2: NVENC works, and so does handing ddagrab's D3D11
+ * frames straight to it — 0.45 s of CPU for five seconds of 1440p60.
+ *
+ * The host matters as much as the version. This must point at a *permanently
+ * archived, version-tagged* release: BtbN's dated auto-builds were the obvious
+ * choice and turned out to be deleted within days, leaving the download button
+ * returning 404. GyanD/codexffmpeg keeps its version tags indefinitely.
+ *
+ * Before changing this, check two things: that the URL belongs to a permanent
+ * tag rather than a rolling build, and that the new build's NVENC still
+ * initialises on an older driver — `EncoderDetect` reports the requirement in
+ * its probe reason.
+ */
+const DOWNLOAD_URL =
+  'https://github.com/GyanD/codexffmpeg/releases/download/7.1/ffmpeg-7.1-essentials_build.zip'
 
 const VERSION_PROBE_TIMEOUT_MS = 8_000
 
@@ -112,13 +139,20 @@ export class FfmpegManager {
     return this.getStatus()
   }
 
-  /** Candidate ffmpeg.exe locations, most specific first */
+  /**
+   * Candidate ffmpeg.exe locations, most specific first.
+   *
+   * A build in binDir got there because the app downloaded it, which now
+   * includes the user asking for the compatible one after a driver mismatch —
+   * so it has to outrank whatever shipped with the app, or reinstalling would
+   * silently change nothing.
+   */
   private candidates(): string[] {
     const bundled = app.isPackaged
       ? resolve(process.resourcesPath, 'ffmpeg', 'ffmpeg.exe')
       : resolve(app.getAppPath(), 'resources', 'ffmpeg', 'ffmpeg.exe')
 
-    return [bundled, join(binDir(), 'ffmpeg.exe'), 'ffmpeg'].filter(
+    return [join(binDir(), 'ffmpeg.exe'), bundled, 'ffmpeg'].filter(
       (p) => p === 'ffmpeg' || existsSync(p),
     )
   }
@@ -150,6 +184,28 @@ export class FfmpegManager {
    */
   async download(): Promise<FfmpegStatus> {
     if (this._downloading || this._ffmpegPath) return this.getStatus()
+    return this.install()
+  }
+
+  /**
+   * Replace an FFmpeg that is already installed with the pinned build.
+   *
+   * `download()` deliberately refuses once a binary works, which is right for
+   * first-run setup and wrong here: a machine that fell back to CPU encoding
+   * because its FFmpeg demands a newer NVIDIA driver has a *working* FFmpeg,
+   * just not one it can use the GPU with. Replacing it is the fix.
+   */
+  async reinstall(): Promise<FfmpegStatus> {
+    if (this._downloading) return this.getStatus()
+
+    logger.info('FFmpeg reinstall requested', { previous: this._ffmpegPath })
+    this._ffmpegPath = null
+    this._ffprobePath = null
+    this._version = null
+    return this.install()
+  }
+
+  private async install(): Promise<FfmpegStatus> {
 
     this._downloading = true
     this._downloadPercent = 0
@@ -174,7 +230,7 @@ export class FfmpegManager {
       for (const exe of ['ffmpeg.exe', 'ffprobe.exe']) {
         const found = findFile(extractDir, exe)
         if (found) {
-          copyFileSync(found, join(dir, exe))
+          await copyOverLocked(found, join(dir, exe))
           copied++
         }
       }
@@ -193,8 +249,20 @@ export class FfmpegManager {
       this._error = err instanceof Error ? err.message : String(err)
       logger.error('FFmpeg download failed', this._error)
       this.cleanupDownload(zipPath, extractDir)
+
+      // A reinstall clears the resolved path before it starts, so a failure
+      // here would leave the app believing it has no FFmpeg at all — when the
+      // perfectly good previous binary is still sitting there. Find it again.
+      const recovered = await this.ensureReady()
+      if (recovered.state === 'ready') {
+        logger.info('FFmpeg install failed; kept the existing binary', { path: recovered.path })
+        // ensureReady clears _error on success, but the failure is still the
+        // thing the user asked about and needs to see.
+        this._error = err instanceof Error ? err.message : String(err)
+      }
+
       this.emit()
-      return this.getStatus()
+      return { ...this.getStatus(), error: this._error }
     }
   }
 
@@ -217,6 +285,9 @@ export class FfmpegManager {
 
       request.on('response', (response) => {
         if (response.statusCode >= 400) {
+          // Name the URL: a 404 here means the pinned build moved or was
+          // pruned, and without the address that is a guessing game.
+          logger.error('FFmpeg download rejected', { url, status: response.statusCode })
           fail(new Error(`Download failed with HTTP ${response.statusCode}`))
           return
         }
@@ -260,6 +331,29 @@ export class FfmpegManager {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Copy over a file Windows may still consider in use.
+ *
+ * Callers stop the recorder before replacing FFmpeg, but the handle is not
+ * always released the instant the process exits, and an export or a probe may
+ * still be winding down. Retrying briefly turns a hard EBUSY failure into a
+ * short wait; anything that outlasts it is a genuine lock worth reporting.
+ */
+async function copyOverLocked(source: string, destination: string): Promise<void> {
+  const attempts = 10
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      copyFileSync(source, destination)
+      return
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code
+      if ((code !== 'EBUSY' && code !== 'EPERM') || attempt === attempts) throw err
+      logger.debug(`FFmpeg binary still locked, retrying (${attempt}/${attempts})`)
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 300))
+    }
+  }
+}
 
 /** Run `<binary> -version` and return the first output line, or null on failure */
 function probeVersion(binary: string): Promise<string | null> {

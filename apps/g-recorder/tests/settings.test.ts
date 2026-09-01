@@ -11,9 +11,16 @@ describe('validateSettings', () => {
   })
 
   it('rejects an unsupported frame rate', () => {
-    const { valid, errors } = validateSettings({ fps: 144 })
+    // 45 rather than 144: high-refresh rates are supported now, so the example
+    // has to be one no display mode offers.
+    const { valid, errors } = validateSettings({ fps: 45 })
     expect(valid).toBe(false)
     expect(errors[0]).toContain('fps')
+  })
+
+  it('accepts the high-refresh rates a 120/144 Hz display needs', () => {
+    expect(validateSettings({ fps: 120 }).valid).toBe(true)
+    expect(validateSettings({ fps: 144 }).valid).toBe(true)
   })
 
   it('rejects a replay length outside the supported range', () => {

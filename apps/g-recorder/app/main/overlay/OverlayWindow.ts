@@ -3,27 +3,33 @@ import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { logger } from '../logging/logger'
 
-const WIDTH = 96
-const HEIGHT = 28
+const WIDTH = 108
+const HEIGHT = 30
 const MARGIN = 12
 
+/** How often to re-claim the top of the window stack while visible */
+const ON_TOP_REASSERT_MS = 2_000
+
 /**
- * A small always-on-top badge showing whether capture is running. It is
- * click-through, so it never gets in the way of whatever is being recorded.
+ * A small always-on-top frame-rate readout. It is click-through, so it never
+ * gets in the way of whatever is being recorded.
  */
 export class OverlayWindow {
   private win: BrowserWindow | null = null
+  private keepOnTop: ReturnType<typeof setInterval> | null = null
 
   create(): void {
     if (this.win && !this.win.isDestroyed()) return
 
-    const { width: screenWidth } = screen.getPrimaryDisplay().workAreaSize
+    // Top-left, where a frame counter is conventionally read and where it is
+    // least likely to sit over a game's own HUD.
+    const { x: workX, y: workY } = screen.getPrimaryDisplay().workArea
 
     this.win = new BrowserWindow({
       width: WIDTH,
       height: HEIGHT,
-      x: screenWidth - WIDTH - MARGIN,
-      y: MARGIN,
+      x: workX + MARGIN,
+      y: workY + MARGIN,
       frame: false,
       transparent: true,
       alwaysOnTop: true,
@@ -46,8 +52,14 @@ export class OverlayWindow {
 
     // Mouse events pass straight through to whatever is underneath
     this.win.setIgnoreMouseEvents(true)
-    // 'screen-saver' keeps it visible above borderless-fullscreen games
-    this.win.setAlwaysOnTop(true, 'screen-saver')
+    this.assertOnTop()
+
+    // A game going fullscreen re-orders the window stack and drops the badge
+    // behind it, permanently — Windows does not put it back. Re-asserting on a
+    // slow timer costs nothing and is what keeps it visible across alt-tabs and
+    // mode changes. Note this cannot win against *exclusive* fullscreen, which
+    // bypasses the desktop compositor entirely; borderless is the fix there.
+    this.keepOnTop = setInterval(() => this.assertOnTop(), ON_TOP_REASSERT_MS)
 
     if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
       void this.win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#/overlay`)
@@ -59,6 +71,19 @@ export class OverlayWindow {
       this.win?.showInactive()
       logger.info('Overlay window shown')
     })
+  }
+
+  /**
+   * Claim the top of the window stack.
+   *
+   * 'screen-saver' is the highest level Electron exposes and the only one that
+   * clears borderless-fullscreen games; setVisibleOnAllWorkspaces keeps it from
+   * being left behind on a virtual-desktop switch.
+   */
+  private assertOnTop(): void {
+    if (!this.win || this.win.isDestroyed() || !this.win.isVisible()) return
+    this.win.setAlwaysOnTop(true, 'screen-saver')
+    this.win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   }
 
   /** Show or hide the badge without tearing the window down */
@@ -75,6 +100,8 @@ export class OverlayWindow {
   }
 
   destroy(): void {
+    if (this.keepOnTop) clearInterval(this.keepOnTop)
+    this.keepOnTop = null
     if (this.win && !this.win.isDestroyed()) this.win.destroy()
     this.win = null
   }

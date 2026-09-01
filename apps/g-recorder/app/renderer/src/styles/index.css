@@ -1,53 +1,10 @@
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-:root {
-  --bg: #141418;
-  --bg-surface: #1c1c22;
-  --bg-elevated: #26262e;
-  --bg-hover: #30303a;
-  --border: #34343f;
-  --border-strong: #45454f;
-
-  --text: #ececf2;
-  --text-muted: #8d8d9d;
-  --text-faint: #63636f;
-
-  --accent: #6c63ff;
-  --accent-hover: #7d75ff;
-  --accent-soft: rgba(108, 99, 255, 0.16);
-  --danger: #e5605f;
-  --danger-soft: rgba(229, 96, 95, 0.14);
-  --success: #46b47c;
-  --success-soft: rgba(70, 180, 124, 0.14);
-  --warning: #d9a441;
-  --warning-soft: rgba(217, 164, 65, 0.14);
-
-  --font: system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --radius: 8px;
-  --radius-sm: 5px;
-}
-
-html,
-body,
-#root {
-  height: 100%;
-}
-
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font);
-  font-size: 14px;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-  overflow: hidden;
-}
+/*
+ * G-Recorder styles.
+ *
+ * Colours, spacing and typography come from @garam/theme — the one place the
+ * whole family is themed. Nothing below should contain a raw hex value.
+ */
+@import '@garam/theme/all.css';
 
 /* ── App shell ───────────────────────────────────────────────────────────── */
 
@@ -64,9 +21,30 @@ body {
   padding: 0 16px;
   height: 48px;
   flex-shrink: 0;
+  position: relative;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border);
   -webkit-app-region: drag;
+}
+
+/*
+ * A hairline of the accent along the top edge, fading out to the right. It
+ * costs nothing and is what makes the whole window read as belonging to the
+ * ramp, rather than only the controls painted with it.
+ */
+.topbar::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    var(--accent-from) 0%,
+    var(--accent-to) 45%,
+    transparent 100%
+  );
+  opacity: 0.85;
+  pointer-events: none;
 }
 
 .topbar > * {
@@ -82,11 +60,23 @@ body {
   margin-right: 8px;
 }
 
+/*
+ * NOT --accent-gradient: that ramp is tuned for filling a button, and across a
+ * short word it barely leaves the blue end. Spending the whole ramp over the
+ * width of the name is what makes it read as blue-to-purple.
+ */
+.brand-name {
+  background: linear-gradient(100deg, var(--accent-from) 0%, var(--accent-to) 92%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
 .brand-dot {
   width: 10px;
   height: 10px;
   border-radius: 3px;
-  background: var(--accent);
+  background: var(--accent-gradient);
 }
 
 .nav-link {
@@ -106,7 +96,8 @@ body {
 
 .nav-link.active {
   background: var(--accent-soft);
-  color: var(--accent-hover);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--accent-ring);
 }
 
 .page {
@@ -140,6 +131,24 @@ h2 {
   text-transform: uppercase;
   color: var(--text-faint);
   margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The ramp, spent and fading out — a rule that belongs to the accent. */
+.section-title::after {
+  content: '';
+  flex: 1;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--accent-from) 0%,
+    var(--accent-to) 42%,
+    transparent 100%
+  );
+  opacity: 0.5;
 }
 
 .muted {
@@ -194,27 +203,32 @@ button {
 }
 
 .btn-primary {
-  background: var(--accent);
+  background: var(--accent-gradient);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--text-on-accent);
   font-weight: 600;
 }
 
+/* Brightness rather than another colour: a gradient cannot be swapped for a
+   flat hover colour without the fill visibly collapsing. */
 .btn-primary:hover:not(:disabled) {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
+  filter: brightness(1.12);
+}
+
+.btn-primary:active:not(:disabled) {
+  filter: brightness(0.9);
 }
 
 .btn-danger {
   background: var(--danger);
   border-color: var(--danger);
-  color: #fff;
+  color: var(--text-on-accent);
 }
 
 .btn-success {
   background: var(--success);
   border-color: var(--success);
-  color: #fff;
+  color: var(--text-on-accent);
 }
 
 .btn-ghost {
@@ -259,8 +273,8 @@ button {
 }
 
 .segmented button.active {
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-gradient);
+  color: var(--text-on-accent);
   font-weight: 600;
 }
 
@@ -302,7 +316,7 @@ input:focus {
 }
 
 .switch.on {
-  background: var(--accent);
+  background: var(--accent-gradient);
 }
 
 .switch::after {
@@ -313,7 +327,7 @@ input:focus {
   width: 15px;
   height: 15px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--text-on-accent);
   transition: transform 0.15s;
 }
 
@@ -324,10 +338,27 @@ input:focus {
 /* ── Cards, rows, banners ────────────────────────────────────────────────── */
 
 .card {
+  position: relative;
+  overflow: hidden;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 16px;
+}
+
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    var(--accent-from) 0%,
+    var(--accent-to) 45%,
+    transparent 100%
+  );
+  opacity: 0.7;
+  pointer-events: none;
 }
 
 .row {
@@ -367,26 +398,26 @@ input:focus {
 
 .banner-error {
   background: var(--danger-soft);
-  border-color: rgba(229, 96, 95, 0.3);
-  color: #f2a3a2;
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 .banner-warning {
   background: var(--warning-soft);
-  border-color: rgba(217, 164, 65, 0.3);
-  color: #e6c07d;
+  border-color: var(--warning);
+  color: var(--warning);
 }
 
 .banner-info {
   background: var(--accent-soft);
-  border-color: rgba(108, 99, 255, 0.3);
-  color: #a49dff;
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .banner-success {
   background: var(--success-soft);
-  border-color: rgba(70, 180, 124, 0.3);
-  color: #7fd0a5;
+  border-color: var(--success);
+  color: var(--success);
 }
 
 .pill {
@@ -404,7 +435,7 @@ input:focus {
 
 .pill-live {
   background: var(--danger-soft);
-  color: #ef8c8b;
+  color: var(--danger);
 }
 
 .pill-dot {
@@ -440,7 +471,7 @@ input:focus {
 
 .progress-fill {
   height: 100%;
-  background: var(--accent);
+  background: var(--accent-gradient);
   border-radius: 3px;
   transition: width 0.25s ease;
 }
@@ -460,7 +491,7 @@ input:focus {
 
 .stage {
   position: relative;
-  background: #000;
+  background: var(--bg-media);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
@@ -531,7 +562,7 @@ input:focus {
   position: absolute;
   top: 0;
   bottom: 0;
-  background: rgba(10, 10, 14, 0.68);
+  background: var(--bg-scrim);
   pointer-events: none;
 }
 
@@ -549,7 +580,7 @@ input:focus {
   top: 0;
   bottom: 0;
   width: 12px;
-  background: var(--accent);
+  background: var(--accent-gradient);
   cursor: ew-resize;
   display: flex;
   align-items: center;
@@ -561,7 +592,7 @@ input:focus {
   width: 2px;
   height: 16px;
   border-radius: 1px;
-  background: rgba(255, 255, 255, 0.85);
+  background: var(--text-on-accent);
 }
 
 .timeline-handle:hover {
@@ -573,7 +604,7 @@ input:focus {
   top: 0;
   bottom: 0;
   width: 2px;
-  background: #fff;
+  background: var(--text-on-accent);
   box-shadow: 0 0 5px rgba(0, 0, 0, 0.8);
   pointer-events: none;
 }
@@ -626,7 +657,7 @@ input:focus {
   width: 13px;
   height: 13px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--accent-gradient);
   cursor: pointer;
 }
 
@@ -677,4 +708,120 @@ kbd {
 
 ::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* ── Recorder bar ─────────────────────────────────────────────────────────── */
+
+.recorder-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  flex-shrink: 0;
+}
+
+.recorder-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  flex-shrink: 0;
+}
+
+.recorder-dot.is-live {
+  background: var(--danger);
+  animation: recorder-pulse 2s ease-in-out infinite;
+}
+
+@keyframes recorder-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.recorder-state {
+  flex: 1;
+  font-size: var(--fs-md);
+  color: var(--text);
+}
+
+.recorder-error {
+  color: var(--danger);
+  font-size: var(--fs-sm);
+}
+
+/* ── FPS overlay ─────────────────────────────────────────────────────────── */
+
+/*
+ * Its own window, painted over whatever is being recorded. Everything here is
+ * sized for glanceability at arm's length while a game holds your attention:
+ * one number, high contrast, no chrome competing with it.
+ */
+.fps-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.fps-readout {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 4px 10px 4px 8px;
+  border-radius: 999px;
+  background: var(--bg-badge);
+  border: 1px solid var(--border-subtle);
+  /* Sits over arbitrary content, so it carries its own separation from it. */
+  box-shadow: 0 2px 10px -4px rgb(0 0 0 / 0.9);
+  user-select: none;
+  white-space: nowrap;
+}
+
+.fps-dot {
+  align-self: center;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  flex-shrink: 0;
+}
+
+.fps-readout.is-live .fps-dot {
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent-ring);
+}
+
+.fps-readout.is-recording .fps-dot {
+  background: var(--danger);
+  box-shadow: 0 0 6px var(--danger);
+  animation: blink 1.4s ease-in-out infinite;
+}
+
+.fps-value {
+  min-width: 2.4ch;
+  text-align: right;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  /* Fixed-width digits: the badge must not resize as the count changes. */
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+  color: var(--text);
+}
+
+.fps-unit {
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  color: var(--text-faint);
 }

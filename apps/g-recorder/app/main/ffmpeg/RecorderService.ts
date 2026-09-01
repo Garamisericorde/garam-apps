@@ -1,5 +1,7 @@
 import { spawn } from 'child_process'
 import type { ChildProcess } from 'child_process'
+import { screen } from 'electron'
+import { constants as osConstants, cpus, setPriority } from 'os'
 import { basename, dirname, join } from 'path'
 import {
   createWriteStream,
@@ -19,6 +21,7 @@ import type {
   SegmentInfo,
 } from '../../shared/types'
 import { cacheDir, concatListPath, logsDir, segmentIndexPath, segmentListPath } from '../../shared/paths'
+import { broadcast } from '../ipc/broadcast'
 import { logger } from '../logging/logger'
 import { FfmpegManager } from './FfmpegManager'
 import { SettingsStore } from '../settings/SettingsStore'
@@ -28,14 +31,86 @@ import {
   buildSegmentOutputArgs,
   buildSingleFileOutputArgs,
 } from './commands'
+import type { SystemAudioFormat } from '../audio/SystemAudioBridge'
+import {
+  canCaptureSystemAudio,
+  pipeSystemAudioTo,
+  startSystemAudio,
+  stopSystemAudio,
+} from '../audio/SystemAudioBridge'
 import { detectEncoders, resolveEncoder } from './EncoderDetect'
 import { PRUNE_BUFFER_SEGMENTS } from '../settings/defaults'
+import { resolutionHeight } from '../../shared/presets'
 
 /** How often the segment list is re-read (ms) */
 const POLL_INTERVAL_MS = 1_000
 
 /** How long to wait for FFmpeg to exit gracefully before killing it (ms) */
 const STOP_TIMEOUT_MS = 5_000
+
+/**
+ * Share of the machine's cores software encoding may use.
+ *
+ * x264 defaults to a thread per core, so the buffer and the game end up
+ * fighting over the same CPU. Half the cores still keeps up with 1080p60 on the
+ * ultrafast preset and leaves the rest to the game.
+ */
+const SOFTWARE_ENCODER_CORE_SHARE = 0.5
+
+/** Never leave software encoding with fewer threads than this */
+const MIN_SOFTWARE_ENCODER_THREADS = 2
+
+/** Worker-thread cap for software capture encoding on this machine */
+function softwareEncoderThreads(): number {
+  const cores = cpus().length || 4
+  return Math.max(MIN_SOFTWARE_ENCODER_THREADS, Math.floor(cores * SOFTWARE_ENCODER_CORE_SHARE))
+}
+
+/** Nearest even integer — a real display mode is never an odd number of pixels */
+function roundToEven(value: number): number {
+  return Math.round(value / 2) * 2
+}
+
+/**
+ * How long to wait before reconnecting after the capture drops out.
+ *
+ * DXGI hands the duplication back almost immediately, so the first retry is
+ * fast — a long pause here is a hole in the replay buffer.
+ */
+const RESTART_BASE_DELAY_MS = 400
+
+/** Ceiling for the backoff, so a persistent failure retries quietly */
+const RESTART_MAX_DELAY_MS = 8_000
+
+/** A capture that ran at least this long counts as healthy, resetting backoff */
+const HEALTHY_RUN_MS = 10_000
+
+/** Consecutive immediate failures before giving up and telling the user */
+const MAX_RESTART_ATTEMPTS = 6
+
+/**
+ * FFmpeg exits that mean "the display went away", not "this configuration is
+ * broken".
+ *
+ * `887a0026` is DXGI_ERROR_ACCESS_LOST, which Windows raises whenever it tears
+ * down desktop duplication — a game taking the display fullscreen-exclusive, a
+ * resolution or refresh-rate change, a UAC prompt, a GPU driver reset. Every
+ * one of those is routine while gaming, which is exactly when the buffer is
+ * supposed to be running.
+ */
+const RECOVERABLE_STDERR = /887a0026|access.?lost|AcquireNextFrame failed|device.?removed/i
+
+/** How much of FFmpeg's stderr to keep in memory for diagnosing an exit */
+const STDERR_TAIL_CHARS = 2_000
+
+/** Enough to hold a partial progress report while the rest arrives */
+const PROGRESS_BUFFER_CHARS = 4_000
+
+/** Window the frame rate is averaged over, in microseconds of captured time */
+const FPS_WINDOW_US = 1_000_000
+
+/** Samples kept to find one a full window old (reports arrive ~2/second) */
+const FPS_HISTORY_SAMPLES = 12
 
 /** Segments written by the strftime pattern below */
 const SEGMENT_RE = /^seg_\d{8}_\d{6}\.mp4$/
@@ -50,6 +125,13 @@ export class RecorderService {
   private _recordingStartedAt = 0
   private _starting = false
   private _stopping = false
+
+  /** Pending reconnect after the capture dropped out, if any */
+  private _restartTimer: ReturnType<typeof setTimeout> | null = null
+  private _restartAttempts = 0
+  private _processStartedAt = 0
+  /** Tail of the capture's stderr, to tell a lost display from a bad config */
+  private _stderrTail = ''
 
   /** Set while a replay is being written, to keep pruning off the used files */
   private _saveHolds = 0
@@ -66,6 +148,7 @@ export class RecorderService {
     bufferSeconds: 0,
     oldestSegmentTime: null,
     newestSegmentTime: null,
+    captureFps: null,
     error: null,
   }
   private _statusListeners: ((status: RecorderStatus) => void)[] = []
@@ -112,32 +195,8 @@ export class RecorderService {
 
     this._starting = true
     try {
-      const settings = SettingsStore.getInstance().get()
-      const { ffmpegPath, args: captureArgs } = await this.prepareCapture(settings)
-
-      mkdirSync(cacheDir(), { recursive: true })
-      this.loadIndex()
-      // A fresh session writes a fresh list; previous timings live in the index
-      rmSync(segmentListPath(), { force: true })
-
-      const args = [
-        ...captureArgs,
-        ...buildSegmentOutputArgs(
-          settings.segmentDurationSeconds,
-          join(cacheDir(), SEGMENT_PATTERN),
-          segmentListPath(),
-        ),
-      ]
-
-      this._recordingStartedAt = Date.now()
-      this._process = this.spawnCapture(ffmpegPath, args, 'replay-buffer', () => {
-        if (this._status.isRecording) {
-          this.emit({ isRecording: false, error: 'Screen capture stopped unexpectedly' })
-        }
-        this.stopPolling()
-      })
-
-      this.startPolling(settings)
+      this._restartAttempts = 0
+      await this.spawnBuffer(false)
       this.emit({ isRecording: true, error: null })
       logger.info('RecorderService: replay buffer started')
     } catch (err) {
@@ -150,15 +209,144 @@ export class RecorderService {
     }
   }
 
+  /**
+   * Spawn the capture process that feeds the buffer.
+   *
+   * `resuming` distinguishes a reconnect from a fresh start: the segments
+   * already in memory are still valid footage, and reloading the on-disk index
+   * would drop whatever has not been flushed to it yet.
+   */
+  private async spawnBuffer(resuming: boolean): Promise<void> {
+    const settings = SettingsStore.getInstance().get()
+    const { ffmpegPath, args: captureArgs, systemAudioPiped } = await this.prepareCapture(settings)
+
+    mkdirSync(cacheDir(), { recursive: true })
+    if (resuming) this.saveIndex()
+    else this.loadIndex()
+
+    // Each run's segment list starts its offsets at zero, so the old one has to
+    // go; the timings it described are already absolute in the index.
+    rmSync(segmentListPath(), { force: true })
+
+    const args = [
+      ...captureArgs,
+      ...buildSegmentOutputArgs(
+        settings.segmentDurationSeconds,
+        join(cacheDir(), SEGMENT_PATTERN),
+        segmentListPath(),
+      ),
+    ]
+
+    this._recordingStartedAt = Date.now()
+    this._processStartedAt = Date.now()
+    this._stderrTail = ''
+    this._process = this.spawnCapture(ffmpegPath, args, 'replay-buffer', () =>
+      this.handleBufferExit(),
+    )
+    if (systemAudioPiped) this.feedSystemAudio(this._process)
+
+    this.startPolling(settings)
+  }
+
+  /**
+   * Route the renderer's loopback PCM into this process's stdin.
+   *
+   * FFmpeg blocks on an input that stops producing, so a write failure — the
+   * usual one being the process having just exited — must be swallowed rather
+   * than thrown: the exit handler is already dealing with it.
+   */
+  private feedSystemAudio(proc: ChildProcess): void {
+    const stdin = proc.stdin
+    if (!stdin) return
+
+    stdin.on('error', (err) => {
+      logger.debug('RecorderService: system audio pipe closed', String(err))
+    })
+
+    pipeSystemAudioTo((chunk) => {
+      if (stdin.writable) stdin.write(chunk)
+    })
+  }
+
+  /**
+   * Decide what a dead capture process means and act on it.
+   *
+   * Losing the display is routine — it happens every time a game goes
+   * fullscreen — so the buffer reconnects instead of switching itself off. Only
+   * a capture that keeps dying immediately is treated as broken, because that
+   * is a configuration problem no amount of retrying will fix.
+   */
+  private handleBufferExit(): void {
+    this.stopPolling()
+    this._process = null
+
+    // A stop the user asked for is not a failure.
+    if (this._stopping || !this._status.isRecording) return
+    // A failed spawn raises both 'error' and 'close'; one reconnect covers both.
+    if (this._restartTimer !== null) return
+
+    const ranFor = Date.now() - this._processStartedAt
+    if (ranFor >= HEALTHY_RUN_MS) this._restartAttempts = 0
+
+    const recoverable = RECOVERABLE_STDERR.test(this._stderrTail)
+    this._restartAttempts++
+
+    if (this._restartAttempts > MAX_RESTART_ATTEMPTS) {
+      logger.error('RecorderService: capture keeps failing, giving up', {
+        attempts: this._restartAttempts,
+        stderr: this._stderrTail.slice(-400),
+      })
+      this.emit({
+        isRecording: false,
+        error: 'Screen capture keeps stopping. Check the log for what FFmpeg reported.',
+      })
+      return
+    }
+
+    const delay = Math.min(
+      RESTART_BASE_DELAY_MS * 2 ** (this._restartAttempts - 1),
+      RESTART_MAX_DELAY_MS,
+    )
+
+    logger.warn('RecorderService: capture dropped out, reconnecting', {
+      attempt: this._restartAttempts,
+      delayMs: delay,
+      ranForMs: ranFor,
+      reason: recoverable ? 'display access lost' : 'unknown',
+    })
+
+    this._restartTimer = setTimeout(() => {
+      this._restartTimer = null
+      if (this._stopping || !this._status.isRecording) return
+
+      void this.spawnBuffer(true).catch((err) => {
+        const message = err instanceof Error ? err.message : String(err)
+        logger.error('RecorderService: reconnect failed', message)
+        // Hand the next attempt back to the same path rather than unwinding.
+        this.handleBufferExit()
+      })
+    }, delay)
+  }
+
+  /** Cancel a pending reconnect — used when the user stops the buffer */
+  private cancelRestart(): void {
+    if (this._restartTimer !== null) {
+      clearTimeout(this._restartTimer)
+      this._restartTimer = null
+    }
+  }
+
   async stop(): Promise<void> {
     if (!this._status.isRecording && !this._process) return
     if (this._stopping) return
 
     this._stopping = true
+    this.cancelRestart()
+    stopSystemAudio()
     try {
       logger.info('RecorderService: stopping replay buffer…')
       this.stopPolling()
-      this.emit({ isRecording: false })
+      this.emit({ isRecording: false, captureFps: null })
 
       const proc = this._process
       this._process = null
@@ -304,7 +492,7 @@ export class RecorderService {
   /** Resolve FFmpeg, encoder, capture backend, and audio devices */
   private async prepareCapture(
     settings: AppSettings,
-  ): Promise<{ ffmpegPath: string; args: string[] }> {
+  ): Promise<{ ffmpegPath: string; args: string[]; systemAudioPiped: boolean }> {
     const manager = FfmpegManager.getInstance()
     const status = await manager.ensureReady()
     if (status.state !== 'ready') {
@@ -319,25 +507,85 @@ export class RecorderService {
 
     const { systemAudioDevice, micDevice } = await this.resolveAudioDevices(ffmpegPath, settings)
 
+    // Chromium's loopback is the only way most machines have of hearing
+    // themselves, so it is tried first and the DirectShow device is the
+    // fallback — not the other way round.
+    let systemAudioPipe: SystemAudioFormat | null = null
+    if (settings.captureAudio && !systemAudioDevice && canCaptureSystemAudio()) {
+      systemAudioPipe = await startSystemAudio()
+      if (!systemAudioPipe) stopSystemAudio()
+    }
+
+    // The direct path cannot carry a filter, so it is only on the table when
+    // the capture needs no scaling — either the user asked for source
+    // resolution, or the display already is the requested height.
+    const useD3d11Direct =
+      caps.hasD3d11DirectNvenc && encoder === 'nvenc' && !this.needsScaling(settings)
+
     logger.info('RecorderService: capture configuration', {
       capture: caps.hasDdagrab ? 'ddagrab' : 'gdigrab',
       encoder,
+      d3d11Direct: useD3d11Direct,
       zeroCopy: caps.hasCudaZeroCopy,
       monitorIndex: settings.monitorIndex,
-      systemAudioDevice,
+      systemAudio: systemAudioPipe ? 'loopback (renderer)' : (systemAudioDevice ?? 'none'),
       micDevice,
     })
+
+    if (!caps.hasDdagrab) {
+      // gdigrab redraws the whole desktop through GDI on the CPU for every
+      // frame, and it cannot see a fullscreen-exclusive game at all. Users hit
+      // both at once — a stuttering game and a black recording — with nothing
+      // on screen connecting the two.
+      broadcast('app:notice', {
+        level: 'warning',
+        message:
+          'Fast screen capture (ddagrab) is unavailable, so recording uses the slower GDI path. ' +
+          'It costs noticeably more CPU and cannot record fullscreen-exclusive games — ' +
+          'switch the game to borderless windowed mode.',
+      })
+    }
 
     const args = buildCaptureArgs({
       settings,
       encoder,
       useDdagrab: caps.hasDdagrab,
+      useD3d11Direct,
       useCudaZeroCopy: caps.hasCudaZeroCopy && encoder === 'nvenc',
       systemAudioDevice,
+      systemAudioPipe,
       micDevice,
+      encoderThreads: softwareEncoderThreads(),
     })
 
-    return { ffmpegPath, args }
+    return { ffmpegPath, args, systemAudioPiped: systemAudioPipe !== null }
+  }
+
+  /**
+   * Whether capture has to resize, which rules out every GPU-only path.
+   *
+   * Compared against the display's real pixel height, not its DIP height:
+   * on fractional scaling those differ, and treating a 1080p display as
+   * something else would give up the fast path for no reason. The size is
+   * derived the way the rest of the family does it — bounds x scaleFactor,
+   * rounded to an even number, because both dimensions of a real display mode
+   * always are.
+   */
+  private needsScaling(settings: AppSettings): boolean {
+    const target = resolutionHeight(settings.resolution)
+    if (target === null) return false
+
+    try {
+      const displays = screen.getAllDisplays()
+      const display = displays[settings.monitorIndex] ?? screen.getPrimaryDisplay()
+      const nativeHeight = roundToEven(display.bounds.height * display.scaleFactor)
+      return nativeHeight !== target
+    } catch (err) {
+      // Without a reliable size, assume scaling is needed: the slow path still
+      // produces the resolution the user asked for, the fast one might not.
+      logger.warn('RecorderService: could not read display size', String(err))
+      return true
+    }
   }
 
   /**
@@ -363,11 +611,16 @@ export class RecorderService {
         ? settings.systemAudioDevice
         : pickDefaultLoopback(devices)
 
-      if (!systemAudioDevice && noLoopbackFound) {
-        logger.warn(
-          'System audio is enabled but no loopback device was found. ' +
-            'Enable "Stereo Mix" in Windows sound settings or install a virtual audio cable.',
-        )
+      // No DirectShow loopback device is the normal case, not a fault: the app
+      // captures system audio through Chromium instead and needs nothing from
+      // Windows. Only worth a word if that route is unavailable too, which is
+      // the one situation where the recording really would come out silent.
+      if (!systemAudioDevice && noLoopbackFound && !canCaptureSystemAudio()) {
+        const message =
+          'System audio is on, but it cannot be captured right now — the app window that ' +
+          'records it is not available. Recording continues without system sound.'
+        logger.warn(message)
+        broadcast('app:notice', { level: 'warning', message })
       }
     }
 
@@ -390,10 +643,20 @@ export class RecorderService {
   ): ChildProcess {
     const proc = spawn(ffmpegPath, args, {
       windowsHide: true,
-      stdio: ['pipe', 'ignore', 'pipe'],
+      // stdout carries the -progress stream the overlay's frame rate comes from
+      stdio: ['pipe', 'pipe', 'pipe'],
     })
 
+    this.deprioritise(proc, label)
     attachStderrLog(proc, label, ffmpegPath, args)
+    this.trackProgress(proc, SettingsStore.getInstance().get().fps)
+
+    // Keep the last of stderr in memory as well as on disk: the exit handler
+    // has to know *why* FFmpeg stopped, and re-reading the log file to find out
+    // would race with the write stream still flushing it.
+    proc.stderr?.on('data', (chunk: Buffer) => {
+      this._stderrTail = (this._stderrTail + chunk.toString()).slice(-STDERR_TAIL_CHARS)
+    })
 
     proc.on('close', (code, signal) => {
       logger.info(`RecorderService: FFmpeg (${label}) exited`, { code, signal })
@@ -407,6 +670,89 @@ export class RecorderService {
     })
 
     return proc
+  }
+
+  /**
+   * Read FFmpeg's progress stream and turn it into a frame rate.
+   *
+   * The rate that matters is not `fps`, which desktop duplication pins to the
+   * requested value by repeating the last frame, but how many frames were new.
+   * `frame` minus `dup_frames`, differenced between two reports, is the rate the
+   * screen is actually changing at — the number a player recognises, capped by
+   * the configured capture rate.
+   */
+  private trackProgress(proc: ChildProcess, maxFps: number): void {
+    if (!proc.stdout) return
+
+    let buffered = ''
+    /** Recent samples, oldest first, so the rate is measured over a window */
+    const history: { frames: number; duplicates: number; micros: number }[] = []
+
+    proc.stdout.on('data', (chunk: Buffer) => {
+      buffered = (buffered + chunk.toString()).slice(-PROGRESS_BUFFER_CHARS)
+
+      // Each report ends with a `progress=` line; anything earlier is partial.
+      const blocks = buffered.split(/^progress=\w+$/m)
+      if (blocks.length < 2) return
+      buffered = blocks[blocks.length - 1] ?? ''
+
+      const report = blocks[blocks.length - 2]
+      if (!report) return
+
+      const value = (key: string): number | null => {
+        const match = new RegExp(`^${key}=\\s*(-?\\d+)`, 'm').exec(report)
+        return match ? Number(match[1]) : null
+      }
+
+      const frames = value('frame')
+      const micros = value('out_time_us')
+      if (frames === null || micros === null) return
+      const duplicates = value('dup_frames') ?? 0
+
+      history.push({ frames, duplicates, micros })
+      if (history.length > FPS_HISTORY_SAMPLES) history.shift()
+
+      /*
+       * Measured against a sample about a second old rather than the previous
+       * one. FFmpeg does not update `frame` and `dup_frames` at the same
+       * instant, so consecutive reports disagree about which frames were new —
+       * enough for the instantaneous rate to swing between a third of the real
+       * value and the full capture rate, and occasionally to come out negative.
+       * Over a second those disagreements cancel.
+       */
+      const oldest = history.find((sample) => micros - sample.micros >= FPS_WINDOW_US)
+      if (!oldest) return
+
+      const seconds = (micros - oldest.micros) / 1_000_000
+      if (seconds <= 0) return
+
+      const fresh = frames - oldest.frames - (duplicates - oldest.duplicates)
+      // Cannot exceed the rate the screen is being sampled at, and cannot be
+      // negative however the counters happen to land.
+      const fps = Math.max(0, Math.min(maxFps, Math.round(fresh / seconds)))
+
+      if (fps !== this._status.captureFps) this.emit({ captureFps: fps })
+    })
+  }
+
+  /**
+   * Drop the capture process below the game in Windows' scheduling order.
+   *
+   * At normal priority FFmpeg competes with the foreground game as an equal,
+   * which is what the buffer being "on" felt like. Below-normal means it only
+   * gets the time the game is not using — capture is never the thing that must
+   * finish first.
+   *
+   * Best-effort: a failure here costs performance, not correctness, so it is
+   * logged rather than raised.
+   */
+  private deprioritise(proc: ChildProcess, label: string): void {
+    if (proc.pid === undefined) return
+    try {
+      setPriority(proc.pid, osConstants.priority.PRIORITY_BELOW_NORMAL)
+    } catch (err) {
+      logger.warn(`RecorderService: could not lower FFmpeg (${label}) priority`, String(err))
+    }
   }
 
   // ── Segment tracking ───────────────────────────────────────────────────────

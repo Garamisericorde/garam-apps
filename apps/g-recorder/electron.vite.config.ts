@@ -1,4 +1,11 @@
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
+
+/**
+ * The @garam/* packages are consumed as uncompiled TypeScript source, so they
+ * must NOT be externalized — otherwise the packaged app cannot resolve them at
+ * runtime. They are bundled in, which is also what keeps each app standalone.
+ */
+const GARAM_PACKAGES = ['@garam/core', '@garam/theme', '@garam/ui']
 import react from '@vitejs/plugin-react'
 import type { Plugin } from 'vite'
 import path from 'path'
@@ -37,10 +44,10 @@ export default defineConfig({
   // electron-vite auto-discovers src/main/index.ts and src/preload/index.ts.
   // Those shims re-import the real implementations from app/main/ and app/preload/.
   main: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin({ exclude: GARAM_PACKAGES })],
   },
   preload: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin({ exclude: GARAM_PACKAGES })],
   },
   renderer: {
     // electron-vite auto-discovers src/renderer/index.html, which loads

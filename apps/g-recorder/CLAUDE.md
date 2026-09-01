@@ -110,9 +110,15 @@ All capture/encoding/export is done via FFmpeg spawned from the main process.
 ## Capture approach (Windows)
 - Prefer FFmpeg desktop capture using `ddagrab` if available.
 - If not available, fall back to `gdigrab` (slower but works).
-- ddagrab produces D3D11 GPU frames. They can only reach NVENC directly when
-  `hwmap=derive_device=cuda` succeeds, which depends on the adapter — probe it,
-  never assume. Otherwise `hwdownload,format=bgra` first.
+- ddagrab produces D3D11 GPU frames. `h264_nvenc` accepts `d3d11` as an input
+  format, so the cheapest path is **no video filter at all** — measured at
+  1440p60 on a 3060 Ti: 0.08 s of CPU per 5 s captured, against 2.58 s once the
+  frames round-trip through system memory and 11.05 s for software encoding.
+  Any filter forces that round trip, so this path is off the moment scaling is
+  requested. Prefer source resolution and resize on export.
+  (`hwmap=derive_device=cuda` is *not* the way in: FFmpeg has no D3D11-to-CUDA
+  device derivation, so that probe always fails and used to send every NVIDIA
+  machine down the full CPU path.)
 - Audio comes from DirectShow. Windows has no ffmpeg-native WASAPI loopback, so
   system audio needs Stereo Mix or a virtual cable; warn clearly when absent and
   keep recording rather than failing.
@@ -123,6 +129,23 @@ All capture/encoding/export is done via FFmpeg spawned from the main process.
 `ffmpeg -encoders` reports what the binary was *compiled* with, not what will run.
 Every encoder must be smoke-tested with a one-frame encode before being offered,
 and the failure reason surfaced in Settings.
+
+## The FFmpeg build is pinned — do not track "latest"
+NVENC support is a compile-time contract: a build carries the NVIDIA Video Codec
+SDK headers it was built against and refuses to run on an older driver. Tracking
+the newest release silently raises the driver floor, and every machine below it
+falls back to encoding on the CPU — which reads to the user as "recording makes
+my games stutter", with working hardware sitting idle. `FfmpegManager` pins
+7.1 (NVENC API 12.x, drivers back to ~551, GPUs back to Pascal).
+
+**Pin to a permanently archived version tag, never a dated auto-build.**
+BtbN's `autobuild-YYYY-MM-DD-HH-MM` releases are deleted within days — a URL
+verified in the morning 404s by the afternoon, and the user meets it as a failed
+download button. GyanD/codexffmpeg keeps its version tags indefinitely.
+
+When changing the pin, verify NVENC still initialises on an older driver, and
+remember the fix for an affected user is replacing the binary, never telling
+them to update a driver they chose deliberately.
 
 ## Encoding rules (defaults)
 - Container: MP4

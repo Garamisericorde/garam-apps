@@ -9,6 +9,7 @@ import type {
   FfmpegStatus,
   MediaInfo,
   RecorderStatus,
+  HotkeyFailure,
   ThumbnailStrip,
 } from '../shared/types'
 
@@ -30,7 +31,7 @@ export interface ExportResult {
 }
 
 export interface Notice {
-  level: 'info' | 'error'
+  level: 'info' | 'warning' | 'error'
   message: string
 }
 
@@ -110,9 +111,24 @@ export const api = {
     getStatus: (): Promise<FfmpegStatus> => ipcRenderer.invoke('ffmpeg:getStatus'),
     ensureReady: (): Promise<FfmpegStatus> => ipcRenderer.invoke('ffmpeg:ensureReady'),
     download: (): Promise<FfmpegStatus> => ipcRenderer.invoke('ffmpeg:download'),
+    /** Replace an installed FFmpeg with the pinned, driver-compatible build */
+    reinstall: (): Promise<FfmpegStatus> => ipcRenderer.invoke('ffmpeg:reinstall'),
 
     onStatusChange: (callback: (status: FfmpegStatus) => void): (() => void) =>
       subscribe('ffmpeg:statusChange', callback),
+  },
+
+  /**
+   * System audio capture, which Chromium does and FFmpeg cannot — the renderer
+   * captures it and pushes raw PCM back for FFmpeg to mux.
+   */
+  systemAudio: {
+    onStart: (
+      callback: (format: { sampleRate: number; channels: number }) => void,
+    ): (() => void) => subscribe('systemAudio:start', callback),
+    onStop: (callback: () => void): (() => void) => subscribe('systemAudio:stop', callback),
+    sendChunk: (pcm: ArrayBuffer): void => ipcRenderer.send('systemAudio:chunk', pcm),
+    reportError: (message: string): void => ipcRenderer.send('systemAudio:error', message),
   },
 
   devices: {
@@ -133,8 +149,8 @@ export const api = {
     onNotice: (callback: (notice: Notice) => void): (() => void) =>
       subscribe('app:notice', callback),
 
-    /** Hotkeys Windows refused to register */
-    onHotkeyConflict: (callback: (accelerators: string[]) => void): (() => void) =>
+    /** Hotkeys that did not register, with the reason for each */
+    onHotkeyConflict: (callback: (failures: HotkeyFailure[]) => void): (() => void) =>
       subscribe('app:hotkeyConflict', callback),
   },
 } as const

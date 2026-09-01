@@ -2,8 +2,13 @@ import { useEffect, useState } from 'react'
 import type { RecorderStatus } from '../../../shared/types'
 
 /**
- * The always-on-top capture badge. It runs in its own frameless, click-through
- * window, so it deliberately skips the app shell and paints a transparent body.
+ * The always-on-top frame-rate readout.
+ *
+ * It runs in its own frameless, click-through window, so it deliberately skips
+ * the app shell and paints a transparent body. The number is how fast the
+ * screen is actually changing — see RecorderStatus.captureFps for why that is
+ * not the same as the encoder's frame rate, and why it cannot exceed the
+ * configured capture rate.
  */
 export default function OverlayPage(): JSX.Element {
   const [status, setStatus] = useState<RecorderStatus | null>(null)
@@ -19,51 +24,22 @@ export default function OverlayPage(): JSX.Element {
     return window.api.recorder.onStatusChange(setStatus)
   }, [])
 
-  const isRecording = status?.isManualRecording ?? false
-  const isBuffering = status?.isRecording ?? false
-  const active = isRecording || isBuffering
-  const label = isRecording ? 'REC' : isBuffering ? 'REPLAY' : 'IDLE'
-  const colour = isRecording ? '#ff4040' : isBuffering ? '#6c63ff' : '#888'
+  const recording = status?.isManualRecording ?? false
+  const buffering = status?.isRecording ?? false
+  const live = recording || buffering
+  const fps = status?.captureFps
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <div
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 5,
-          background: 'rgba(0, 0, 0, 0.72)',
-          borderRadius: 5,
-          padding: '3px 8px',
-          fontFamily: '"Segoe UI", system-ui, sans-serif',
-          fontSize: 11,
-          fontWeight: 700,
-          letterSpacing: '0.06em',
-          userSelect: 'none',
-          color: colour,
-          border: `1px solid ${active ? colour + '59' : 'rgba(255,255,255,0.08)'}`,
-          whiteSpace: 'nowrap',
-        }}
-      >
-        <span
-          style={{
-            width: 7,
-            height: 7,
-            borderRadius: '50%',
-            background: active ? colour : '#555',
-            flexShrink: 0,
-            animation: isRecording ? 'blink 1.4s ease-in-out infinite' : 'none',
-          }}
-        />
-        {label}
+    <div className="fps-overlay">
+      <div className={`fps-readout${live ? ' is-live' : ''}${recording ? ' is-recording' : ''}`}>
+        <span className="fps-dot" aria-hidden />
+        {/*
+         * The number and its unit are separate so the digits can hold a fixed
+         * width. Without that the whole badge jitters every time the count
+         * crosses a digit boundary, which is exactly when you are watching it.
+         */}
+        <span className="fps-value">{live && typeof fps === 'number' ? fps : '--'}</span>
+        <span className="fps-unit">FPS</span>
       </div>
     </div>
   )

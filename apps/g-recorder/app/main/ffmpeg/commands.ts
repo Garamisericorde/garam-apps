@@ -16,6 +16,23 @@ export interface VideoEncodeOptions {
   maxBitrateKbps?: number
   /** GOP size in frames */
   gopSize?: number
+  /**
+   * Tune for an always-on capture rather than for the best picture.
+   *
+   * Export runs once and can take its time; the replay buffer runs for hours
+   * *next to a game* and every cycle it spends is one the game does not get.
+   * The quality-oriented settings are what made games stutter with the buffer
+   * on, so capture asks for the low-latency variant of each encoder instead.
+   */
+  lowLatency?: boolean
+  /**
+   * Cap on encoder worker threads (software encoding only).
+   *
+   * Left alone, x264 spawns a thread per core and saturates the CPU. Lowering
+   * the process priority is not enough on its own — the threads still evict the
+   * game's data from cache.
+   */
+  threads?: number
 }
 
 /**
@@ -27,7 +44,7 @@ export interface VideoEncodeOptions {
  * and cbr, so the old `vbr_hq` alias fails outright.
  */
 export function buildVideoEncodeArgs(options: VideoEncodeOptions): string[] {
-  const { encoder, quality, targetBitrateKbps, maxBitrateKbps, gopSize } = options
+  const { encoder, quality, targetBitrateKbps, maxBitrateKbps, gopSize, lowLatency } = options
   const args: string[] = []
 
   const capKbps = targetBitrateKbps ?? (maxBitrateKbps && maxBitrateKbps > 0 ? maxBitrateKbps : 0)
@@ -36,7 +53,10 @@ export function buildVideoEncodeArgs(options: VideoEncodeOptions): string[] {
 
   switch (encoder) {
     case 'nvenc':
-      args.push('-c:v', 'h264_nvenc', '-preset', 'p4', '-tune', 'hq')
+      // 'll' drops the lookahead and B-frame reordering that 'hq' turns on —
+      // both hold frames on the GPU while the game is trying to use it.
+      args.push('-c:v', 'h264_nvenc', '-preset', 'p4', '-tune', lowLatency ? 'll' : 'hq')
+      if (lowLatency) args.push('-rc-lookahead', '0', '-bf', '0')
       if (targetBitrateKbps) {
         args.push('-rc', 'vbr', '-b:v', `${targetBitrateKbps}k`)
       } else {
@@ -46,7 +66,7 @@ export function buildVideoEncodeArgs(options: VideoEncodeOptions): string[] {
       break
 
     case 'qsv':
-      args.push('-c:v', 'h264_qsv', '-preset', 'medium')
+      args.push('-c:v', 'h264_qsv', '-preset', lowLatency ? 'veryfast' : 'medium')
       if (targetBitrateKbps) {
         args.push('-b:v', `${targetBitrateKbps}k`)
       } else {
@@ -56,7 +76,7 @@ export function buildVideoEncodeArgs(options: VideoEncodeOptions): string[] {
       break
 
     case 'amf':
-      args.push('-c:v', 'h264_amf', '-quality', 'balanced')
+      args.push('-c:v', 'h264_amf', '-quality', lowLatency ? 'speed' : 'balanced')
       if (targetBitrateKbps) {
         args.push('-rc', 'vbr_peak', '-b:v', `${targetBitrateKbps}k`)
       } else {
@@ -66,7 +86,11 @@ export function buildVideoEncodeArgs(options: VideoEncodeOptions): string[] {
       break
 
     default:
-      args.push('-c:v', 'libx264', '-preset', 'veryfast')
+      // 'veryfast' still costs several cores at 1080p60. 'ultrafast' with
+      // zerolatency is the difference between a playable game and a slideshow;
+      // the buffer trades picture quality for it, exports do not.
+      args.push('-c:v', 'libx264', '-preset', lowLatency ? 'ultrafast' : 'veryfast')
+      if (lowLatency) args.push('-tune', 'zerolatency')
       if (targetBitrateKbps) {
         args.push('-b:v', `${targetBitrateKbps}k`)
       } else {
@@ -78,6 +102,12 @@ export function buildVideoEncodeArgs(options: VideoEncodeOptions): string[] {
 
   if (gopSize && gopSize > 0) {
     args.push('-g', String(gopSize), '-keyint_min', String(gopSize))
+  }
+
+  // Only software encoding has worker threads worth limiting; the hardware
+  // encoders do the work on the GPU and ignore the flag.
+  if (encoder === 'x264' && options.threads && options.threads > 0) {
+    args.push('-threads', String(options.threads))
   }
 
   return args
@@ -92,13 +122,46 @@ export interface CaptureOptions {
   encoder: EncoderType
   /** Use ddagrab (DXGI) instead of gdigrab */
   useDdagrab: boolean
+  /**
+   * Hand ddagrab's D3D11 frames to NVENC with no video filter at all.
+   *
+   * Cheapest path by two orders of magnitude, and mutually exclusive with any
+   * filtering — inserting one forces the frames back through system memory,
+   * which is the whole cost being avoided.
+   */
+  useD3d11Direct: boolean
   /** ddagrab frames can be mapped straight to NVENC (probed, not assumed) */
   useCudaZeroCopy: boolean
   /** DirectShow device for system audio, when enabled and available */
   systemAudioDevice: string | null
+  /**
+   * Take system audio as raw PCM on stdin instead of from a DirectShow device.
+   *
+   * Windows exposes no loopback device on most machines, so this is the usual
+   * case rather than the exception — the renderer captures it through Chromium
+   * and feeds it here. Mutually exclusive with systemAudioDevice.
+   */
+  systemAudioPipe: { sampleRate: number; channels: number; codec: string } | null
   /** DirectShow device for the microphone, when enabled and available */
   micDevice: string | null
+  /** Upper bound on x264 worker threads; see VideoEncodeOptions.threads */
+  encoderThreads?: number
 }
+
+/**
+ * Packets FFmpeg may queue per input before it blocks.
+ *
+ * The default (8) is tiny. When the encoder falls behind for a moment the
+ * demuxer thread stalls waiting for room, and a stalled desktop-capture thread
+ * shows up as a hitch in whatever is on screen. A deeper queue absorbs the
+ * spike instead of pushing it back onto the capture.
+ */
+const THREAD_QUEUE_SIZE = '512'
+
+/** One audio source, in the order FFmpeg will see it */
+type AudioInput =
+  | { kind: 'dshow'; device: string }
+  | { kind: 'pipe'; format: { sampleRate: number; channels: number; codec: string } }
 
 /**
  * Build the input + filter + encode portion shared by replay-buffer capture
@@ -106,11 +169,21 @@ export interface CaptureOptions {
  */
 export function buildCaptureArgs(options: CaptureOptions): string[] {
   const { settings, encoder, useDdagrab } = options
-  const audioDevices = [options.systemAudioDevice, options.micDevice].filter(
-    (d): d is string => !!d,
-  )
 
-  const args: string[] = ['-hide_banner', '-loglevel', 'warning']
+  // System audio comes either from stdin (Chromium's loopback) or from a
+  // DirectShow device, never both; the microphone is always DirectShow. Order
+  // matters — it fixes the input indices the maps below refer to.
+  const audioInputs: AudioInput[] = []
+  if (options.systemAudioPipe) audioInputs.push({ kind: 'pipe', format: options.systemAudioPipe })
+  else if (options.systemAudioDevice)
+    audioInputs.push({ kind: 'dshow', device: options.systemAudioDevice })
+  if (options.micDevice) audioInputs.push({ kind: 'dshow', device: options.micDevice })
+
+  // `-progress` writes a machine-readable block to stdout every half second.
+  // It is how the overlay knows the real frame rate: ddagrab pads its output to
+  // the requested rate, so the interesting number is not `fps` but how many of
+  // those frames were duplicates.
+  const args: string[] = ['-hide_banner', '-loglevel', 'warning', '-progress', 'pipe:1']
 
   // ── Video input ──
   if (useDdagrab) {
@@ -119,9 +192,10 @@ export function buildCaptureArgs(options: CaptureOptions): string[] {
       `framerate=${settings.fps}`,
       `draw_mouse=${settings.captureCursor ? 1 : 0}`,
     ].join(':')
-    args.push('-f', 'lavfi', '-i', `ddagrab=${ddagrab}`)
+    args.push('-thread_queue_size', THREAD_QUEUE_SIZE, '-f', 'lavfi', '-i', `ddagrab=${ddagrab}`)
   } else {
     args.push(
+      '-thread_queue_size', THREAD_QUEUE_SIZE,
       '-f', 'gdigrab',
       '-framerate', String(settings.fps),
       '-draw_mouse', settings.captureCursor ? '1' : '0',
@@ -130,43 +204,73 @@ export function buildCaptureArgs(options: CaptureOptions): string[] {
   }
 
   // ── Audio inputs ──
-  for (const device of audioDevices) {
-    args.push(
-      '-f', 'dshow',
-      '-audio_buffer_size', '50',
-      '-rtbufsize', '64M',
-      '-i', `audio=${device}`,
-    )
+  for (const input of audioInputs) {
+    if (input.kind === 'pipe') {
+      args.push(
+        '-thread_queue_size', THREAD_QUEUE_SIZE,
+        '-f', input.format.codec,
+        '-ar', String(input.format.sampleRate),
+        '-ac', String(input.format.channels),
+        '-i', 'pipe:0',
+      )
+    } else {
+      args.push(
+        '-thread_queue_size', THREAD_QUEUE_SIZE,
+        '-f', 'dshow',
+        '-audio_buffer_size', '50',
+        '-rtbufsize', '64M',
+        '-i', `audio=${input.device}`,
+      )
+    }
   }
 
   // ── Filters ──
-  const videoFilter = buildCaptureVideoFilter(
-    settings,
-    encoder,
-    useDdagrab,
-    options.useCudaZeroCopy,
-  )
-
-  if (audioDevices.length > 1) {
+  if (options.useD3d11Direct) {
+    // Deliberately no video filter: the frames stay on the GPU from capture to
+    // encoder. Audio still needs its mix, but that graph must not touch video.
+    args.push('-map', '0:v:0')
+    if (audioInputs.length > 1) {
+      const audioLabels = audioInputs.map((_, i) => `[${i + 1}:a]`).join('')
+      args.push(
+        '-filter_complex',
+        `${audioLabels}amix=inputs=${audioInputs.length}:duration=longest:dropout_transition=0,` +
+          `aresample=async=1[aout]`,
+        '-map',
+        '[aout]',
+      )
+    } else if (audioInputs.length === 1) {
+      args.push('-map', '1:a:0', '-af', 'aresample=async=1')
+    }
+  } else if (audioInputs.length > 1) {
     // Two sources need a mix, so the whole graph goes through -filter_complex
-    const audioLabels = audioDevices.map((_, i) => `[${i + 1}:a]`).join('')
+    const videoFilter = buildCaptureVideoFilter(settings, encoder, useDdagrab, options.useCudaZeroCopy)
+    const audioLabels = audioInputs.map((_, i) => `[${i + 1}:a]`).join('')
     const graph =
       `[0:v]${videoFilter}[vout];` +
-      `${audioLabels}amix=inputs=${audioDevices.length}:duration=longest:dropout_transition=0,` +
+      `${audioLabels}amix=inputs=${audioInputs.length}:duration=longest:dropout_transition=0,` +
       `aresample=async=1[aout]`
     args.push('-filter_complex', graph, '-map', '[vout]', '-map', '[aout]')
   } else {
+    const videoFilter = buildCaptureVideoFilter(settings, encoder, useDdagrab, options.useCudaZeroCopy)
     args.push('-vf', videoFilter, '-map', '0:v:0')
-    if (audioDevices.length === 1) {
+    if (audioInputs.length === 1) {
       args.push('-map', '1:a:0', '-af', 'aresample=async=1')
     }
   }
 
   // ── Encoding ──
   const gopSize = settings.fps * KEYFRAME_INTERVAL_SECONDS
-  args.push(...buildVideoEncodeArgs({ encoder, quality: 23, gopSize }))
+  args.push(
+    ...buildVideoEncodeArgs({
+      encoder,
+      quality: 23,
+      gopSize,
+      lowLatency: true,
+      threads: options.encoderThreads,
+    }),
+  )
 
-  if (audioDevices.length > 0) {
+  if (audioInputs.length > 0) {
     args.push('-c:a', 'aac', '-b:a', '160k', '-ar', '48000')
   } else {
     args.push('-an')

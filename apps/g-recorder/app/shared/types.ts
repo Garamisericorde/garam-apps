@@ -51,6 +51,15 @@ export interface RecorderStatus {
   bufferSeconds: number
   oldestSegmentTime: number | null
   newestSegmentTime: number | null
+  /**
+   * Frames per second actually being captured, or null when nothing is running.
+   *
+   * Counts only *new* frames. Desktop duplication repeats the last frame to
+   * fill the requested rate, so the raw encoder rate always reads as the
+   * configured fps and says nothing about what is on screen. This number
+   * follows the screen, and is therefore capped by the capture frame rate.
+   */
+  captureFps: number | null
   error: string | null
 }
 
@@ -131,6 +140,15 @@ export interface DisplayInfo {
   label: string
   width: number
   height: number
+  /**
+   * Real pixel height, which under fractional scaling is not `height`.
+   *
+   * Whether capture needs to resize — and so whether it can stay on the GPU —
+   * is decided against the pixels, never against the DIP size.
+   */
+  nativeHeight: number
+  /** Refresh rate in Hz, which bounds the frame rate worth capturing at */
+  refreshRate: number
   isPrimary: boolean
 }
 
@@ -166,8 +184,20 @@ export interface EncoderCapabilities {
   x264: EncoderProbe
   /** DXGI Desktop Duplication capture works */
   hasDdagrab: boolean
+  /**
+   * NVENC accepts ddagrab's D3D11 frames unfiltered — the cheapest path there
+   * is, but unusable as soon as a filter (i.e. scaling) has to be inserted.
+   */
+  hasD3d11DirectNvenc: boolean
   /** ddagrab frames can go straight to NVENC without a system-memory round trip */
   hasCudaZeroCopy: boolean
   /** Highest-ranked encoder that actually works here */
   bestEncoder: EncoderType
+}
+
+/** A hotkey that did not register, and why. */
+export interface HotkeyFailure {
+  accelerator: string
+  /** 'taken' = another app owns it, 'invalid' = not a legal accelerator string. */
+  reason: 'taken' | 'invalid'
 }
