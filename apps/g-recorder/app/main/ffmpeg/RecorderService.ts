@@ -106,6 +106,28 @@ const STDERR_TAIL_CHARS = 2_000
 /** Enough to hold a partial progress report while the rest arrives */
 const PROGRESS_BUFFER_CHARS = 4_000
 
+/**
+ * How long the frame counter may stand still before the capture is presumed
+ * dead.
+ *
+ * FFmpeg pads its output to a constant frame rate, so `frame` keeps climbing
+ * even while the screen is perfectly still — a counter that stops has lost its
+ * input, not its subject. Waiting a few seconds keeps a scheduling hiccup from
+ * being mistaken for a failure.
+ */
+const CAPTURE_STALL_MS = 4_000
+
+/**
+ * Grace given to a capture that has not reported anything yet.
+ *
+ * Starting FFmpeg means opening the encoder and claiming the desktop
+ * duplication, and the latter can be slow when a previous instance has only
+ * just let go of it. Holding a fresh process to the running-capture deadline
+ * kills it before it can produce its first frame, and the restart it triggers
+ * runs into exactly the same wall — a loop that never recovers.
+ */
+const CAPTURE_STARTUP_GRACE_MS = 15_000
+
 /** Window the frame rate is averaged over, in microseconds of captured time */
 const FPS_WINDOW_US = 1_000_000
 
@@ -132,6 +154,10 @@ export class RecorderService {
   private _processStartedAt = 0
   /** Tail of the capture's stderr, to tell a lost display from a bad config */
   private _stderrTail = ''
+  /** When the capture last produced a new frame — see checkForStall */
+  private _lastFrameAt = 0
+  /** Whether the current capture has reported any progress at all yet */
+  private _sawProgress = false
 
   /** Set while a replay is being written, to keep pruning off the used files */
   private _saveHolds = 0
@@ -239,6 +265,8 @@ export class RecorderService {
 
     this._recordingStartedAt = Date.now()
     this._processStartedAt = Date.now()
+    this._lastFrameAt = Date.now()
+    this._sawProgress = false
     this._stderrTail = ''
     this._process = this.spawnCapture(ffmpegPath, args, 'replay-buffer', () =>
       this.handleBufferExit(),
@@ -266,6 +294,36 @@ export class RecorderService {
     pipeSystemAudioTo((chunk) => {
       if (stdin.writable) stdin.write(chunk)
     })
+  }
+
+  /**
+   * Notice a capture that has stopped producing frames and restart it.
+   *
+   * Waiting for the process to exit is not enough. When a game takes the
+   * display, ddagrab fails with DXGI_ERROR_ACCESS_LOST and the video input
+   * dies — but FFmpeg stays alive as long as the audio pipe keeps feeding it,
+   * so no exit ever arrives. The buffer then looks healthy while recording
+   * nothing, which is precisely when the user believes it is capturing their
+   * game. The frame counter standing still is the only honest signal.
+   */
+  private checkForStall(): void {
+    if (!this._process || this._stopping || !this._status.isRecording) return
+    if (this._restartTimer !== null) return
+
+    const limit = this._sawProgress ? CAPTURE_STALL_MS : CAPTURE_STARTUP_GRACE_MS
+    if (Date.now() - this._lastFrameAt < limit) return
+
+    logger.warn('RecorderService: capture stalled, restarting', {
+      startedProducing: this._sawProgress,
+      stalledForMs: Date.now() - this._lastFrameAt,
+      stderr: this._stderrTail.slice(-200),
+    })
+
+    // Killing it routes into the normal reconnect path rather than duplicating
+    // the backoff and bookkeeping here.
+    const proc = this._process
+    this._lastFrameAt = Date.now()
+    proc.kill()
   }
 
   /**
@@ -709,6 +767,13 @@ export class RecorderService {
       if (frames === null || micros === null) return
       const duplicates = value('dup_frames') ?? 0
 
+      // Proof the capture is still alive; the stall watchdog reads this.
+      const previous = history[history.length - 1]
+      if (!previous || frames > previous.frames) {
+        this._lastFrameAt = Date.now()
+        this._sawProgress = true
+      }
+
       history.push({ frames, duplicates, micros })
       if (history.length > FPS_HISTORY_SAMPLES) history.shift()
 
@@ -761,6 +826,7 @@ export class RecorderService {
     this.stopPolling()
     this._pollTimer = setInterval(() => {
       try {
+        this.checkForStall()
         this.refreshSegments(settings)
         this.pruneSegments(settings)
         this.saveIndex()
