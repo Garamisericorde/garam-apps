@@ -3,10 +3,10 @@ import { Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'reac
 import type { HotkeyFailure } from '@shared/types'
 import type { FfmpegStatus } from '../../shared/types'
 import EditorPage from './pages/EditorPage'
+import RecordPage from './pages/RecordPage'
 import SettingsPage from './pages/SettingsPage'
 import OverlayPage from './pages/OverlayPage'
 import FfmpegBanner from './components/FfmpegBanner'
-import RecorderBar from './components/RecorderBar'
 import { startSystemAudioCapture, stopSystemAudioCapture } from './audio/systemAudio'
 
 interface Notice {
@@ -89,8 +89,11 @@ export default function App(): JSX.Element {
           <span className="brand-name">G-Recorder</span>
         </span>
 
+        <NavLink to="/record" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
+          Record
+        </NavLink>
         <NavLink to="/editor" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
-          Editor
+          Edit
         </NavLink>
         <NavLink to="/settings" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
           Settings
@@ -100,8 +103,6 @@ export default function App(): JSX.Element {
       <main className="page">
         <div className="stack" style={{ gap: 12, height: '100%' }}>
           <FfmpegBanner status={ffmpeg} onStatusChange={setFfmpeg} />
-
-          <RecorderBar />
 
           {hotkeyConflicts.length > 0 && (
             <div className="banner banner-warning">
@@ -131,10 +132,12 @@ export default function App(): JSX.Element {
           )}
 
           <Routes>
-            <Route path="/" element={<Navigate to="/editor" replace />} />
+            {/* Recording is what the app is for; editing is what you do after. */}
+            <Route path="/" element={<Navigate to="/record" replace />} />
+            <Route path="/record" element={<RecordPage />} />
             <Route path="/editor" element={<EditorPage />} />
             <Route path="/settings" element={<SettingsPage />} />
-            <Route path="*" element={<Navigate to="/editor" replace />} />
+            <Route path="*" element={<Navigate to="/record" replace />} />
           </Routes>
         </div>
       </main>

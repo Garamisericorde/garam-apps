@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useLocation } from 'react-router-dom'
-import type { MediaInfo, RecorderStatus } from '../../../shared/types'
-import { clamp, formatBytes, formatDuration } from '../../../shared/time'
+import { useLocation, useNavigate } from 'react-router-dom'
+import type { MediaInfo } from '../../../shared/types'
+import { clamp, formatBytes, formatTime } from '../../../shared/time'
 import VideoPlayer from '../components/VideoPlayer'
 import type { VideoPlayerHandle } from '../components/VideoPlayer'
 import Timeline from '../components/Timeline'
@@ -20,11 +20,11 @@ interface EditorLocationState {
 
 export default function EditorPage(): JSX.Element {
   const location = useLocation()
+  const navigate = useNavigate()
   const requestedPath = (location.state as EditorLocationState | null)?.clipPath
 
   const playerRef = useRef<VideoPlayerHandle>(null)
 
-  const [status, setStatus] = useState<RecorderStatus | null>(null)
   const [clip, setClip] = useState<LoadedClip | null>(null)
   const [duration, setDuration] = useState(0)
   const [inPoint, setInPoint] = useState(0)
@@ -67,12 +67,6 @@ export default function EditorPage(): JSX.Element {
     }
   }, [])
 
-  // Recorder status
-  useEffect(() => {
-    window.api.recorder.getStatus().then(setStatus).catch(() => undefined)
-    return window.api.recorder.onStatusChange(setStatus)
-  }, [])
-
   // A replay saved from the tray or a hotkey lands here
   useEffect(() => {
     return window.api.recorder.onReplaySaved((saved) => {
@@ -102,25 +96,6 @@ export default function EditorPage(): JSX.Element {
       }
     },
     [],
-  )
-
-  // Both of these finish by broadcasting recorder:replaySaved, and the
-  // subscription above loads the resulting clip — no need to do it twice.
-  const handleSaveReplay = useCallback(
-    () => runAction('save', () => window.api.recorder.saveReplay().then(() => undefined)),
-    [runAction],
-  )
-
-  const handleToggleRecording = useCallback(
-    () =>
-      runAction('record', async () => {
-        if (status?.isManualRecording) {
-          await window.api.recorder.stopManual()
-          return
-        }
-        await window.api.recorder.startManual()
-      }),
-    [runAction, status?.isManualRecording],
   )
 
   const handleOpenFile = useCallback(
@@ -212,34 +187,20 @@ export default function EditorPage(): JSX.Element {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  const recording = status?.isManualRecording ?? false
-  const bufferRunning = status?.isRecording ?? false
-
   return (
     <div className="editor">
-      <div className="row">
-        <h1>Editor</h1>
-        <StatusPill status={status} />
-
-        <div style={{ flex: 1 }} />
+      <div className="row-between editor-head">
+        <div className="stack">
+          <h1>{clip ? baseName(clip.path) : 'Edit'}</h1>
+          {clip && (
+            <span className="muted small mono">
+              {clip.info.width}×{clip.info.height} · {formatTime(duration)}
+            </span>
+          )}
+        </div>
 
         <button className="btn" onClick={() => void handleOpenFile()} disabled={busy !== null}>
           Open video…
-        </button>
-        <button
-          className={recording ? 'btn btn-danger' : 'btn'}
-          onClick={() => void handleToggleRecording()}
-          disabled={busy !== null}
-        >
-          {recording ? 'Stop recording' : 'Record'}
-        </button>
-        <button
-          className="btn btn-primary"
-          onClick={() => void handleSaveReplay()}
-          disabled={busy !== null || !bufferRunning}
-          title={bufferRunning ? 'Save the replay buffer' : 'The replay buffer is not running'}
-        >
-          {busy === 'save' ? 'Saving…' : 'Save replay'}
         </button>
       </div>
 
@@ -279,17 +240,13 @@ export default function EditorPage(): JSX.Element {
           />
         ) : (
           <div className="stage-empty">
-            <p>Drop a video here, open one, or save a replay to start editing.</p>
+            <p>Drop a video here, or open one, to start editing.</p>
             <div className="row">
-              <button className="btn" onClick={() => void handleOpenFile()}>
+              <button className="btn btn-primary" onClick={() => void handleOpenFile()}>
                 Open video…
               </button>
-              <button
-                className="btn btn-primary"
-                onClick={() => void handleSaveReplay()}
-                disabled={!bufferRunning}
-              >
-                Save replay
+              <button className="btn" onClick={() => navigate('/record')}>
+                Save a replay
               </button>
             </div>
           </div>
@@ -341,35 +298,6 @@ export default function EditorPage(): JSX.Element {
 
 // ── Sub-components ───────────────────────────────────────────────────────────
 
-function StatusPill({ status }: { status: RecorderStatus | null }): JSX.Element {
-  if (!status) return <span className="pill">…</span>
-
-  if (status.isManualRecording) {
-    return (
-      <span className="pill pill-live">
-        <span className="pill-dot" />
-        Recording
-      </span>
-    )
-  }
-
-  if (status.isRecording) {
-    return (
-      <span className="pill pill-live">
-        <span className="pill-dot" />
-        Buffer {formatDuration(status.bufferSeconds)}
-      </span>
-    )
-  }
-
-  return (
-    <span className="pill">
-      <span className="pill-dot" />
-      Idle
-    </span>
-  )
-}
-
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -380,4 +308,9 @@ function isTypingTarget(target: EventTarget | null): boolean {
 function cleanError(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err)
   return raw.replace(/^Error invoking remote method '[^']+':\s*(Error:\s*)?/, '').trim()
+}
+
+/** File name without its directory, for the editor's title */
+function baseName(path: string): string {
+  return path.split(/[\\/]/).pop() ?? path
 }

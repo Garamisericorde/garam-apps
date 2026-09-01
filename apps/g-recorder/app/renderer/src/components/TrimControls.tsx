@@ -62,32 +62,40 @@ export default function TrimControls({
         |▶
       </button>
 
-      <span className="mono small muted" style={{ minWidth: 132 }}>
-        {formatTime(currentTime)} / {formatTime(duration)}
+      <span className="transport-clock mono">
+        {formatTime(currentTime)}
+        <span className="muted"> / {formatTime(duration)}</span>
       </span>
 
       <div style={{ flex: 1 }} />
 
-      <button className="btn" onClick={onSetIn} disabled={disabled} title="Set start (I)">
-        Set start
+      <button className="btn" onClick={onSetIn} disabled={disabled} title="Cut the start here (I)">
+        Cut start
       </button>
-      <button className="btn" onClick={onSetOut} disabled={disabled} title="Set end (O)">
-        Set end
+      <button className="btn" onClick={onSetOut} disabled={disabled} title="Cut the end here (O)">
+        Cut end
       </button>
 
-      <span className="mono small muted" style={{ minWidth: 152, textAlign: 'right' }}>
-        {formatTime(inPoint)} → {formatTime(outPoint)}
-      </span>
-
-      <span className="pill" title="Length of the trimmed selection">
-        {formatTime(selection)}
-      </span>
+      {/*
+       * One readout, not two. The range and the selection length used to sit
+       * side by side, and on an untrimmed clip they print the same number —
+       * which reads as the duration having been written twice by mistake.
+       * Untrimmed, there is nothing to say; trimmed, the length is what the
+       * export will be.
+       */}
+      {trimmed ? (
+        <span className="pill pill-accent" title={`${formatTime(inPoint)} → ${formatTime(outPoint)}`}>
+          {formatTime(selection)} selected
+        </span>
+      ) : (
+        <span className="small muted">Whole clip</span>
+      )}
 
       <button
         className="btn btn-ghost"
         onClick={onReset}
         disabled={disabled || !trimmed}
-        title="Clear the trim and select the whole clip"
+        title="Clear the cut and select the whole clip"
       >
         Reset
       </button>

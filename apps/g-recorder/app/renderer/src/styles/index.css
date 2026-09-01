@@ -535,7 +535,9 @@ input:focus {
 
 .timeline {
   position: relative;
-  height: 62px;
+  /* Taller: this is the cutting tool, not a decorative filmstrip, and the
+     handles need somewhere to be grabbed. */
+  height: 84px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--bg-elevated);
@@ -562,7 +564,8 @@ input:focus {
   position: absolute;
   top: 0;
   bottom: 0;
-  background: var(--bg-scrim);
+  /* Nearly opaque: what is cut away should read as gone, not as dimmed. */
+  background: rgb(0 0 0 / 0.66);
   pointer-events: none;
 }
 
@@ -572,6 +575,7 @@ input:focus {
   bottom: 0;
   border-top: 2px solid var(--accent);
   border-bottom: 2px solid var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-ring) inset;
   pointer-events: none;
 }
 
@@ -579,24 +583,30 @@ input:focus {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 12px;
+  width: 14px;
   background: var(--accent-gradient);
   cursor: ew-resize;
   display: flex;
   align-items: center;
   justify-content: center;
+  /* A grip, so it reads as something to drag rather than an edge marker. */
+  gap: 2px;
+  transition: filter 0.12s;
 }
 
+.timeline-handle::before,
 .timeline-handle::after {
   content: '';
   width: 2px;
-  height: 16px;
+  height: 18px;
   border-radius: 1px;
   background: var(--text-on-accent);
+  opacity: 0.85;
 }
 
+/* Brightness, not another colour: a gradient cannot take a flat hover fill. */
 .timeline-handle:hover {
-  background: var(--accent-hover);
+  filter: brightness(1.15);
 }
 
 .timeline-playhead {
@@ -802,4 +812,116 @@ kbd {
 
 .state-dot.is-idle {
   opacity: 0.55;
+}
+
+/* ── Record page ─────────────────────────────────────────────────────────── */
+
+.capture-card {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.capture-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    var(--accent-from) 0%,
+    var(--accent-to) 45%,
+    transparent 100%
+  );
+  opacity: 0.7;
+}
+
+.capture-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.capture-head .state-dot {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+/*
+ * How full the rolling window is. A bar rather than a number because the
+ * question it answers — "would a replay saved now cover what just happened?" —
+ * is a proportion, and proportions are read faster than digits.
+ */
+.capture-meter {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--bg-inset);
+  overflow: hidden;
+}
+
+.capture-meter-fill {
+  height: 100%;
+  background: var(--accent-gradient);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.capture-actions {
+  padding-top: 4px;
+}
+
+.capture-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.fact {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 14px;
+  background: var(--bg-surface);
+}
+
+.fact-label {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.fact-value {
+  font-size: 13px;
+  font-weight: 550;
+}
+
+/* ── Editor chrome ───────────────────────────────────────────────────────── */
+
+.editor-head {
+  align-items: flex-start;
+}
+
+.transport-clock {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+.pill-accent {
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+  font-weight: 600;
 }
