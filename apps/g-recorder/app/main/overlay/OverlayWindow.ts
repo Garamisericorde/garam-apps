@@ -5,13 +5,13 @@ import { logger } from '../logging/logger'
 
 const WIDTH = 26
 const HEIGHT = 26
-const MARGIN = 12
+const MARGIN = 4
 
 /**
  * Pushed down the left edge to clear Steam's frame counter, which claims the
  * very top-left corner and would otherwise sit on top of this.
  */
-const TOP_OFFSET = 34
+const TOP_OFFSET = 18
 
 /** How often to re-claim the top of the window stack while visible */
 const ON_TOP_REASSERT_MS = 2_000

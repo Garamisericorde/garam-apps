@@ -297,6 +297,86 @@ describe('buildCaptureArgs', () => {
   })
 })
 
+describe('buildClipExportArgs with parts', () => {
+  const base: ClipExportOptions = {
+    clipPath: 'in.mp4',
+    outputPath: 'out.mp4',
+    inPoint: 0,
+    outPoint: 10,
+    encoder: 'x264',
+    outWidth: 1280,
+    outHeight: 720,
+    crop: null,
+    fps: 0,
+    quality: 23,
+    maxBitrateKbps: 0,
+    audioBitrateKbps: 128,
+    speed: 1,
+    volume: 1,
+    hasAudio: true,
+  }
+
+  it('keeps the fast seek path for a single range', () => {
+    // -ss before -i skips decoding the discarded head entirely; stitching
+    // would throw that away for no gain when nothing is being joined.
+    const args = buildClipExportArgs({ ...base, ranges: [{ start: 2, end: 6 }] })
+    expect(valueAfter(args, '-ss')).toBe('0.000')
+    expect(args).not.toContain('-filter_complex')
+  })
+
+  it('stitches several kept pieces into one clip', () => {
+    const args = buildClipExportArgs({
+      ...base,
+      ranges: [
+        { start: 1, end: 3 },
+        { start: 7, end: 9 },
+      ],
+    })
+    const graph = valueAfter(args, '-filter_complex') ?? ''
+
+    expect(graph).toContain('trim=start=1.000:end=3.000')
+    expect(graph).toContain('trim=start=7.000:end=9.000')
+    expect(graph).toContain('concat=n=2:v=1:a=0')
+    expect(graph).toContain('concat=n=2:v=0:a=1')
+    expect(args).toContain('[vout]')
+    expect(args).toContain('[aout]')
+    // Seeking would fight the trim filters, and -t would cut the join short.
+    expect(args).not.toContain('-ss')
+    expect(args).not.toContain('-t')
+  })
+
+  it('resets each piece to zero, or concat writes a hole where the gap was', () => {
+    const graph =
+      valueAfter(
+        buildClipExportArgs({
+          ...base,
+          ranges: [
+            { start: 1, end: 3 },
+            { start: 7, end: 9 },
+          ],
+        }),
+        '-filter_complex',
+      ) ?? ''
+
+    // The lookbehind matters: plain `setpts` also matches inside `asetpts`.
+    expect(graph.match(/(?<!a)setpts=PTS-STARTPTS/g)).toHaveLength(2)
+    expect(graph.match(/asetpts=PTS-STARTPTS/g)).toHaveLength(2)
+  })
+
+  it('drops the audio branches entirely when the clip is muted', () => {
+    const args = buildClipExportArgs({
+      ...base,
+      volume: 0,
+      ranges: [
+        { start: 1, end: 3 },
+        { start: 7, end: 9 },
+      ],
+    })
+    expect(args).toContain('-an')
+    expect(valueAfter(args, '-filter_complex')).not.toContain('atrim')
+  })
+})
+
 describe('buildSegmentOutputArgs', () => {
   it('asks FFmpeg for a CSV list so segment timings never have to be guessed', () => {
     const args = buildSegmentOutputArgs(2, 'C:\\cache\\seg_%Y%m%d_%H%M%S.mp4', 'C:\\cache\\list.csv')

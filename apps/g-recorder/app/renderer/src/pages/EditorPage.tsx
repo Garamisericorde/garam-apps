@@ -8,6 +8,9 @@ import Timeline from '../components/Timeline'
 import TrimControls from '../components/TrimControls'
 import PresetPicker from '../components/PresetPicker'
 
+/** Shortest part a cut may create — below this it cannot be aimed at or seen */
+const MIN_PART_SECONDS = 0.25
+
 interface LoadedClip {
   path: string
   url: string
@@ -28,6 +31,16 @@ export default function EditorPage(): JSX.Element {
   const [clip, setClip] = useState<LoadedClip | null>(null)
   const [duration, setDuration] = useState(0)
   const [inPoint, setInPoint] = useState(0)
+  /**
+   * Split points inside the selection, in seconds.
+   *
+   * A cut on its own removes nothing: it divides the selection into parts, and
+   * discarding a part is a separate, reversible act. That keeps S free to be
+   * pressed while scrubbing without destroying anything.
+   */
+  const [cuts, setCuts] = useState<number[]>([])
+  /** Parts the export should leave out, keyed by their start time */
+  const [discarded, setDiscarded] = useState<number[]>([])
   const [outPoint, setOutPoint] = useState(0)
   const [currentTime, setCurrentTime] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -130,6 +143,16 @@ export default function EditorPage(): JSX.Element {
 
     const frameStep = 1 / (clip.info.fps > 0 ? clip.info.fps : 30)
 
+    const splitAtPlayhead = (): void => {
+      // A cut on top of an existing one, or hard against an edge, would make a
+      // part too short to see or select.
+      const tooClose = (a: number, b: number): boolean => Math.abs(a - b) < MIN_PART_SECONDS
+      if (tooClose(currentTime, inPoint) || tooClose(currentTime, outPoint)) return
+      if (cuts.some((cut) => tooClose(cut, currentTime))) return
+
+      setCuts((previous) => [...previous, currentTime].sort((a, b) => a - b))
+    }
+
     const handleKey = (event: KeyboardEvent): void => {
       if (isTypingTarget(event.target)) return
 
@@ -145,6 +168,10 @@ export default function EditorPage(): JSX.Element {
         case 'o':
         case 'O':
           setOutPoint(clamp(currentTime, inPoint + 0.1, duration))
+          break
+        case 's':
+        case 'S':
+          splitAtPlayhead()
           break
         case 'ArrowLeft':
           event.preventDefault()
@@ -167,7 +194,7 @@ export default function EditorPage(): JSX.Element {
 
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [clip, currentTime, duration, inPoint, outPoint])
+  }, [clip, cuts, currentTime, duration, inPoint, outPoint])
 
   // ── Drag and drop ──────────────────────────────────────────────────────────
 
@@ -186,6 +213,17 @@ export default function EditorPage(): JSX.Element {
   )
 
   // ── Render ─────────────────────────────────────────────────────────────────
+
+  // Parts are derived, never stored: cuts and the trim are the only state, so
+  // moving a handle cannot leave a stale part behind.
+  const bounds = [inPoint, ...cuts.filter((c) => c > inPoint && c < outPoint), outPoint]
+  const parts = bounds.slice(0, -1).map((start, index) => ({
+    start,
+    end: bounds[index + 1] ?? outPoint,
+    kept: !discarded.some((d) => Math.abs(d - start) < 0.001),
+  }))
+  const keptRanges = parts.filter((p) => p.kept).map(({ start, end }) => ({ start, end }))
+  const hasCuts = parts.length > 1
 
   return (
     <div className="editor">
@@ -260,9 +298,41 @@ export default function EditorPage(): JSX.Element {
         currentTime={currentTime}
         thumbnails={thumbnails}
         loadingThumbnails={loadingThumbnails}
+        cuts={cuts.filter((c) => c > inPoint && c < outPoint)}
         onSeek={handleSeek}
         onTrimChange={handleTrimChange}
       />
+
+      {hasCuts && (
+        <div className="parts">
+          <span className="parts-label">Parts</span>
+          {parts.map((part) => (
+            <button
+              key={part.start}
+              className={`part${part.kept ? '' : ' is-dropped'}`}
+              title={part.kept ? 'Click to drop this part' : 'Click to keep this part'}
+              onClick={() =>
+                setDiscarded((previous) =>
+                  part.kept
+                    ? [...previous, part.start]
+                    : previous.filter((d) => Math.abs(d - part.start) >= 0.001),
+                )
+              }
+            >
+              <span className="mono">{formatTime(part.end - part.start)}</span>
+            </button>
+          ))}
+          <button
+            className="btn btn-ghost small"
+            onClick={() => {
+              setCuts([])
+              setDiscarded([])
+            }}
+          >
+            Clear cuts
+          </button>
+        </div>
+      )}
 
       <TrimControls
         duration={duration}
@@ -274,7 +344,11 @@ export default function EditorPage(): JSX.Element {
         onTogglePlay={() => playerRef.current?.togglePlay()}
         onSetIn={() => setInPoint(clamp(currentTime, 0, outPoint - 0.1))}
         onSetOut={() => setOutPoint(clamp(currentTime, inPoint + 0.1, duration))}
-        onReset={() => handleTrimChange(0, duration)}
+        onReset={() => {
+          handleTrimChange(0, duration)
+          setCuts([])
+          setDiscarded([])
+        }}
         onNudge={(delta) => playerRef.current?.nudge(delta)}
       />
 
@@ -282,6 +356,7 @@ export default function EditorPage(): JSX.Element {
         clipPath={clip?.path ?? null}
         inPoint={inPoint}
         outPoint={outPoint}
+        ranges={hasCuts ? keptRanges : undefined}
         hasAudio={clip?.info.hasAudio ?? false}
         disabled={!clip}
       />

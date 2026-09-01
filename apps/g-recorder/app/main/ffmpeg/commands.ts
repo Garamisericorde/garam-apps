@@ -375,6 +375,15 @@ export interface ClipExportOptions {
   outputPath: string
   inPoint: number
   outPoint: number
+  /**
+   * Pieces to keep, in order, when the clip has been cut into parts.
+   *
+   * Absent or single-entry means an ordinary trim, which takes the fast path:
+   * `-ss` before `-i` seeks by keyframe and never decodes the discarded head.
+   * Two or more has to decode the whole span and stitch, so it is only used
+   * when something in the middle is actually being dropped.
+   */
+  ranges?: { start: number; end: number }[]
   encoder: EncoderType
   /** Final output dimensions, already rounded to even numbers by the caller */
   outWidth: number
@@ -402,6 +411,9 @@ export interface ClipExportOptions {
  * long replays) and `-accurate_seek` keeps the cut frame-exact.
  */
 export function buildClipExportArgs(options: ClipExportOptions): string[] {
+  const kept = (options.ranges ?? []).filter((r) => r.end - r.start > 0.01)
+  if (kept.length > 1) return buildStitchedExportArgs(options, kept)
+
   const sourceDuration = Math.max(options.outPoint - options.inPoint, 0.05)
   const includeAudio = options.hasAudio && options.volume > 0
 
@@ -441,6 +453,75 @@ export function buildClipExportArgs(options: ClipExportOptions): string[] {
     '-pix_fmt', 'yuv420p',
     '-movflags', '+faststart',
     // Machine-readable progress on stdout; the human-readable bar is suppressed
+    '-progress', 'pipe:1',
+    '-stats_period', '0.5',
+    '-nostats',
+    '-y',
+    options.outputPath,
+  )
+
+  return args
+}
+
+/**
+ * Export several kept pieces as one continuous clip.
+ *
+ * Each piece is trimmed on its own branch and the branches are concatenated
+ * before the usual crop/scale/speed chain, so the transforms are described once
+ * rather than per piece. `setpts=PTS-STARTPTS` on every branch is what makes
+ * concat work: without it the second piece keeps its original timestamps and
+ * the muxer writes a clip with a hole where the gap used to be.
+ */
+function buildStitchedExportArgs(
+  options: ClipExportOptions,
+  kept: { start: number; end: number }[],
+): string[] {
+  const includeAudio = options.hasAudio && options.volume > 0
+  const parts: string[] = []
+
+  kept.forEach((range, index) => {
+    const trim = `trim=start=${range.start.toFixed(3)}:end=${range.end.toFixed(3)}`
+    parts.push(`[0:v]${trim},setpts=PTS-STARTPTS[v${index}]`)
+    if (includeAudio) {
+      const atrim = `atrim=start=${range.start.toFixed(3)}:end=${range.end.toFixed(3)}`
+      parts.push(`[0:a]${atrim},asetpts=PTS-STARTPTS[a${index}]`)
+    }
+  })
+
+  const videoLabels = kept.map((_, i) => `[v${i}]`).join('')
+  const audioLabels = kept.map((_, i) => `[a${i}]`).join('')
+
+  parts.push(`${videoLabels}concat=n=${kept.length}:v=1:a=0[vcat]`)
+  parts.push(`[vcat]${buildExportVideoFilter(options)}[vout]`)
+
+  if (includeAudio) {
+    parts.push(`${audioLabels}concat=n=${kept.length}:v=0:a=1[acat]`)
+    parts.push(`[acat]${buildExportAudioFilter(options)}[aout]`)
+  }
+
+  const args: string[] = [
+    '-hide_banner',
+    '-nostdin',
+    '-i', options.clipPath,
+    '-filter_complex', parts.join(';'),
+    '-map', '[vout]',
+  ]
+
+  if (includeAudio) {
+    args.push('-map', '[aout]', '-c:a', 'aac', '-b:a', `${options.audioBitrateKbps}k`)
+  } else {
+    args.push('-an')
+  }
+
+  args.push(
+    ...buildVideoEncodeArgs({
+      encoder: options.encoder,
+      quality: options.quality,
+      maxBitrateKbps: options.maxBitrateKbps,
+      targetBitrateKbps: options.targetBitrateKbps,
+    }),
+    '-pix_fmt', 'yuv420p',
+    '-movflags', '+faststart',
     '-progress', 'pipe:1',
     '-stats_period', '0.5',
     '-nostats',

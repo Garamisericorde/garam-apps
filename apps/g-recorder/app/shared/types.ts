@@ -65,6 +65,14 @@ export interface ExportOptions {
   clipPath: string
   inPoint: number
   outPoint: number
+  /**
+   * Pieces to keep when the clip has been cut into parts, in order.
+   *
+   * Omitted or a single entry means an ordinary trim. inPoint/outPoint always
+   * describe the outer bounds, so size estimates and the fast seek path keep
+   * working without knowing about parts.
+   */
+  ranges?: { start: number; end: number }[]
   /** Absolute output path; empty string = auto-generate in settings.outputPath */
   outputPath: string
   /** Playback speed multiplier (1 = normal) */

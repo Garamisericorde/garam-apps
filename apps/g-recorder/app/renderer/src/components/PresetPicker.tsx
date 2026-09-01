@@ -14,6 +14,8 @@ interface PresetPickerProps {
   clipPath: string | null
   inPoint: number
   outPoint: number
+  /** Kept pieces when the clip has been cut; undefined for a plain trim */
+  ranges?: { start: number; end: number }[]
   hasAudio: boolean
   disabled?: boolean
 }
@@ -30,6 +32,7 @@ export default function PresetPicker({
   clipPath,
   inPoint,
   outPoint,
+  ranges,
   hasAudio,
   disabled = false,
 }: PresetPickerProps): JSX.Element {
@@ -51,7 +54,11 @@ export default function PresetPicker({
   }, [])
 
   const preset = getPreset(presetId)
-  const sourceDuration = Math.max(outPoint - inPoint, 0)
+  // With parts, the footage kept is the sum of the pieces, not the span they
+  // sit in — the size estimate and the progress bar both read from this.
+  const sourceDuration = ranges?.length
+    ? ranges.reduce((total, r) => total + Math.max(r.end - r.start, 0), 0)
+    : Math.max(outPoint - inPoint, 0)
   const outputDuration = sourceDuration / speed
   const isExporting = state === 'exporting'
   const canExport = !disabled && !!clipPath && sourceDuration > 0 && !isExporting
@@ -71,6 +78,7 @@ export default function PresetPicker({
       clipPath,
       inPoint,
       outPoint,
+      ranges,
       outputPath: '', // the main process names the file
       speed,
       volume: hasAudio ? volume : 0,

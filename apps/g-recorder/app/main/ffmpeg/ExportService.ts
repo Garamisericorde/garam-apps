@@ -84,6 +84,7 @@ export class ExportService {
       outputPath,
       inPoint: options.inPoint,
       outPoint: options.outPoint,
+      ranges: options.ranges,
       speed,
       aspect: options.aspect,
       targetSizeMb: options.targetSizeMb,
