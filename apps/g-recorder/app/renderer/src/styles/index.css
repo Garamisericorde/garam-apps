@@ -805,12 +805,39 @@ kbd {
     0 1px 4px rgb(0 0 0 / 0.6);
 }
 
-/* The buffer running is the resting state, so it wears the app's own accent. */
+/*
+ * The buffer running is the resting state, so it wears the app's own accent.
+ *
+ * The ramp drifts across the dot instead of sitting still. A blink would read
+ * as an alert and pull the eye off a game every 1.4 seconds; this is slow
+ * enough that you never catch it moving, but a glance still finds something
+ * alive rather than a painted dot that might be a leftover from a crashed app.
+ *
+ * The gradient repeats its first stop at the end so the loop closes on itself —
+ * without that third stop the animation snaps back at the halfway point.
+ */
 .state-dot.is-buffering {
-  background: var(--accent-gradient);
+  background: linear-gradient(
+    120deg,
+    var(--accent-from),
+    var(--accent-to),
+    var(--accent-from)
+  );
+  background-size: 220% 220%;
   box-shadow:
     0 0 0 1px rgb(0 0 0 / 0.55),
     0 0 8px var(--accent-ring);
+  animation: accent-drift 7s ease-in-out infinite;
+}
+
+@keyframes accent-drift {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
 }
 
 /* Recording to a file is the exceptional one, and reads as red everywhere. */
@@ -986,4 +1013,18 @@ kbd {
   background: transparent;
   color: var(--text-faint);
   text-decoration: line-through;
+}
+
+/*
+ * Nothing here is load-bearing — the dot's colour already carries the state, and
+ * the recording blink is duplicated by the tray icon. Someone who has asked the
+ * system for less motion should not have a permanently animated dot on top of
+ * every window.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .state-dot.is-buffering,
+  .state-dot.is-recording,
+  .pill-live .pill-dot {
+    animation: none;
+  }
 }
