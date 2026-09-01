@@ -128,12 +128,6 @@ const CAPTURE_STALL_MS = 4_000
  */
 const CAPTURE_STARTUP_GRACE_MS = 15_000
 
-/** Window the frame rate is averaged over, in microseconds of captured time */
-const FPS_WINDOW_US = 1_000_000
-
-/** Samples kept to find one a full window old (reports arrive ~2/second) */
-const FPS_HISTORY_SAMPLES = 12
-
 /** Segments written by the strftime pattern below */
 const SEGMENT_RE = /^seg_\d{8}_\d{6}\.mp4$/
 const SEGMENT_PATTERN = 'seg_%Y%m%d_%H%M%S.mp4'
@@ -174,7 +168,6 @@ export class RecorderService {
     bufferSeconds: 0,
     oldestSegmentTime: null,
     newestSegmentTime: null,
-    captureFps: null,
     error: null,
   }
   private _statusListeners: ((status: RecorderStatus) => void)[] = []
@@ -404,7 +397,7 @@ export class RecorderService {
     try {
       logger.info('RecorderService: stopping replay buffer…')
       this.stopPolling()
-      this.emit({ isRecording: false, captureFps: null })
+      this.emit({ isRecording: false })
 
       const proc = this._process
       this._process = null
@@ -707,7 +700,7 @@ export class RecorderService {
 
     this.deprioritise(proc, label)
     attachStderrLog(proc, label, ffmpegPath, args)
-    this.trackProgress(proc, SettingsStore.getInstance().get().fps)
+    this.trackProgress(proc)
 
     // Keep the last of stderr in memory as well as on disk: the exit handler
     // has to know *why* FFmpeg stopped, and re-reading the log file to find out
@@ -731,20 +724,18 @@ export class RecorderService {
   }
 
   /**
-   * Read FFmpeg's progress stream and turn it into a frame rate.
+   * Watch FFmpeg's progress stream for proof the capture is still alive.
    *
-   * The rate that matters is not `fps`, which desktop duplication pins to the
-   * requested value by repeating the last frame, but how many frames were new.
-   * `frame` minus `dup_frames`, differenced between two reports, is the rate the
-   * screen is actually changing at — the number a player recognises, capped by
-   * the configured capture rate.
+   * Only the frame counter is read. FFmpeg pads its output to a constant frame
+   * rate, so `frame` climbs even while the screen is perfectly still — which
+   * makes a counter that stops a reliable sign that the input died, and is the
+   * only thing the stall watchdog needs.
    */
-  private trackProgress(proc: ChildProcess, maxFps: number): void {
+  private trackProgress(proc: ChildProcess): void {
     if (!proc.stdout) return
 
     let buffered = ''
-    /** Recent samples, oldest first, so the rate is measured over a window */
-    const history: { frames: number; duplicates: number; micros: number }[] = []
+    let lastFrames = -1
 
     proc.stdout.on('data', (chunk: Buffer) => {
       buffered = (buffered + chunk.toString()).slice(-PROGRESS_BUFFER_CHARS)
@@ -757,46 +748,15 @@ export class RecorderService {
       const report = blocks[blocks.length - 2]
       if (!report) return
 
-      const value = (key: string): number | null => {
-        const match = new RegExp(`^${key}=\\s*(-?\\d+)`, 'm').exec(report)
-        return match ? Number(match[1]) : null
-      }
+      const match = /^frame=\s*(\d+)/m.exec(report)
+      if (!match) return
 
-      const frames = value('frame')
-      const micros = value('out_time_us')
-      if (frames === null || micros === null) return
-      const duplicates = value('dup_frames') ?? 0
+      const frames = Number(match[1])
+      if (frames <= lastFrames) return
 
-      // Proof the capture is still alive; the stall watchdog reads this.
-      const previous = history[history.length - 1]
-      if (!previous || frames > previous.frames) {
-        this._lastFrameAt = Date.now()
-        this._sawProgress = true
-      }
-
-      history.push({ frames, duplicates, micros })
-      if (history.length > FPS_HISTORY_SAMPLES) history.shift()
-
-      /*
-       * Measured against a sample about a second old rather than the previous
-       * one. FFmpeg does not update `frame` and `dup_frames` at the same
-       * instant, so consecutive reports disagree about which frames were new —
-       * enough for the instantaneous rate to swing between a third of the real
-       * value and the full capture rate, and occasionally to come out negative.
-       * Over a second those disagreements cancel.
-       */
-      const oldest = history.find((sample) => micros - sample.micros >= FPS_WINDOW_US)
-      if (!oldest) return
-
-      const seconds = (micros - oldest.micros) / 1_000_000
-      if (seconds <= 0) return
-
-      const fresh = frames - oldest.frames - (duplicates - oldest.duplicates)
-      // Cannot exceed the rate the screen is being sampled at, and cannot be
-      // negative however the counters happen to land.
-      const fps = Math.max(0, Math.min(maxFps, Math.round(fresh / seconds)))
-
-      if (fps !== this._status.captureFps) this.emit({ captureFps: fps })
+      lastFrames = frames
+      this._lastFrameAt = Date.now()
+      this._sawProgress = true
     })
   }
 

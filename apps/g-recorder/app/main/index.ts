@@ -130,7 +130,15 @@ function createMainWindow(): void {
     if (!startHidden) mainWindow?.show()
   })
 
-  // Closing the window keeps the app alive in the tray — quitting is explicit
+  /*
+   * The close button hides to the tray; only the tray's Exit really quits.
+   * A recorder that stops when its window is closed stops recording, which is
+   * the opposite of what closing a window means for a background capture tool.
+   *
+   * Minimize is deliberately left alone. Hiding on minimize too would take the
+   * taskbar button away, and minimize is exactly the gesture people use when
+   * they still want the app one click away.
+   */
   mainWindow.on('close', (event) => {
     if (isQuitting) return
     event.preventDefault()

@@ -3,16 +3,22 @@ import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { logger } from '../logging/logger'
 
-const WIDTH = 108
-const HEIGHT = 30
+const WIDTH = 26
+const HEIGHT = 26
 const MARGIN = 12
+
+/**
+ * Pushed down the left edge to clear Steam's frame counter, which claims the
+ * very top-left corner and would otherwise sit on top of this.
+ */
+const TOP_OFFSET = 34
 
 /** How often to re-claim the top of the window stack while visible */
 const ON_TOP_REASSERT_MS = 2_000
 
 /**
- * A small always-on-top frame-rate readout. It is click-through, so it never
- * gets in the way of whatever is being recorded.
+ * A small always-on-top dot showing whether capture is running. It is
+ * click-through, so it never gets in the way of whatever is being recorded.
  */
 export class OverlayWindow {
   private win: BrowserWindow | null = null
@@ -21,15 +27,15 @@ export class OverlayWindow {
   create(): void {
     if (this.win && !this.win.isDestroyed()) return
 
-    // Top-left, where a frame counter is conventionally read and where it is
-    // least likely to sit over a game's own HUD.
+    // Top-left, measured from the work area rather than the screen size so it
+    // lands correctly on a secondary monitor and above a taskbar.
     const { x: workX, y: workY } = screen.getPrimaryDisplay().workArea
 
     this.win = new BrowserWindow({
       width: WIDTH,
       height: HEIGHT,
       x: workX + MARGIN,
-      y: workY + MARGIN,
+      y: workY + TOP_OFFSET,
       frame: false,
       transparent: true,
       alwaysOnTop: true,

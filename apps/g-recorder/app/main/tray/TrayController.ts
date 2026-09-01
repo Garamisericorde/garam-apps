@@ -87,7 +87,7 @@ export class TrayController {
       { label: 'Settings', click: () => this.actions.openSettings() },
       { label: 'Open clips folder', click: () => this.actions.openOutputFolder() },
       { type: 'separator' },
-      { label: 'Quit', click: () => this.actions.quit() },
+      { label: 'Exit', click: () => this.actions.quit() },
     ]
 
     this.tray.setContextMenu(Menu.buildFromTemplate(template))

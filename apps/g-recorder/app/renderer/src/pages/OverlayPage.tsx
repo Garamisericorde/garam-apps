@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react'
 import type { RecorderStatus } from '../../../shared/types'
 
 /**
- * The always-on-top frame-rate readout.
+ * A single dot, always on top, saying whether capture is running.
  *
- * It runs in its own frameless, click-through window, so it deliberately skips
- * the app shell and paints a transparent body. The number is how fast the
- * screen is actually changing — see RecorderStatus.captureFps for why that is
- * not the same as the encoder's frame rate, and why it cannot exceed the
- * configured capture rate.
+ * Deliberately just a dot. It sits over a game, where anything that has to be
+ * read takes attention the game wants — the state is carried by colour alone,
+ * which is legible from the corner of the eye and costs nothing to ignore.
+ *
+ * It runs in its own frameless, click-through window, so it skips the app
+ * shell and paints a transparent body.
  */
 export default function OverlayPage(): JSX.Element {
   const [status, setStatus] = useState<RecorderStatus | null>(null)
@@ -26,21 +27,17 @@ export default function OverlayPage(): JSX.Element {
 
   const recording = status?.isManualRecording ?? false
   const buffering = status?.isRecording ?? false
-  const live = recording || buffering
-  const fps = status?.captureFps
+
+  const state = recording ? 'is-recording' : buffering ? 'is-buffering' : 'is-idle'
+  const label = recording
+    ? 'Recording to file'
+    : buffering
+      ? 'Instant replay on'
+      : 'Instant replay off'
 
   return (
-    <div className="fps-overlay">
-      <div className={`fps-readout${live ? ' is-live' : ''}${recording ? ' is-recording' : ''}`}>
-        <span className="fps-dot" aria-hidden />
-        {/*
-         * The number and its unit are separate so the digits can hold a fixed
-         * width. Without that the whole badge jitters every time the count
-         * crosses a digit boundary, which is exactly when you are watching it.
-         */}
-        <span className="fps-value">{live && typeof fps === 'number' ? fps : '--'}</span>
-        <span className="fps-unit">FPS</span>
-      </div>
+    <div className="state-overlay">
+      <span className={`state-dot ${state}`} role="img" aria-label={label} title={label} />
     </div>
   )
 }

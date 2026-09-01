@@ -757,71 +757,49 @@ kbd {
   font-size: var(--fs-sm);
 }
 
-/* ── FPS overlay ─────────────────────────────────────────────────────────── */
+/* ── Capture state overlay ───────────────────────────────────────────────── */
 
 /*
- * Its own window, painted over whatever is being recorded. Everything here is
- * sized for glanceability at arm's length while a game holds your attention:
- * one number, high contrast, no chrome competing with it.
+ * Its own window, painted over whatever is being recorded. One dot, no text:
+ * it has to be readable at a glance without competing with a game for
+ * attention, and colour alone carries the state.
  */
-.fps-overlay {
+.state-overlay {
   position: fixed;
   inset: 0;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
 }
 
-.fps-readout {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 5px;
-  padding: 4px 10px 4px 8px;
-  border-radius: 999px;
-  background: var(--bg-badge);
-  border: 1px solid var(--border-subtle);
-  /* Sits over arbitrary content, so it carries its own separation from it. */
-  box-shadow: 0 2px 10px -4px rgb(0 0 0 / 0.9);
-  user-select: none;
-  white-space: nowrap;
-}
-
-.fps-dot {
-  align-self: center;
-  width: 6px;
-  height: 6px;
+.state-dot {
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   background: var(--text-faint);
-  flex-shrink: 0;
+  /* Sits over arbitrary content, so it carries its own separation from it. */
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.55),
+    0 1px 4px rgb(0 0 0 / 0.6);
 }
 
-.fps-readout.is-live .fps-dot {
-  background: var(--accent);
-  box-shadow: 0 0 6px var(--accent-ring);
+/* The buffer running is the resting state, so it wears the app's own accent. */
+.state-dot.is-buffering {
+  background: var(--accent-gradient);
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.55),
+    0 0 8px var(--accent-ring);
 }
 
-.fps-readout.is-recording .fps-dot {
+/* Recording to a file is the exceptional one, and reads as red everywhere. */
+.state-dot.is-recording {
   background: var(--danger);
-  box-shadow: 0 0 6px var(--danger);
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.55),
+    0 0 8px var(--danger);
   animation: blink 1.4s ease-in-out infinite;
 }
 
-.fps-value {
-  min-width: 2.4ch;
-  text-align: right;
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: -0.02em;
-  /* Fixed-width digits: the badge must not resize as the count changes. */
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: 'tnum';
-  color: var(--text);
-}
-
-.fps-unit {
-  font-size: 9px;
-  font-weight: 650;
-  letter-spacing: 0.1em;
-  color: var(--text-faint);
+.state-dot.is-idle {
+  opacity: 0.55;
 }

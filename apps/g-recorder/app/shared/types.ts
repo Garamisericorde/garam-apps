@@ -51,15 +51,6 @@ export interface RecorderStatus {
   bufferSeconds: number
   oldestSegmentTime: number | null
   newestSegmentTime: number | null
-  /**
-   * Frames per second actually being captured, or null when nothing is running.
-   *
-   * Counts only *new* frames. Desktop duplication repeats the last frame to
-   * fill the requested rate, so the raw encoder rate always reads as the
-   * configured fps and says nothing about what is on screen. This number
-   * follows the screen, and is therefore capped by the capture frame rate.
-   */
-  captureFps: number | null
   error: string | null
 }
 
