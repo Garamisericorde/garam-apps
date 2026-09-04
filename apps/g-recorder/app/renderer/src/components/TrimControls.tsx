@@ -1,5 +1,8 @@
 import { formatTime } from '../../../shared/time'
 
+/** How far the skip buttons jump — the step every player uses */
+const SKIP_SECONDS = 5
+
 interface TrimControlsProps {
   duration: number
   currentTime: number
@@ -36,69 +39,86 @@ export default function TrimControls({
 
   return (
     <div className="transport">
-      <button
-        className="btn btn-icon"
-        onClick={onTogglePlay}
-        disabled={disabled}
-        title="Play / pause (Space)"
-      >
-        {isPlaying ? '❚❚' : '▶'}
-      </button>
-
-      <button
-        className="btn btn-icon"
-        onClick={() => onNudge(-1 / 30)}
-        disabled={disabled}
-        title="Step back one frame (←)"
-      >
-        ◀|
-      </button>
-      <button
-        className="btn btn-icon"
-        onClick={() => onNudge(1 / 30)}
-        disabled={disabled}
-        title="Step forward one frame (→)"
-      >
-        |▶
-      </button>
-
-      <span className="transport-clock mono">
-        {formatTime(currentTime)}
-        <span className="muted"> / {formatTime(duration)}</span>
-      </span>
-
-      <div style={{ flex: 1 }} />
-
-      <button className="btn" onClick={onSetIn} disabled={disabled} title="Cut the start here (I)">
-        Cut start
-      </button>
-      <button className="btn" onClick={onSetOut} disabled={disabled} title="Cut the end here (O)">
-        Cut end
-      </button>
-
       {/*
-       * One readout, not two. The range and the selection length used to sit
-       * side by side, and on an untrimmed clip they print the same number —
-       * which reads as the duration having been written twice by mistake.
-       * Untrimmed, there is nothing to say; trimmed, the length is what the
-       * export will be.
-       */}
-      {trimmed ? (
-        <span className="pill pill-accent" title={`${formatTime(inPoint)} → ${formatTime(outPoint)}`}>
-          {formatTime(selection)} selected
-        </span>
-      ) : (
-        <span className="small muted">Whole clip</span>
-      )}
+        * The transport sits centred under the clip, the way every player puts
+        * it, with the editing actions kept to the side. A three-column grid
+        * rather than flex: it keeps the play button on the centre line no
+        * matter how wide the actions to its right grow.
+        */}
+      <div />
 
-      <button
-        className="btn btn-ghost"
-        onClick={onReset}
-        disabled={disabled || !trimmed}
-        title="Clear the cut and select the whole clip"
-      >
-        Reset
-      </button>
+      <div className="transport-main">
+        <button
+          className="btn btn-icon btn-ghost"
+          onClick={() => onNudge(-currentTime)}
+          disabled={disabled}
+          title="Back to the start (Home)"
+        >
+          ⏮
+        </button>
+
+        <button
+          className="btn btn-icon btn-ghost"
+          onClick={() => onNudge(-SKIP_SECONDS)}
+          disabled={disabled}
+          title={`Back ${SKIP_SECONDS} seconds`}
+        >
+          <span className="skip">↺<em>{SKIP_SECONDS}</em></span>
+        </button>
+
+        <button
+          className="play-button"
+          onClick={onTogglePlay}
+          disabled={disabled}
+          title="Play / pause (Space)"
+        >
+          {isPlaying ? '❚❚' : '▶'}
+        </button>
+
+        <button
+          className="btn btn-icon btn-ghost"
+          onClick={() => onNudge(SKIP_SECONDS)}
+          disabled={disabled}
+          title={`Forward ${SKIP_SECONDS} seconds`}
+        >
+          <span className="skip">↻<em>{SKIP_SECONDS}</em></span>
+        </button>
+
+        <span className="transport-clock mono">
+          {formatTime(currentTime)}
+          <span className="faint"> / {formatTime(duration)}</span>
+        </span>
+      </div>
+
+      <div className="transport-actions">
+        <button className="btn" onClick={onSetIn} disabled={disabled} title="Cut the start here (I)">
+          Cut start
+        </button>
+        <button className="btn" onClick={onSetOut} disabled={disabled} title="Cut the end here (O)">
+          Cut end
+        </button>
+
+        {/*
+         * One readout, not two. The range and the selection length used to sit
+         * side by side, and on an untrimmed clip they print the same number.
+         */}
+        {trimmed ? (
+          <span className="pill pill-accent" title={`${formatTime(inPoint)} → ${formatTime(outPoint)}`}>
+            {formatTime(selection)} selected
+          </span>
+        ) : (
+          <span className="small faint">Whole clip</span>
+        )}
+
+        <button
+          className="btn btn-ghost"
+          onClick={onReset}
+          disabled={disabled || !trimmed}
+          title="Clear the cut and select the whole clip"
+        >
+          Reset
+        </button>
+      </div>
     </div>
   )
 }

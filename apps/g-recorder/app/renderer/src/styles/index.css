@@ -526,9 +526,72 @@ input:focus {
 }
 
 .transport {
-  display: flex;
+  /* Three columns so the play button holds the centre line however wide the
+     actions beside it grow. */
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 10px;
+}
+
+.transport-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: center;
+}
+
+.transport-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-self: end;
+}
+
+/* The one control you reach for without looking, so it is round and larger. */
+.play-button {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent-gradient);
+  color: var(--text-on-accent);
+  font-size: 13px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: filter 0.12s;
+}
+
+.play-button:hover:not(:disabled) {
+  filter: brightness(1.12);
+}
+
+.play-button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+/* The skip amount rides inside the arrow, as it does on every player */
+.skip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.skip em {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-top: 2px;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 700;
 }
 
 /* Timeline */
