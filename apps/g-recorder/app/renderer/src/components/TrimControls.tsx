@@ -23,6 +23,8 @@ interface TrimControlsProps {
      of the clip than it is worth. */
   view: TimelineView
   onViewChange: (view: TimelineView) => void
+  snap: boolean
+  onSnapChange: (snap: boolean) => void
 }
 
 /**
@@ -44,6 +46,8 @@ export default function TrimControls({
   onToggleFullscreen,
   view,
   onViewChange,
+  snap,
+  onSnapChange,
 }: TrimControlsProps): JSX.Element {
   const selection = Math.max(outPoint - inPoint, 0)
   const trimmed = inPoint > 0.001 || outPoint < duration - 0.001
@@ -63,7 +67,13 @@ export default function TrimControls({
           {formatTime(currentTime)}
           <span className="faint"> / {formatTime(duration)}</span>
         </span>
-        <TimelineZoom view={view} disabled={disabled} onChange={onViewChange} />
+        <TimelineZoom
+          view={view}
+          disabled={disabled}
+          onChange={onViewChange}
+          snap={snap}
+          onSnapChange={onSnapChange}
+        />
       </div>
 
       <div className="transport-main">

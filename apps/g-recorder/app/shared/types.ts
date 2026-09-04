@@ -72,6 +72,9 @@ export interface AppSettings {
   editorKeyCutEnd: string | null
   editorKeySplit: string | null
   editorKeyFullscreen: string | null
+
+  /** Whether clip edges pull into line with each other while being dragged */
+  editorSnap: boolean
 }
 
 export interface RecorderStatus {
@@ -112,7 +115,15 @@ export interface ExportOptions {
    * takes the fast single-pass path. Present and different means the two lanes
    * are edited apart, and the export has to place them independently.
    */
-  audio?: { inPoint: number; outPoint: number }
+  audio?: {
+    inPoint: number
+    outPoint: number
+    /**
+     * Where the audio sits against the picture, in seconds. Positive means it
+     * plays later than the video; negative, earlier.
+     */
+    offsetSeconds: number
+  }
   /** Absolute output path; empty string = auto-generate in settings.outputPath */
   outputPath: string
   /** Playback speed multiplier (1 = normal) */

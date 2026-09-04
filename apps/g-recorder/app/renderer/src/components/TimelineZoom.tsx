@@ -13,10 +13,15 @@ export default function TimelineZoom({
   view,
   disabled,
   onChange,
+  snap,
+  onSnapChange,
 }: {
   view: TimelineView
   disabled: boolean
   onChange: (view: TimelineView) => void
+  /** Whether dragged edges pull into line with each other */
+  snap: boolean
+  onSnapChange: (snap: boolean) => void
 }): JSX.Element {
   const step = (factor: number): void =>
     onChange({ ...view, zoom: clamp(view.zoom * factor, MIN_ZOOM, MAX_ZOOM) })
@@ -54,6 +59,19 @@ export default function TimelineZoom({
         <svg viewBox="0 0 20 20" aria-hidden>
           <circle cx="9" cy="9" r="5.2" />
           <path d="M12.9 12.9 16.5 16.5M6.6 9h4.8M9 6.6v4.8" />
+        </svg>
+      </button>
+
+      {/* A magnet, the way every editor draws this, and it stays lit while on
+          so the state is readable without hovering for a tooltip. */}
+      <button
+        className={`zoom-btn${snap ? ' is-on' : ''}`}
+        onClick={() => onSnapChange(!snap)}
+        title={snap ? 'Snapping on — edges pull into line' : 'Snapping off'}
+      >
+        <svg viewBox="0 0 20 20" aria-hidden>
+          <path d="M6 4v6a4 4 0 0 0 8 0V4" />
+          <path d="M4 4h4M12 4h4M4 9h4M12 9h4" />
         </svg>
       </button>
     </div>

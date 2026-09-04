@@ -144,9 +144,22 @@ export class ExportService {
       includeAudio &&
       audio !== undefined &&
       (Math.abs(audio.inPoint - options.inPoint) > 0.01 ||
-        Math.abs(audio.outPoint - options.outPoint) > 0.01)
+        Math.abs(audio.outPoint - options.outPoint) > 0.01 ||
+        Math.abs(audio.offsetSeconds) > 0.01)
 
     if (audioApart && audio) {
+      /*
+       * Two lanes placed against each other, then slid so the earlier one
+       * starts at zero. Whichever lane leads sets the origin: an export that
+       * opened with the gap the user dragged in would be a clip that starts
+       * with nothing in it.
+       */
+      const audioLead = audio.inPoint - options.inPoint + audio.offsetSeconds
+      const videoAt = Math.max(0, -audioLead)
+      const audioAt = Math.max(0, audioLead)
+      const videoLength = options.outPoint - options.inPoint
+      const audioLength = audio.outPoint - audio.inPoint
+
       return buildTimelineExportArgs({
         clipPath: options.clipPath,
         outputPath,
@@ -154,19 +167,12 @@ export class ExportService {
         outPoint: options.outPoint,
         sources: [options.clipPath],
         video: [
-          { input: 0, start: 0, sourceIn: options.inPoint, sourceOut: options.outPoint },
+          { input: 0, start: videoAt, sourceIn: options.inPoint, sourceOut: options.outPoint },
         ],
         audio: [
-          {
-            input: 0,
-            // Trimming the audio's head leaves it starting later against the
-            // picture, rather than sliding the whole track forward.
-            start: Math.max(0, audio.inPoint - options.inPoint),
-            sourceIn: audio.inPoint,
-            sourceOut: audio.outPoint,
-          },
+          { input: 0, start: audioAt, sourceIn: audio.inPoint, sourceOut: audio.outPoint },
         ],
-        duration: options.outPoint - options.inPoint,
+        duration: Math.max(videoAt + videoLength, audioAt + audioLength),
         encoder,
         outWidth: framing.outWidth,
         outHeight: framing.outHeight,

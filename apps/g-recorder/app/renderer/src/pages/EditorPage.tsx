@@ -13,6 +13,7 @@ import PresetPicker from '../components/PresetPicker'
 import MediaLibrary from '../components/MediaLibrary'
 import type { ExportControl } from '../components/PresetPicker'
 import { DEFAULT_EDITOR_KEYS } from '../../../shared/hotkeyDefaults'
+import type { AppSettings } from '../../../shared/types'
 
 /** null is a key the user has cleared, which is not the same as unset */
 interface EditorKeys {
@@ -111,11 +112,24 @@ export default function EditorPage(): JSX.Element {
    * the track — the export is simply told to leave it out.
    */
   const [audioRemoved, setAudioRemoved] = useState(false)
+  /*
+   * Where each lane sits on the timeline. Only the difference between them
+   * survives to the export — one clip slid along an empty timeline is the same
+   * clip — but both are tracked so the picture matches what was dragged.
+   */
+  const [videoStart, setVideoStart] = useState(0)
+  const [audioStart, setAudioStart] = useState(0)
   const [keys, setKeys] = useState<EditorKeys>(DEFAULT_EDITOR_KEYS)
+  const [snapEnabled, setSnapEnabled] = useState(true)
 
   useEffect(() => {
-    window.api.settings.get().then(setKeys).catch(() => undefined)
-    return window.api.settings.onChange(setKeys)
+    const apply = (settings: AppSettings): void => {
+      setKeys(settings)
+      setSnapEnabled(settings.editorSnap)
+    }
+
+    window.api.settings.get().then(apply).catch(() => undefined)
+    return window.api.settings.onChange(apply)
   }, [])
   const [loadingThumbnails, setLoadingThumbnails] = useState(false)
 
@@ -138,6 +152,8 @@ export default function EditorPage(): JSX.Element {
     setAudioIn(0)
     setAudioOut(0)
     setAudioRemoved(false)
+    setVideoStart(0)
+    setAudioStart(0)
     setThumbnails([])
     setWaveform([])
     setCuts([])
@@ -161,6 +177,8 @@ export default function EditorPage(): JSX.Element {
       setAudioIn(0)
       setAudioOut(nextDuration)
       setAudioRemoved(false)
+      setVideoStart(0)
+      setAudioStart(0)
       setView(FIT_VIEW)
       setCurrentTime(0)
 
@@ -294,6 +312,13 @@ export default function EditorPage(): JSX.Element {
         splitAtPlayhead()
         return
       }
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.preventDefault()
+        if (selectedLane === 'audio') setAudioRemoved(true)
+        else clearClip()
+        return
+      }
+
       if (matches(event, keys.editorKeyFullscreen)) {
         toggleFullscreen()
         return
@@ -321,7 +346,18 @@ export default function EditorPage(): JSX.Element {
 
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [clip, cuts, currentTime, duration, inPoint, keys, outPoint, toggleFullscreen])
+  }, [
+    clearClip,
+    clip,
+    cuts,
+    currentTime,
+    duration,
+    inPoint,
+    keys,
+    outPoint,
+    selectedLane,
+    toggleFullscreen,
+  ])
 
   // ── Drag and drop ──────────────────────────────────────────────────────────
 
@@ -538,9 +574,11 @@ export default function EditorPage(): JSX.Element {
               if (lane === 'audio') {
                 setAudioIn(0)
                 setAudioOut(duration)
+                setAudioStart(0)
                 setAudioRemoved(false)
               } else {
                 handleTrimChange(0, duration)
+                setVideoStart(0)
               }
             }}
             loadingThumbnails={loadingThumbnails}
@@ -549,6 +587,13 @@ export default function EditorPage(): JSX.Element {
             onTrimChange={handleTrimChange}
             view={view}
             onViewChange={setView}
+            videoStart={videoStart}
+            audioStart={audioStart}
+            snap={snapEnabled}
+            onLaneMove={(lane, start) => {
+              if (lane === 'audio') setAudioStart(start)
+              else setVideoStart(start)
+            }}
           />
         </div>
 
@@ -600,6 +645,11 @@ export default function EditorPage(): JSX.Element {
           }}
           view={view}
           onViewChange={setView}
+          snap={snapEnabled}
+          onSnapChange={(next) => {
+            setSnapEnabled(next)
+            void window.api.settings.set({ editorSnap: next })
+          }}
           onNudge={(delta) => playerRef.current?.nudge(delta)}
         onToggleFullscreen={toggleFullscreen}
         />
@@ -609,7 +659,13 @@ export default function EditorPage(): JSX.Element {
           inPoint={inPoint}
           outPoint={outPoint}
           ranges={keptRanges}
-          audio={{ inPoint: audioIn, outPoint: audioOut }}
+          audio={{
+            inPoint: audioIn,
+            outPoint: audioOut,
+            // Only the gap between the lanes matters; where the pair sits on
+            // an otherwise empty timeline is not something an export can show.
+            offsetSeconds: audioStart - videoStart,
+          }}
           hasAudio={(clip?.info.hasAudio ?? false) && !audioRemoved}
           disabled={!clip}
           onControlChange={setExportControl}

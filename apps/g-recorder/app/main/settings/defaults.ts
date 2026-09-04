@@ -34,6 +34,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ...DEFAULT_HOTKEYS,
   ...DEFAULT_PAD_BINDINGS,
   ...DEFAULT_EDITOR_KEYS,
+  editorSnap: true,
 }
 
 // ── Recording constants ──────────────────────────────────────────────────────

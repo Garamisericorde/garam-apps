@@ -54,7 +54,18 @@ export default function ContextMenu({
   useEffect(() => {
     if (!position) return
 
-    const dismiss = (): void => onClose()
+    /*
+     * A pointerdown INSIDE the menu is the click that is about to choose an
+     * item — closing on it unmounted the menu before the click could land, so
+     * every item silently did nothing. Stopping propagation in the component
+     * cannot help: React listens on its root in the bubble phase, and this
+     * listener runs first, on window, in the capture phase.
+     */
+    const dismiss = (event: Event): void => {
+      const menu = ref.current
+      if (menu && event.target instanceof Node && menu.contains(event.target)) return
+      onClose()
+    }
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') onClose()
     }
@@ -78,9 +89,6 @@ export default function ContextMenu({
       ref={ref}
       className="context-menu"
       style={{ left: adjusted?.x ?? position.x, top: adjusted?.y ?? position.y }}
-      // The dismissal above listens on the window, so the menu has to keep its
-      // own clicks from reaching it.
-      onPointerDown={(event) => event.stopPropagation()}
     >
       {items.map((item) => (
         <button

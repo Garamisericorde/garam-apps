@@ -364,31 +364,26 @@ export default function SettingsPage(): JSX.Element {
         <HotkeyField
           label="Play / pause"
           value={settings.editorKeyPlayPause}
-          allowBareKey
           onChange={(key) => void save({ editorKeyPlayPause: key })}
         />
         <HotkeyField
           label="Cut the start here"
           value={settings.editorKeyCutStart}
-          allowBareKey
           onChange={(key) => void save({ editorKeyCutStart: key })}
         />
         <HotkeyField
           label="Cut the end here"
           value={settings.editorKeyCutEnd}
-          allowBareKey
           onChange={(key) => void save({ editorKeyCutEnd: key })}
         />
         <HotkeyField
           label="Split at the playhead"
           value={settings.editorKeySplit}
-          allowBareKey
           onChange={(key) => void save({ editorKeySplit: key })}
         />
         <HotkeyField
           label="Fullscreen"
           value={settings.editorKeyFullscreen}
-          allowBareKey
           onChange={(key) => void save({ editorKeyFullscreen: key })}
         />
       </Section>
@@ -594,6 +589,11 @@ function PadField({
     <div className="row-between">
       <div className="stack">
         <span>{label}</span>
+        {!capturing && !rejected && swallowsTyping(value) && (
+          <span className="small faint">
+            Held globally — {value} will not reach other applications
+          </span>
+        )}
         {rejected ? (
           <span className="small danger">{rejected}</span>
         ) : (
@@ -729,19 +729,10 @@ function HotkeyField({
   label,
   value,
   onChange,
-  allowBareKey = false,
 }: {
   label: string
   value: string | null
   onChange: (accelerator: string | null) => void
-  /**
-   * Accept a key with no modifiers.
-   *
-   * Right for editor keys, which only fire while the editor has focus, and
-   * wrong for global ones: a bare letter registered system-wide swallows that
-   * key in every other application.
-   */
-  allowBareKey?: boolean
 }): JSX.Element {
   const [capturing, setCapturing] = useState(false)
   /** What is held down right now, shown while it is being pressed */
@@ -794,17 +785,6 @@ function HotkeyField({
         return
       }
 
-      /*
-       * A function key on its own is fine: it types nothing, which is why
-       * recorders have used them alone for decades. Any other bare key would
-       * swallow that letter in every application on the machine.
-       */
-      if (held.length === 0 && !allowBareKey && !/^F\d{1,2}$/.test(key)) {
-        setPreview([key])
-        reject(`${key} needs Ctrl, Alt or Shift with it`)
-        return
-      }
-
       setPreview([...held, key])
       setCapturing(false)
       onChange([...held, key].join('+'))
@@ -831,7 +811,7 @@ function HotkeyField({
       window.removeEventListener('keyup', handleUp, true)
       window.removeEventListener('mousedown', handleMouse, true)
     }
-  }, [allowBareKey, capturing, onChange, reject])
+  }, [capturing, onChange, reject])
 
   return (
     <div className="row-between">
@@ -840,13 +820,7 @@ function HotkeyField({
         {rejected ? (
           <span className="small danger">{rejected}</span>
         ) : (
-          capturing && (
-            <span className="small faint">
-              {allowBareKey
-                ? 'Press any key · Esc to cancel'
-                : 'Hold Ctrl, Alt or Shift and press a key — or a function key on its own · Esc to cancel'}
-            </span>
-          )
+          capturing && <span className="small faint">Press a combination · Esc to cancel</span>
         )}
       </div>
       <div className="row">
@@ -881,6 +855,17 @@ function modifierName(key: string): string {
   if (key === 'Control') return 'Ctrl'
   if (key === 'Meta') return 'Super'
   return key
+}
+
+/**
+ * Whether a global shortcut is a key people also type with.
+ *
+ * Worth saying once, because a global registration takes that key away from
+ * every other application — but not worth refusing over. Which keys are worth
+ * spending is the user's call, not this field's.
+ */
+function swallowsTyping(accelerator: string | null): boolean {
+  return accelerator !== null && /^[A-Za-z0-9]$/.test(accelerator)
 }
 
 /** Whether a captured binding is one a game will not fire by accident */

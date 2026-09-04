@@ -23,7 +23,7 @@ interface PresetPickerProps {
   /** Kept pieces when the clip has been cut; undefined for a plain trim */
   ranges?: { start: number; end: number }[]
   /** The audio lane's window, when it has been trimmed away from the video */
-  audio?: { inPoint: number; outPoint: number }
+  audio?: { inPoint: number; outPoint: number; offsetSeconds: number }
   hasAudio: boolean
   disabled?: boolean
   /**

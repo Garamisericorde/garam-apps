@@ -778,16 +778,68 @@ input:focus {
   filter: brightness(1.15);
 }
 
-/* A split point. Bright and thin: it marks a boundary, it is not a control. */
+/*
+ * A split point.
+ *
+ * Deliberately unlike the trim handle beside it, which is a solid accent bar:
+ * a cut is a mark, not something to grab, and drawn as a plain bright line the
+ * two read as the same thing at a glance. Dashed, neutral, with a notch at the
+ * top — the shape every editor uses for a razor cut.
+ */
 .timeline-cut {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 2px;
-  margin-left: -1px;
-  background: var(--text-on-accent);
-  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.6);
+  width: 1px;
+  margin-left: -0.5px;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--text) 0 4px,
+    transparent 4px 8px
+  );
+  opacity: 0.85;
   pointer-events: none;
+}
+
+.timeline-cut-mark {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 0;
+  height: 0;
+  transform: translateX(-50%);
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--text);
+}
+
+/*
+ * The clip body, as a grip. Invisible: the thumbnails and the waveform are
+ * what the eye follows, and a tint over them would only make the picture
+ * harder to read. The cursor is what says it can be moved.
+ */
+.timeline-body {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  cursor: grab;
+}
+
+.timeline-body:active {
+  cursor: grabbing;
+}
+
+/* The edge a moving clip has locked onto */
+.lane-snap {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 1px;
+  margin-left: -0.5px;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+  pointer-events: none;
+  z-index: 3;
 }
 
 .timeline-playhead {
@@ -1187,6 +1239,11 @@ kbd {
 .zoom-readout:hover:not(:disabled) {
   color: var(--text);
   background: var(--bg-elevated);
+}
+
+.zoom-btn.is-on {
+  color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .zoom-btn:disabled,

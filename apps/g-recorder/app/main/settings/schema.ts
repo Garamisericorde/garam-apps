@@ -81,6 +81,8 @@ const VALIDATORS: {
   editorKeyCutEnd: editorKey('editorKeyCutEnd'),
   editorKeySplit: editorKey('editorKeySplit'),
   editorKeyFullscreen: editorKey('editorKeyFullscreen'),
+
+  editorSnap: (v) => (typeof v === 'boolean' ? null : 'editorSnap must be a boolean'),
 }
 
 /**
