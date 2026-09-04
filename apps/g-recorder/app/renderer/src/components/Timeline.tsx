@@ -49,6 +49,15 @@ type DragTarget = 'in' | 'out' | 'audio-in' | 'audio-out' | 'playhead' | 'video-
  * zoom, and what "close" means is a property of the hand, not of the clip.
  */
 const SNAP_PX = 8
+
+/**
+ * How far the pointer must travel before a press on a clip becomes a move.
+ *
+ * Below it the press is a click, and a click on a clip means "play from here"
+ * — the thing you do far more often than rearranging. Without a threshold
+ * every attempt to seek nudges the clip a few milliseconds instead.
+ */
+const DRAG_THRESHOLD_PX = 4
 export type Lane = 'video' | 'audio'
 
 /** Smallest selection the user can drag down to */
@@ -228,6 +237,49 @@ export default function Timeline({
     ],
   )
 
+  /**
+   * A press on a clip body: a click seeks, a drag moves.
+   *
+   * Which one it was cannot be known at pointerdown, so nothing happens until
+   * the pointer either travels far enough to be a drag or is released without
+   * having done so.
+   */
+  const beginBodyPress = useCallback(
+    (lane: Lane, event: React.PointerEvent): void => {
+      if (duration <= 0) return
+
+      event.preventDefault()
+      event.stopPropagation()
+
+      const target: DragTarget = lane === 'video' ? 'video-body' : 'audio-body'
+      const downX = event.clientX
+      const downTime = timeFromEvent(event.clientX)
+      grabRef.current = downTime - (lane === 'video' ? videoStart : audioStart)
+      let moved = false
+
+      const handleMove = (moveEvent: PointerEvent): void => {
+        if (!moved) {
+          if (Math.abs(moveEvent.clientX - downX) < DRAG_THRESHOLD_PX) return
+          moved = true
+          dragRef.current = target
+        }
+        applyDrag(target, timeFromEvent(moveEvent.clientX))
+      }
+
+      const handleUp = (): void => {
+        if (!moved) applyDrag('playhead', downTime)
+        dragRef.current = null
+        setSnapAt(null)
+        window.removeEventListener('pointermove', handleMove)
+        window.removeEventListener('pointerup', handleUp)
+      }
+
+      window.addEventListener('pointermove', handleMove)
+      window.addEventListener('pointerup', handleUp)
+    },
+    [applyDrag, audioStart, duration, timeFromEvent, videoStart],
+  )
+
   const beginDrag = useCallback(
     (target: DragTarget, event: React.PointerEvent): void => {
       if (duration <= 0) return
@@ -306,7 +358,6 @@ export default function Timeline({
    * at different places on the timeline and still each describe their own clip.
    */
   const laneOverlay = (lane: Lane, start: number, from: number, to: number): JSX.Element => {
-    const target: DragTarget = lane === 'video' ? 'video-body' : 'audio-body'
     const left = clamp(position(start + from), 0, 100)
     const right = clamp(position(start + to), 0, 100)
 
@@ -336,9 +387,9 @@ export default function Timeline({
           style={{ left: `${left}%`, width: `${Math.max(right - left, 0)}%` }}
           onPointerDown={(event) => {
             onSelectLane(lane)
-            beginDrag(target, event)
+            beginBodyPress(lane, event)
           }}
-          title="Drag to move this clip"
+          title="Click to play from here · drag to move this clip"
         />
 
         {cuts.map((cut) => (
