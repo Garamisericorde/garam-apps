@@ -1118,3 +1118,51 @@ kbd {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ── Hotkey capture ──────────────────────────────────────────────────────── */
+
+.hotkey-field {
+  min-width: 190px;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.hotkey-field.is-capturing {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+/*
+ * Refusal has to be felt, not read: the shake says "not that" before any label
+ * could be looked at, which is the point when hands are still on the keys.
+ */
+.hotkey-field.is-rejected {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px var(--danger-soft);
+  animation: hotkey-refuse 0.36s ease;
+}
+
+@keyframes hotkey-refuse {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-5px);
+  }
+  40% {
+    transform: translateX(5px);
+  }
+  60% {
+    transform: translateX(-3px);
+  }
+  80% {
+    transform: translateX(3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hotkey-field.is-rejected {
+    animation: none;
+  }
+}

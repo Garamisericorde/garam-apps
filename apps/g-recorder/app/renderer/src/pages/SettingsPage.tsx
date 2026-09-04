@@ -23,6 +23,7 @@ export default function SettingsPage(): JSX.Element {
   const [cacheSize, setCacheSize] = useState<number | null>(null)
   const [version, setVersion] = useState('')
   const [reinstalling, setReinstalling] = useState(false)
+  const [scan, setScan] = useState<'idle' | 'scanning' | 'done'>('idle')
 
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -241,14 +242,28 @@ export default function SettingsPage(): JSX.Element {
           </Field>
         )}
 
-        <Field label="Detected devices" hint={`${audio?.devices.length ?? 0} found`}>
+        <Field label="Detected devices" hint={deviceHint(audio, scan)}>
+          {/*
+            * A rescan of an unchanged machine returns exactly what was there
+            * before, so with no state to show the button looked broken. It now
+            * says it is working and confirms when it is done.
+            */}
           <button
             className="btn"
+            disabled={scan === 'scanning'}
             onClick={() => {
-              window.api.devices.audio(true).then(setAudio).catch(() => undefined)
+              setScan('scanning')
+              window.api.devices
+                .audio(true)
+                .then((devices) => {
+                  setAudio(devices)
+                  setScan('done')
+                  setTimeout(() => setScan('idle'), 2000)
+                })
+                .catch(() => setScan('idle'))
             }}
           >
-            Rescan
+            {scan === 'scanning' ? 'Scanning…' : scan === 'done' ? '✓ Rescanned' : 'Rescan'}
           </button>
         </Field>
       </Section>
@@ -449,6 +464,19 @@ function Toggle({
  * Captures the next key combination the user presses and turns it into an
  * Electron accelerator string.
  */
+/**
+ * Records a shortcut by watching what you hold down.
+ *
+ * The combination builds up as keys go down — Alt, then Alt+Shift, then the
+ * finished Alt+Shift+K — so you can see what you are about to bind instead of
+ * finding out after it is saved.
+ *
+ * What it refuses is as important as what it accepts. Windows binds a shortcut
+ * to modifiers plus ONE key: "Alt+Q+R" is not a three-key chord, and Electron
+ * happily registers it as plain Alt+R with the Q silently dropped. Mouse
+ * buttons are not addressable at all. Rejecting both here, visibly, beats
+ * saving something that reads back as one shortcut and fires on another.
+ */
 function HotkeyField({
   label,
   value,
@@ -459,9 +487,21 @@ function HotkeyField({
   onChange: (accelerator: string) => void
 }): JSX.Element {
   const [capturing, setCapturing] = useState(false)
+  /** What is held down right now, shown while it is being pressed */
+  const [preview, setPreview] = useState<string[]>([])
+  const [rejected, setRejected] = useState(false)
+
+  const reject = useCallback(() => {
+    setRejected(true)
+    // Long enough for the shake to finish, short enough to keep trying.
+    setTimeout(() => setRejected(false), 420)
+  }, [])
 
   useEffect(() => {
-    if (!capturing) return
+    if (!capturing) {
+      setPreview([])
+      return
+    }
 
     const handleKey = (event: KeyboardEvent): void => {
       event.preventDefault()
@@ -472,29 +512,86 @@ function HotkeyField({
         return
       }
 
-      const accelerator = toAccelerator(event)
-      if (!accelerator) return // modifier-only press — keep waiting
+      const held: string[] = []
+      if (event.ctrlKey) held.push('Ctrl')
+      if (event.shiftKey) held.push('Shift')
+      if (event.altKey) held.push('Alt')
+      if (event.metaKey) held.push('Super')
 
+      // Still only modifiers: show them and wait for the key they belong to.
+      if (MODIFIER_KEYS.includes(event.key)) {
+        setPreview(held)
+        return
+      }
+
+      const key = acceleratorKey(event)
+      if (!key) {
+        reject()
+        return
+      }
+
+      if (held.length === 0) {
+        // A bare letter would swallow that key everywhere in Windows.
+        setPreview([key])
+        reject()
+        return
+      }
+
+      setPreview([...held, key])
       setCapturing(false)
-      onChange(accelerator)
+      onChange([...held, key].join('+'))
+    }
+
+    const handleUp = (event: KeyboardEvent): void => {
+      if (!MODIFIER_KEYS.includes(event.key)) return
+      // Releasing a modifier before the key means starting over.
+      setPreview((previous) => previous.filter((part) => part !== modifierName(event.key)))
+    }
+
+    const handleMouse = (event: MouseEvent): void => {
+      // Only the primary button gets through: it is how the field is opened.
+      if (event.button === 0) return
+      event.preventDefault()
+      reject()
     }
 
     window.addEventListener('keydown', handleKey, true)
-    return () => window.removeEventListener('keydown', handleKey, true)
-  }, [capturing, onChange])
+    window.addEventListener('keyup', handleUp, true)
+    window.addEventListener('mousedown', handleMouse, true)
+    return () => {
+      window.removeEventListener('keydown', handleKey, true)
+      window.removeEventListener('keyup', handleUp, true)
+      window.removeEventListener('mousedown', handleMouse, true)
+    }
+  }, [capturing, onChange, reject])
 
   return (
     <div className="row-between">
-      <span>{label}</span>
+      <div className="stack">
+        <span>{label}</span>
+        {capturing && (
+          <span className="small faint">
+            Hold the modifiers, then press one key · Esc to cancel
+          </span>
+        )}
+      </div>
       <button
-        className="btn"
+        className={`btn hotkey-field${capturing ? ' is-capturing' : ''}${
+          rejected ? ' is-rejected' : ''
+        }`}
         onClick={() => setCapturing((previous) => !previous)}
-        style={{ minWidth: 170, justifyContent: 'center' }}
       >
-        {capturing ? 'Press a combination…' : value}
+        {capturing ? (preview.length > 0 ? preview.join('+') : 'Press a combination…') : value}
       </button>
     </div>
   )
+}
+
+/** Event key name -> the name used in an accelerator */
+function modifierName(key: string): string {
+  if (key === 'Control') return 'Ctrl'
+  if (key === 'Meta') return 'Super'
+  return key
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -556,26 +653,6 @@ function acceleratorKey(event: KeyboardEvent): string | null {
   return CODE_TO_ACCELERATOR[code] ?? null
 }
 
-/** Build an Electron accelerator from a keyboard event, or null if incomplete */
-function toAccelerator(event: KeyboardEvent): string | null {
-  if (MODIFIER_KEYS.includes(event.key)) return null
-
-  const key = acceleratorKey(event)
-  if (!key) return null
-
-  const parts: string[] = []
-  if (event.ctrlKey) parts.push('Ctrl')
-  if (event.shiftKey) parts.push('Shift')
-  if (event.altKey) parts.push('Alt')
-  if (event.metaKey) parts.push('Super')
-  parts.push(key)
-
-  // A bare letter would swallow normal typing everywhere in Windows
-  const isFunctionKey = /^F\d{1,2}$/.test(key)
-  if (parts.length === 1 && !isFunctionKey) return null
-
-  return parts.join('+')
-}
 
 function ffmpegLabel(status: FfmpegStatus | null): string {
   if (!status) return 'Checking…'
@@ -634,6 +711,13 @@ function resolutionHint(
   return scaling
     ? `${base} — and lets capture stay on the GPU. Resizing costs noticeably more CPU.`
     : `${base} · capture is running entirely on the GPU`
+}
+
+/** What the last scan found, so the button has something to have changed */
+function deviceHint(audio: AudioDevices | null, scan: 'idle' | 'scanning' | 'done'): string {
+  if (scan === 'scanning') return 'Asking Windows…'
+  const count = audio?.devices.length ?? 0
+  return count === 1 ? '1 device found' : `${count} devices found`
 }
 
 /**
