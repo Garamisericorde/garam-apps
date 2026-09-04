@@ -22,6 +22,8 @@ interface TrimControlsProps {
      three small controls, and a whole row of window height for them costs more
      of the clip than it is worth. */
   view: TimelineView
+  /** Seconds a fitted track would span, for the zoom readout */
+  span: number
   onViewChange: (view: TimelineView) => void
   snap: boolean
   onSnapChange: (snap: boolean) => void
@@ -44,6 +46,7 @@ export default function TrimControls({
   onSeek,
   onToggleFullscreen,
   view,
+  span,
   onViewChange,
   snap,
   onSnapChange,
@@ -65,6 +68,7 @@ export default function TrimControls({
         </span>
         <TimelineZoom
           view={view}
+          span={span}
           disabled={disabled}
           onChange={onViewChange}
           snap={snap}

@@ -10,7 +10,7 @@ import {
 } from '../../../shared/timeline'
 import ContextMenu from './ContextMenu'
 import type { MenuPosition } from './ContextMenu'
-import { MAX_ZOOM, MIN_ZOOM, TAIL_FACTOR } from './timelineView'
+import { fitSpan, MAX_VISIBLE_SECONDS, MIN_VISIBLE_SECONDS } from './timelineView'
 import type { TimelineView } from './timelineView'
 
 /** What a source file looks like on the lanes, once it has been examined */
@@ -106,30 +106,40 @@ export default function Timeline({
   /** The edge a moving clip has locked onto, drawn while it holds */
   const [snapAt, setSnapAt] = useState<number | null>(null)
 
-  const { zoom, offset } = view
+  const { offset } = view
   const duration = timelineDuration(timeline)
+
+  /*
+   * The scale is frozen for the length of a drag.
+   *
+   * While fitting, the span follows the content — and dragging a clip to the
+   * right makes the content longer, so the view was rescaling under the pointer
+   * as it moved. Clips appeared to shrink and the other lane appeared to slide
+   * the other way, all while the model was only changing one number.
+   */
+  const frozenSpan = useRef<number | null>(null)
+  const span = frozenSpan.current ?? fitSpan(duration)
 
   /*
    * Track, view and content are three different lengths. Keeping them apart is
    * what lets the wheel pull back into empty track instead of stopping dead at
    * the last frame, and what leaves room to drop a clip after the end.
    */
-  const span = duration > 0 ? duration * TAIL_FACTOR : 30
-  const visible = span / zoom
+  const visible = view.visible ?? span
   const maxOffset = Math.max(span - visible, 0)
 
   // A shorter timeline, or a zoom-out, can leave the window hanging past the end.
   useEffect(() => {
     const clamped = clamp(offset, 0, maxOffset)
-    if (clamped !== offset) onViewChange({ zoom, offset: clamped })
-  }, [maxOffset, offset, zoom, onViewChange])
+    if (clamped !== offset) onViewChange({ visible: view.visible, offset: clamped })
+  }, [maxOffset, offset, view.visible, onViewChange])
 
   /** Keep the playhead in view while it plays past the right edge */
   useEffect(() => {
-    if (zoom === 1 || duration <= 0) return
+    if (view.visible === null || duration <= 0) return
     if (currentTime >= offset && currentTime <= offset + visible) return
-    onViewChange({ zoom, offset: clamp(currentTime - visible / 2, 0, maxOffset) })
-  }, [currentTime, zoom, duration, offset, visible, maxOffset, onViewChange])
+    onViewChange({ visible: view.visible, offset: clamp(currentTime - visible / 2, 0, maxOffset) })
+  }, [currentTime, duration, offset, view.visible, visible, maxOffset, onViewChange])
 
   /** Fraction of the visible window a time sits at */
   const position = useCallback(
@@ -213,9 +223,14 @@ export default function Timeline({
   /** Follow the pointer until it is released, then clean up after it */
   const follow = useCallback(
     (onPointerMove: (event: PointerEvent) => void, onDone?: () => void): void => {
+      // Hold the scale still for the length of the gesture, so what is under
+      // the pointer stays under the pointer.
+      frozenSpan.current = span
+
       const handleMove = (event: PointerEvent): void => onPointerMove(event)
       const handleUp = (): void => {
         dragRef.current = null
+        frozenSpan.current = null
         setSnapAt(null)
         onDone?.()
         window.removeEventListener('pointermove', handleMove)
@@ -225,7 +240,7 @@ export default function Timeline({
       window.addEventListener('pointermove', handleMove)
       window.addEventListener('pointerup', handleUp)
     },
-    [],
+    [span],
   )
 
   /**
@@ -289,15 +304,18 @@ export default function Timeline({
       const fraction = clamp((event.clientX - rect.left) / rect.width, 0, 1)
       const anchor = offset + fraction * visible
 
-      const next = clamp(zoom * (event.deltaY < 0 ? 1.25 : 0.8), MIN_ZOOM, MAX_ZOOM)
-      const nextVisible = span / next
+      const nextVisible = clamp(
+        visible * (event.deltaY < 0 ? 0.8 : 1.25),
+        MIN_VISIBLE_SECONDS,
+        MAX_VISIBLE_SECONDS,
+      )
 
       onViewChange({
-        zoom: next,
+        visible: nextVisible,
         offset: clamp(anchor - fraction * nextVisible, 0, Math.max(span - nextVisible, 0)),
       })
     },
-    [offset, span, visible, zoom, onViewChange],
+    [offset, span, visible, onViewChange],
   )
 
   const menuItems = menu

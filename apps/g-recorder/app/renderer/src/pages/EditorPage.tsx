@@ -23,7 +23,7 @@ import type { VideoPlayerHandle } from '../components/VideoPlayer'
 import Timeline from '../components/Timeline'
 import type { PendingDrop, Selection, SourceAssets } from '../components/Timeline'
 import TrimControls from '../components/TrimControls'
-import { FIT_VIEW, TAIL_FACTOR } from '../components/timelineView'
+import { fitSpan, FIT_VIEW } from '../components/timelineView'
 import type { TimelineView } from '../components/timelineView'
 import PresetPicker from '../components/PresetPicker'
 import MediaLibrary from '../components/MediaLibrary'
@@ -417,8 +417,7 @@ export default function EditorPage(): JSX.Element {
       if (!lanes) return duration
 
       const rect = lanes.getBoundingClientRect()
-      const span = duration > 0 ? duration * TAIL_FACTOR : 30
-      const visible = span / view.zoom
+      const visible = view.visible ?? fitSpan(duration)
       return Math.max(0, view.offset + ((clientX - rect.left) / rect.width) * visible)
     },
     [duration, view],
@@ -645,6 +644,7 @@ export default function EditorPage(): JSX.Element {
           onClear={clearTimeline}
           onSeek={handleSeek}
           view={view}
+          span={fitSpan(duration)}
           onViewChange={setView}
           snap={snapEnabled}
           onSnapChange={(next) => {

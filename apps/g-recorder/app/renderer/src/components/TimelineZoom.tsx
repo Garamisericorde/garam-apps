@@ -1,5 +1,5 @@
 import { clamp } from '../../../shared/time'
-import { MAX_ZOOM, MIN_ZOOM, ZOOM_STEP } from './timelineView'
+import { MAX_VISIBLE_SECONDS, MIN_VISIBLE_SECONDS, ZOOM_STEP } from './timelineView'
 import type { TimelineView } from './timelineView'
 
 /**
@@ -11,26 +11,35 @@ import type { TimelineView } from './timelineView'
  */
 export default function TimelineZoom({
   view,
+  span,
   disabled,
   onChange,
   snap,
   onSnapChange,
 }: {
   view: TimelineView
+  /** Seconds a fitted track would span, which is what "1x" means */
+  span: number
   disabled: boolean
   onChange: (view: TimelineView) => void
   /** Whether dragged edges pull into line with each other */
   snap: boolean
   onSnapChange: (snap: boolean) => void
 }): JSX.Element {
+  const visible = view.visible ?? span
+  const zoom = span / visible
+
   const step = (factor: number): void =>
-    onChange({ ...view, zoom: clamp(view.zoom * factor, MIN_ZOOM, MAX_ZOOM) })
+    onChange({
+      ...view,
+      visible: clamp(visible / factor, MIN_VISIBLE_SECONDS, MAX_VISIBLE_SECONDS),
+    })
 
   return (
     <div className="timeline-zoom">
       <button
         className="zoom-btn"
-        disabled={disabled || view.zoom <= MIN_ZOOM}
+        disabled={disabled || visible >= MAX_VISIBLE_SECONDS}
         onClick={() => step(1 / ZOOM_STEP)}
         title="Zoom out (scroll down on the strip)"
       >
@@ -43,16 +52,16 @@ export default function TimelineZoom({
       {/* Clicking the readout is the fastest way back to the whole clip */}
       <button
         className="zoom-readout mono"
-        disabled={disabled || view.zoom === 1}
-        onClick={() => onChange({ zoom: 1, offset: 0 })}
+        disabled={disabled || view.visible === null}
+        onClick={() => onChange({ visible: null, offset: 0 })}
         title="Fit the whole clip"
       >
-        {view.zoom > 1 ? `${view.zoom.toFixed(1)}×` : 'Fit'}
+        {view.visible === null ? 'Fit' : `${zoom.toFixed(1)}×`}
       </button>
 
       <button
         className="zoom-btn"
-        disabled={disabled || view.zoom >= MAX_ZOOM}
+        disabled={disabled || visible <= MIN_VISIBLE_SECONDS}
         onClick={() => step(ZOOM_STEP)}
         title="Zoom in (scroll up on the strip)"
       >
