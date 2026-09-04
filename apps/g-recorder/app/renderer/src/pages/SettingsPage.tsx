@@ -14,6 +14,7 @@ import {
   DEFAULT_PAD_BINDINGS,
 } from '../../../shared/hotkeyDefaults'
 import { ALLOWED_FPS } from '../../../shared/presets'
+import { sanitizeNamePattern } from '../../../shared/exportNaming'
 import { formatBytes } from '../../../shared/time'
 import { resolutionHeight } from '../../../shared/presets'
 
@@ -319,6 +320,39 @@ export default function SettingsPage(): JSX.Element {
             </button>
           </div>
         </Field>
+
+        <Field
+          label="Save exports to"
+          hint="Kept apart from the recordings, so finished clips do not fill the clip list"
+        >
+          <div className="row" style={{ gap: 8, minWidth: 0 }}>
+            <span className="path-display" title={settings.exportPath}>
+              {settings.exportPath}
+            </span>
+            <button
+              className="btn"
+              onClick={async () => {
+                const chosen = await window.api.settings.pickExportPath()
+                if (chosen) await save({ exportPath: chosen })
+              }}
+            >
+              Browse…
+            </button>
+            <button className="btn" onClick={() => void window.api.settings.openExportFolder()}>
+              Open
+            </button>
+          </div>
+        </Field>
+
+        <Field
+          label="Export name"
+          hint={`Numbered as they are taken: ${settings.exportNamePattern}1, ${settings.exportNamePattern}2, ${settings.exportNamePattern}3`}
+        >
+          <NamePatternField
+            value={settings.exportNamePattern}
+            onChange={(pattern) => void save({ exportNamePattern: pattern })}
+          />
+        </Field>
       </Section>
 
       {/* ── Hotkeys ── */}
@@ -444,6 +478,44 @@ export default function SettingsPage(): JSX.Element {
 }
 
 // ── Sub-components ───────────────────────────────────────────────────────────
+
+/**
+ * The name every export is built from.
+ *
+ * Typed freely and only saved once it is left alone: writing on every keystroke
+ * would push a half-typed name through the validator and bounce it back into
+ * the field mid-word.
+ */
+function NamePatternField({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (pattern: string) => void
+}): JSX.Element {
+  const [draft, setDraft] = useState(value)
+
+  useEffect(() => setDraft(value), [value])
+
+  const commit = (): void => {
+    const cleaned = sanitizeNamePattern(draft)
+    setDraft(cleaned)
+    if (cleaned !== value) onChange(cleaned)
+  }
+
+  return (
+    <input
+      className="input"
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') event.currentTarget.blur()
+      }}
+      spellCheck={false}
+    />
+  )
+}
 
 /**
  * Controller shortcuts.

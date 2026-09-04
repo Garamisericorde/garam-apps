@@ -65,6 +65,12 @@ export default function PresetPicker({
   const [speed, setSpeed] = useState(1)
   const [volume, setVolume] = useState(1)
   const [targetSizeMb, setTargetSizeMb] = useState<number | null>(null)
+  /*
+   * Where this export goes and what it is called. Seeded from the settings when
+   * the dialog opens, then the user's for as long as it is open.
+   */
+  const [directory, setDirectory] = useState('')
+  const [fileName, setFileName] = useState('')
 
   const [state, setState] = useState<ExportState>('idle')
   const [progress, setProgress] = useState<ExportProgress | null>(null)
@@ -77,6 +83,26 @@ export default function PresetPicker({
   useEffect(() => {
     return () => unsubscribeRef.current?.()
   }, [])
+
+  /*
+   * Filled in each time the dialog opens rather than once: the folder may have
+   * gained a file since, and the suggested name has to be one that is free now.
+   */
+  useEffect(() => {
+    if (!open) return
+
+    let cancelled = false
+    void window.api.settings.get().then(async (settings) => {
+      if (cancelled) return
+      setDirectory(settings.exportPath)
+      const suggestion = await window.api.settings.nextExportName(settings.exportPath)
+      if (!cancelled) setFileName(suggestion)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [open])
 
   const preset = getPreset(presetId)
   const sourceDuration = timeline.duration
@@ -97,7 +123,10 @@ export default function PresetPicker({
     const options: ExportOptions = {
       presetId,
       timeline,
-      outputPath: '', // the main process names the file
+      directory,
+      // Empty means "the next name in the pattern", settled against the folder
+      // at export time rather than now.
+      fileName,
       speed,
       volume: hasAudio ? volume : 0,
       aspect,
@@ -121,7 +150,7 @@ export default function PresetPicker({
       unsubscribeRef.current?.()
       unsubscribeRef.current = null
     }
-  }, [aspect, format, hasAudio, presetId, speed, targetSizeMb, timeline, volume])
+  }, [aspect, directory, fileName, format, hasAudio, presetId, speed, targetSizeMb, timeline, volume])
 
   /*
    * Reported only when something the caller can see actually changed.
@@ -169,6 +198,44 @@ export default function PresetPicker({
               {option.toUpperCase()}
             </button>
           ))}
+        </div>
+      </div>
+
+      <div className="field">
+        <span className="field-label">Save as</span>
+        <div className="row" style={{ gap: 8, minWidth: 0 }}>
+          <input
+            className="input"
+            style={{ flex: '1 1 0', minWidth: 0 }}
+            value={fileName}
+            placeholder="Next in the pattern"
+            onChange={(event) => setFileName(event.target.value)}
+            disabled={isExporting}
+          />
+          <span className="small faint mono">.{format}</span>
+        </div>
+      </div>
+
+      <div className="field">
+        <span className="field-label">Folder</span>
+        <div className="row" style={{ gap: 8, minWidth: 0 }}>
+          <span className="path-display" title={directory}>
+            {directory}
+          </span>
+          <button
+            className="btn"
+            disabled={isExporting}
+            onClick={async () => {
+              const chosen = await window.api.settings.pickExportPath()
+              if (chosen) {
+                setDirectory(chosen)
+                // The free name in one folder says nothing about another.
+                setFileName(await window.api.settings.nextExportName(chosen))
+              }
+            }}
+          >
+            Browse…
+          </button>
         </div>
       </div>
 

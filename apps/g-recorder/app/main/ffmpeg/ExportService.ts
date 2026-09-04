@@ -1,11 +1,11 @@
 import { spawn } from 'child_process'
 import type { ChildProcess } from 'child_process'
-import { dirname, join } from 'path'
-import { createWriteStream, mkdirSync } from 'fs'
+import { join } from 'path'
+import { createWriteStream, mkdirSync, readdirSync } from 'fs'
 import type { AspectId, EncoderType, ExportOptions, ExportProgress, MediaInfo } from '../../shared/types'
 import { getAspectRatio, getPreset, resolutionHeight } from '../../shared/presets'
 import { logsDir } from '../../shared/paths'
-import { localTimestamp } from '../../shared/time'
+import { nextNumberedName, sanitizeNamePattern } from '../../shared/exportNaming'
 import { GIF_FPS, GIF_MAX_WIDTH } from '../settings/defaults'
 import type { CropRect } from './commands'
 import { buildClipExportArgs, buildGifExportArgs, buildTimelineExportArgs } from './commands'
@@ -71,13 +71,27 @@ export class ExportService {
     const speed = options.speed > 0 ? options.speed : 1
     const outputDuration = sourceDuration / speed
 
-    const outputPath =
-      options.outputPath ||
-      join(
-        settings.outputPath,
-        `clip_${preset.id}_${localTimestamp()}.${options.format === 'gif' ? 'gif' : 'mp4'}`,
-      )
-    mkdirSync(dirname(outputPath), { recursive: true })
+    const extension = options.format === 'gif' ? 'gif' : 'mp4'
+    const directory = options.directory || settings.exportPath
+    mkdirSync(directory, { recursive: true })
+
+    /*
+     * The name is settled here, against the folder as it is now. Suggesting one
+     * when the dialog opens and trusting it at export time would overwrite a
+     * file if another export finished in between.
+     */
+    const taken = listNames(directory)
+    const chosen = options.fileName.trim()
+      ? sanitizeNamePattern(options.fileName)
+      : nextNumberedName(settings.exportNamePattern, taken)
+
+    // Never overwrite. A name typed by hand that already exists gets numbered
+    // the same way the pattern does, rather than destroying the earlier file.
+    const fileName = taken.some((name) => stemOf(name).toLowerCase() === chosen.toLowerCase())
+      ? nextNumberedName(chosen, taken)
+      : chosen
+
+    const outputPath = join(directory, `${fileName}.${extension}`)
 
     const args =
       options.format === 'gif'
@@ -418,4 +432,18 @@ function toEvenSize(value: number): number {
  */
 function toEvenOffset(value: number): number {
   return Math.max(0, Math.floor(value / 2) * 2)
+}
+
+/** Names already in a folder, or nothing when it cannot be read */
+function listNames(directory: string): string[] {
+  try {
+    return readdirSync(directory)
+  } catch {
+    return []
+  }
+}
+
+function stemOf(fileName: string): string {
+  const dot = fileName.lastIndexOf('.')
+  return dot > 0 ? fileName.slice(0, dot) : fileName
 }

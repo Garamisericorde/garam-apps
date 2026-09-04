@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { join } from 'path'
 import type { AppSettings } from '../../shared/types'
 import { ALLOWED_FPS } from '../../shared/presets'
+import { DEFAULT_NAME_PATTERN } from '../../shared/exportNaming'
 import {
   DEFAULT_EDITOR_KEYS,
   DEFAULT_HOTKEYS,
@@ -31,6 +32,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
   // Output
   outputPath: join(app.getPath('videos'), 'G-Recorder'),
+  exportPath: join(app.getPath('videos'), 'G-Recorder', 'Exports'),
+  exportNamePattern: DEFAULT_NAME_PATTERN,
 
   ...DEFAULT_HOTKEYS,
   ...DEFAULT_PAD_BINDINGS,

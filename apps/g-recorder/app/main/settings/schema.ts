@@ -1,5 +1,6 @@
 import type { AppSettings } from '../../shared/types'
 import { parseBinding } from '../../shared/gamepad'
+import { sanitizeNamePattern } from '../../shared/exportNaming'
 import {
   ALLOWED_FPS,
   DEFAULT_SETTINGS,
@@ -67,6 +68,12 @@ const VALIDATORS: {
 
   outputPath: (v) =>
     typeof v === 'string' && v.trim() !== '' ? null : 'outputPath must be a non-empty string',
+  exportPath: (v) =>
+    typeof v === 'string' && v.trim() !== '' ? null : 'exportPath must be a non-empty string',
+  exportNamePattern: (v) =>
+    typeof v === 'string' && sanitizeNamePattern(v) === v.trim()
+      ? null
+      : 'exportNamePattern must be a name a file can have',
 
   hotkeySaveReplay: accelerator('hotkeySaveReplay'),
   hotkeyToggleRecording: accelerator('hotkeyToggleRecording'),

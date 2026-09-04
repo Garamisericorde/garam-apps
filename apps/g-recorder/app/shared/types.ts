@@ -36,6 +36,16 @@ export interface AppSettings {
 
   // ── Output ──
   outputPath: string
+  /**
+   * Where exports go.
+   *
+   * Separate from outputPath, which is where the recorder writes: raw replays
+   * and finished clips are different things to keep, and mixing them means the
+   * clip list fills with material nobody chose to keep.
+   */
+  exportPath: string
+  /** Name every export is built from: "Test" gives Test1, Test2, Test3 */
+  exportNamePattern: string
 
   /*
    * ── Hotkeys ──
@@ -123,8 +133,10 @@ export interface ExportTimeline {
 export interface ExportOptions {
   presetId: string
   timeline: ExportTimeline
-  /** Absolute output path; empty string = auto-generate in settings.outputPath */
-  outputPath: string
+  /** Folder to write into; empty string = the configured export folder */
+  directory: string
+  /** File name without an extension; empty string = the next in the pattern */
+  fileName: string
   /** Playback speed multiplier (1 = normal) */
   speed: number
   /** Audio gain, 0 = mute, 1 = unchanged */

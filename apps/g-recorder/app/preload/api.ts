@@ -147,8 +147,13 @@ export const api = {
       ipcRenderer.invoke('settings:set', partial),
 
     pickOutputPath: (): Promise<string | null> => ipcRenderer.invoke('settings:pickOutputPath'),
+    pickExportPath: (): Promise<string | null> => ipcRenderer.invoke('settings:pickExportPath'),
+    /** The name the next export would take, given the folder it will go in */
+    nextExportName: (directory?: string): Promise<string> =>
+      ipcRenderer.invoke('settings:nextExportName', directory),
     openLogsFolder: (): Promise<void> => ipcRenderer.invoke('settings:openLogsFolder'),
     openOutputFolder: (): Promise<void> => ipcRenderer.invoke('settings:openOutputFolder'),
+    openExportFolder: (): Promise<void> => ipcRenderer.invoke('settings:openExportFolder'),
 
     onChange: (callback: (settings: AppSettings) => void): (() => void) =>
       subscribe('settings:changed', callback),

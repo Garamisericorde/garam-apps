@@ -1,7 +1,8 @@
 import { app, dialog, ipcMain, screen, shell } from 'electron'
-import { mkdirSync } from 'fs'
+import { mkdirSync, readdirSync } from 'fs'
 import type { AppSettings, AudioDevices, DisplayInfo, FfmpegStatus } from '../../shared/types'
 import { logsDir } from '../../shared/paths'
+import { nextNumberedName } from '../../shared/exportNaming'
 import { listAudioDevices } from '../ffmpeg/AudioDevices'
 import { detectEncoders } from '../ffmpeg/EncoderDetect'
 import { FfmpegManager } from '../ffmpeg/FfmpegManager'
@@ -27,14 +28,17 @@ export function registerSettingsIpc(): void {
 
   ipcMain.handle('settings:set', (_event, partial: Partial<AppSettings>) => store.set(partial))
 
-  ipcMain.handle('settings:pickOutputPath', async () => {
+  /** Pick a folder. The title says which one, since there are two. */
+  const pickFolder = async (title: string): Promise<string | null> => {
     const result = await dialog.showOpenDialog({
-      title: 'Choose where clips are saved',
+      title,
       properties: ['openDirectory', 'createDirectory'],
     })
-    if (result.canceled || result.filePaths.length === 0) return null
-    return result.filePaths[0]
-  })
+    return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0]
+  }
+
+  ipcMain.handle('settings:pickOutputPath', () => pickFolder('Choose where clips are saved'))
+  ipcMain.handle('settings:pickExportPath', () => pickFolder('Choose where exports are saved'))
 
   ipcMain.handle('settings:openLogsFolder', async () => {
     const dir = logsDir()
@@ -46,6 +50,24 @@ export function registerSettingsIpc(): void {
     const dir = store.get().outputPath
     mkdirSync(dir, { recursive: true })
     await shell.openPath(dir)
+  })
+
+  ipcMain.handle('settings:openExportFolder', async () => {
+    const dir = store.get().exportPath
+    mkdirSync(dir, { recursive: true })
+    await shell.openPath(dir)
+  })
+
+  /**
+   * The name the next export would take.
+   *
+   * Read from the folder rather than counted: files get deleted and renamed,
+   * and a counter kept anywhere else drifts out of step with what is on disk.
+   */
+  ipcMain.handle('settings:nextExportName', (_event, directory?: string): string => {
+    const settings = store.get()
+    const dir = directory?.trim() || settings.exportPath
+    return nextNumberedName(settings.exportNamePattern, listNames(dir))
   })
 
   // ── FFmpeg ──
@@ -124,4 +146,13 @@ export function registerSettingsIpc(): void {
   ipcMain.handle('app:getVersion', () => app.getVersion())
 
   ipcMain.handle('app:quit', () => app.quit())
+}
+
+/** Names already in a folder, or nothing when it cannot be read */
+function listNames(directory: string): string[] {
+  try {
+    return readdirSync(directory)
+  } catch {
+    return []
+  }
 }
