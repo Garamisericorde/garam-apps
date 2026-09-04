@@ -3,6 +3,8 @@ import { clamp } from '../../../shared/time'
 import {
   itemDuration,
   itemEnd,
+  itemGain,
+  MAX_GAIN,
   timelineDuration,
   type LaneId,
   type Timeline as TimelineModel,
@@ -50,6 +52,12 @@ interface TimelineProps {
   /** A gesture is about to start changing things, so it can be undone as one */
   onEditBegin: () => void
   onRemove: (lane: LaneId, id: string) => void
+  /** Loudness of one clip, 1 being the source untouched */
+  onGain: (lane: LaneId, id: string, gain: number) => void
+  /** Cut a clip loose from the one it moves with */
+  onUnlink: (lane: LaneId, id: string) => void
+  /** Tie two clips together, so a drag on either moves both */
+  onLink: (a: Selection, b: Selection) => void
   /** Cut at the playhead; `bothLanes` false cuts only the lane clicked */
   onSplit: (lane: LaneId, bothLanes: boolean) => void
   onViewChange: (view: TimelineView) => void
@@ -100,6 +108,9 @@ export default function Timeline({
   onMove,
   onEditBegin,
   onRemove,
+  onGain,
+  onUnlink,
+  onLink,
   onSplit,
   onViewChange,
 }: TimelineProps): JSX.Element {
@@ -260,6 +271,17 @@ export default function Timeline({
       if (event.button !== 0) return
       event.preventDefault()
       event.stopPropagation()
+
+      /*
+       * Shift ties this clip to the selected one. It is a press, not a drag:
+       * linking is the whole gesture, and starting a move as well would drag
+       * the pair the moment the hand wavered.
+       */
+      if (event.shiftKey && selected && !(selected.lane === lane && selected.id === item.id)) {
+        onLink(selected, { lane, id: item.id })
+        return
+      }
+
       onSelect({ lane, id: item.id })
 
       const downX = event.clientX
@@ -283,7 +305,7 @@ export default function Timeline({
         },
       )
     },
-    [applyDrag, follow, onEditBegin, onSeek, onSelect, timeFromEvent],
+    [applyDrag, follow, onEditBegin, onLink, onSeek, onSelect, selected, timeFromEvent],
   )
 
   /** Scrubbing on empty track, which is also how you seek past the last clip */
@@ -359,12 +381,24 @@ export default function Timeline({
     [offset, span, visible, onViewChange],
   )
 
+  const menuTarget = menu
+    ? timeline[menu.target.lane].find((item) => item.id === menu.target.id)
+    : undefined
+
   const menuItems = menu
     ? [
         {
           label: 'Split at the playhead',
           onSelect: () => onSplit(menu.target.lane, true),
         },
+        ...(menuTarget?.linkId
+          ? [
+              {
+                label: menu.target.lane === 'audio' ? 'Unlink from the video' : 'Unlink the sound',
+                onSelect: () => onUnlink(menu.target.lane, menu.target.id),
+              },
+            ]
+          : []),
         {
           label: menu.target.lane === 'audio' ? 'Split audio only' : 'Split video only',
           onSelect: () => onSplit(menu.target.lane, false),
@@ -376,6 +410,34 @@ export default function Timeline({
         },
       ]
     : []
+
+  /**
+   * Drag a clip's loudness line.
+   *
+   * Vertical, on a thin band of its own, so it cannot be confused with the
+   * horizontal drag that moves the clip. The middle is the source untouched,
+   * the top is the ceiling, the bottom is silence.
+   */
+  const pressGain = useCallback(
+    (lane: LaneId, item: TimelineItem, event: React.PointerEvent): void => {
+      if (event.button !== 0) return
+      event.preventDefault()
+      event.stopPropagation()
+
+      const box = (event.currentTarget as HTMLElement).parentElement?.getBoundingClientRect()
+      if (!box) return
+
+      onSelect({ lane, id: item.id })
+      onEditBegin()
+
+      const gainAt = (clientY: number): number =>
+        clamp((1 - (clientY - box.top) / box.height) * MAX_GAIN, 0, MAX_GAIN)
+
+      onGain(lane, item.id, gainAt(event.clientY))
+      follow((moveEvent) => onGain(lane, item.id, gainAt(moveEvent.clientY)))
+    },
+    [follow, onEditBegin, onGain, onSelect],
+  )
 
   const renderItem = (lane: LaneId, item: TimelineItem): JSX.Element => {
     const asset = assets[item.path]
@@ -430,13 +492,32 @@ export default function Timeline({
                 style={{ width: `${sourceWidth}%`, left: `${sourceLeft}%` }}
               >
                 {asset.waveform.map((peak, index) => (
-                  <span key={index} style={{ height: `${Math.max(peak * 100, 2)}%` }} />
+                  // Scaled by the clip's own gain, so the picture of the sound
+                  // matches what will come out of it.
+                  <span
+                    key={index}
+                    style={{ height: `${clamp(peak * itemGain(item) * 100, 2, 100)}%` }}
+                  />
                 ))}
               </div>
             ) : (
               <span className="clip-label">{baseName(item.path)}</span>
             ))}
         </div>
+
+        {lane === 'audio' && (
+          <div
+            className="clip-gain"
+            style={{ bottom: `${(itemGain(item) / MAX_GAIN) * 100}%` }}
+            onPointerDown={(event) => pressGain(lane, item, event)}
+            title={`Volume ${Math.round(itemGain(item) * 100)}% — drag up or down`}
+          >
+            {isSelected && <span className="clip-gain-value">{Math.round(itemGain(item) * 100)}%</span>}
+          </div>
+        )}
+
+        {/* A clip that moves with another says so, quietly. */}
+        {item.linkId && <span className="clip-link" aria-hidden />}
       </div>
     )
   }

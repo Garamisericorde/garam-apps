@@ -1,16 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import {
   EMPTY_TIMELINE,
+  MAX_GAIN,
   appendClip,
   itemAt,
   itemDuration,
+  itemGain,
+  linkItems,
+  linkedWith,
   moveItem,
   removeItem,
+  setItemGain,
   sourcePaths,
   sourceTimeAt,
   splitAt,
   timelineDuration,
   trimItem,
+  unlinkItem,
 } from '../app/shared/timeline'
 import type { Timeline } from '../app/shared/timeline'
 
@@ -165,5 +171,121 @@ describe('removeItem', () => {
     const timeline = removeItem(base, 'audio', idOf(base, 'audio'))
     expect(timeline.audio).toHaveLength(0)
     expect(timeline.video).toHaveLength(1)
+  })
+})
+
+
+describe('per-clip loudness', () => {
+  const two = appendClip(
+    appendClip(EMPTY_TIMELINE, { path: 'a.mp4', durationSeconds: 4, hasAudio: true }),
+    { path: 'b.mp4', durationSeconds: 4, hasAudio: true },
+  )
+
+  it('reads as untouched until it is set', () => {
+    expect(itemGain(two.audio[0])).toBe(1)
+  })
+
+  it('changes one clip and leaves the other alone', () => {
+    // The whole point: two recordings made minutes apart are rarely at the same
+    // level, and a master control cannot lift one without lifting both.
+    const next = setItemGain(two, 'audio', two.audio[0].id, 1.6)
+
+    expect(itemGain(next.audio[0])).toBe(1.6)
+    expect(itemGain(next.audio[1])).toBe(1)
+  })
+
+  it('clamps to silence and to the ceiling', () => {
+    const id = two.audio[0].id
+    expect(itemGain(setItemGain(two, 'audio', id, -3).audio[0])).toBe(0)
+    expect(itemGain(setItemGain(two, 'audio', id, 99).audio[0])).toBe(MAX_GAIN)
+  })
+
+  it('survives a split, on both halves', () => {
+    const loud = setItemGain(two, 'audio', two.audio[0].id, 1.5)
+    const cut = splitAt(loud, 2, ['audio'])
+
+    expect(itemGain(cut.audio[0])).toBe(1.5)
+    expect(itemGain(cut.audio[1])).toBe(1.5)
+  })
+})
+
+describe('linked clips', () => {
+  const clip = appendClip(EMPTY_TIMELINE, {
+    path: 'a.mp4',
+    durationSeconds: 10,
+    hasAudio: true,
+  })
+
+  it('arrives with its own sound linked', () => {
+    expect(clip.video[0].linkId).toBeDefined()
+    expect(clip.audio[0].linkId).toBe(clip.video[0].linkId)
+    expect(linkedWith(clip, 'video', clip.video[0].id)).toHaveLength(2)
+  })
+
+  it('links nothing when the clip is silent', () => {
+    const silent = appendClip(EMPTY_TIMELINE, {
+      path: 'a.mp4',
+      durationSeconds: 10,
+      hasAudio: false,
+    })
+    expect(silent.video[0].linkId).toBeUndefined()
+  })
+
+  it('moves the pair by the same amount, keeping any gap between them', () => {
+    // Offsetting the sound is deliberate work; moving the pair must not undo it.
+    const offset = unlinkItem(clip, 'audio', clip.audio[0].id)
+    const shifted = moveItem(offset, 'audio', offset.audio[0].id, 3)
+    const relinked = linkItems(
+      shifted,
+      { lane: 'video', id: shifted.video[0].id },
+      { lane: 'audio', id: shifted.audio[0].id },
+    )
+
+    const moved = moveItem(relinked, 'video', relinked.video[0].id, 5)
+
+    expect(moved.video[0].start).toBe(5)
+    expect(moved.audio[0].start).toBe(8)
+  })
+
+  it('stops the whole group at zero rather than piling it up', () => {
+    const moved = moveItem(clip, 'video', clip.video[0].id, -4)
+    expect(moved.video[0].start).toBe(0)
+    expect(moved.audio[0].start).toBe(0)
+  })
+
+  it('keeps both halves of a cut paired, on each side', () => {
+    const cut = splitAt(clip, 4)
+
+    expect(cut.video[0].linkId).toBe(cut.audio[0].linkId)
+    expect(cut.video[1].linkId).toBe(cut.audio[1].linkId)
+    // The halves are two pairs, not one group of four.
+    expect(cut.video[0].linkId).not.toBe(cut.video[1].linkId)
+  })
+
+  it('lets one be cut loose, and does not leave the other linked to nothing', () => {
+    const loose = unlinkItem(clip, 'audio', clip.audio[0].id)
+
+    expect(loose.audio[0].linkId).toBeUndefined()
+    expect(loose.video[0].linkId).toBeUndefined()
+  })
+
+  it('moves alone once unlinked', () => {
+    const loose = unlinkItem(clip, 'audio', clip.audio[0].id)
+    const moved = moveItem(loose, 'video', loose.video[0].id, 6)
+
+    expect(moved.video[0].start).toBe(6)
+    expect(moved.audio[0].start).toBe(0)
+  })
+
+  it('joins two groups rather than dropping one', () => {
+    const second = appendClip(clip, { path: 'b.mp4', durationSeconds: 5, hasAudio: true })
+    const joined = linkItems(
+      second,
+      { lane: 'video', id: second.video[0].id },
+      { lane: 'video', id: second.video[1].id },
+    )
+
+    // Both pairs end up in one group: four items, not two.
+    expect(linkedWith(joined, 'video', second.video[0].id)).toHaveLength(4)
   })
 })

@@ -23,6 +23,22 @@ export interface TimelineItem {
   /** Window into the source, in seconds */
   sourceIn: number
   sourceOut: number
+  /**
+   * Loudness of this clip alone, 1 being the source untouched.
+   *
+   * Per item rather than per lane because that is the problem it solves: two
+   * recordings made minutes apart are rarely at the same level, and one master
+   * control cannot bring one up without taking the other with it.
+   */
+  gain?: number
+  /**
+   * Clips that move together, by a shared value.
+   *
+   * A picture and its own sound are one thing until someone says otherwise, so
+   * dragging either moves both. They stay two items: the link decides what a
+   * drag does, not what can be cut, trimmed or removed separately.
+   */
+  linkId?: string
 }
 
 export interface Timeline {
@@ -32,6 +48,19 @@ export interface Timeline {
 
 /** Shortest item the editor will create or leave behind */
 export const MIN_ITEM_SECONDS = 0.05
+
+/**
+ * Loudest a clip can be made.
+ *
+ * Twice the source. Past that the quiet parts a recording actually has are not
+ * being recovered any more, only its noise floor.
+ */
+export const MAX_GAIN = 2
+
+/** A clip's loudness, with the untouched default filled in */
+export function itemGain(item: TimelineItem): number {
+  return item.gain ?? 1
+}
 
 export const EMPTY_TIMELINE: Timeline = { video: [], audio: [] }
 
@@ -73,6 +102,72 @@ function nextId(prefix: string): string {
   return `${prefix}-${counter}`
 }
 
+/** Every item tied to the one named, including itself */
+export function linkedWith(
+  timeline: Timeline,
+  lane: LaneId,
+  id: string,
+): { lane: LaneId; item: TimelineItem }[] {
+  const item = timeline[lane].find((candidate) => candidate.id === id)
+  if (!item) return []
+  if (!item.linkId) return [{ lane, item }]
+
+  const found: { lane: LaneId; item: TimelineItem }[] = []
+  for (const other of ['video', 'audio'] as LaneId[]) {
+    for (const candidate of timeline[other]) {
+      if (candidate.linkId === item.linkId) found.push({ lane: other, item: candidate })
+    }
+  }
+  return found
+}
+
+/** Tie two clips together so a drag on either moves both */
+export function linkItems(
+  timeline: Timeline,
+  a: { lane: LaneId; id: string },
+  b: { lane: LaneId; id: string },
+): Timeline {
+  const first = timeline[a.lane].find((item) => item.id === a.id)
+  const second = timeline[b.lane].find((item) => item.id === b.id)
+  if (!first || !second || first.id === second.id) return timeline
+
+  /*
+   * Joining two groups keeps everything in both. Linking a clip that already
+   * carries a link would otherwise quietly drop whatever it was tied to.
+   */
+  const merged = first.linkId ?? second.linkId ?? nextId('link')
+  const absorbed = new Set([first.linkId, second.linkId, first.id, second.id])
+
+  const relink = (items: TimelineItem[]): TimelineItem[] =>
+    items.map((item) =>
+      absorbed.has(item.linkId) || absorbed.has(item.id) ? { ...item, linkId: merged } : item,
+    )
+
+  return { video: relink(timeline.video), audio: relink(timeline.audio) }
+}
+
+/**
+ * Cut one clip loose.
+ *
+ * A partner left alone keeps a link to nothing, which reads as linked and
+ * behaves as unlinked, so it is cleared too.
+ */
+export function unlinkItem(timeline: Timeline, lane: LaneId, id: string): Timeline {
+  const group = linkedWith(timeline, lane, id)
+  const linkId = group[0]?.item.linkId
+  if (!linkId) return timeline
+
+  const remaining = group.filter((entry) => entry.item.id !== id)
+  const orphan = remaining.length === 1 ? remaining[0].item.id : null
+
+  const clear = (items: TimelineItem[]): TimelineItem[] =>
+    items.map((item) =>
+      item.id === id || item.id === orphan ? { ...item, linkId: undefined } : item,
+    )
+
+  return { video: clear(timeline.video), audio: clear(timeline.audio) }
+}
+
 /**
  * Add a clip to both lanes.
  *
@@ -93,10 +188,15 @@ export function appendClip(
   const window = { sourceIn: 0, sourceOut: Math.max(clip.durationSeconds, MIN_ITEM_SECONDS) }
 
   const at = Math.max(0, start)
+  const linkId = clip.hasAudio ? nextId('link') : undefined
+
   return {
-    video: [...timeline.video, { id: nextId('v'), path: clip.path, start: at, ...window }],
+    video: [
+      ...timeline.video,
+      { id: nextId('v'), path: clip.path, start: at, linkId, ...window },
+    ],
     audio: clip.hasAudio
-      ? [...timeline.audio, { id: nextId('a'), path: clip.path, start: at, ...window }]
+      ? [...timeline.audio, { id: nextId('a'), path: clip.path, start: at, linkId, ...window }]
       : timeline.audio,
   }
 }
@@ -115,6 +215,15 @@ export function splitAt(
 ): Timeline {
   const next: Timeline = { video: [...timeline.video], audio: [...timeline.audio] }
 
+  /*
+   * One new link per group, shared by every right-hand half.
+   *
+   * The lanes are cut in separate passes, so without this the picture's second
+   * half and its sound's second half would each invent their own link and the
+   * pair would come apart at every cut.
+   */
+  const rightLinks = new Map<string, string>()
+
   for (const lane of lanes) {
     next[lane] = next[lane].flatMap((item) => {
       const offset = time - item.start
@@ -123,15 +232,30 @@ export function splitAt(
         return [item]
       }
 
+      let rightLink = item.linkId
+      if (item.linkId) {
+        rightLink = rightLinks.get(item.linkId) ?? nextId('link')
+        rightLinks.set(item.linkId, rightLink)
+      }
+
       const cut = item.sourceIn + offset
       return [
         { ...item, sourceOut: cut },
-        { ...item, id: nextId(lane[0] ?? 'i'), start: time, sourceIn: cut },
+        { ...item, id: nextId(lane[0] ?? 'i'), start: time, sourceIn: cut, linkId: rightLink },
       ]
     })
   }
 
   return next
+}
+
+/** Set one clip's loudness, clamped to what the encoder can be asked for */
+export function setItemGain(timeline: Timeline, lane: LaneId, id: string, gain: number): Timeline {
+  const clamped = Math.min(Math.max(gain, 0), MAX_GAIN)
+  return {
+    ...timeline,
+    [lane]: timeline[lane].map((item) => (item.id === id ? { ...item, gain: clamped } : item)),
+  }
 }
 
 export function removeItem(timeline: Timeline, lane: LaneId, id: string): Timeline {
@@ -144,18 +268,28 @@ export function removeItem(timeline: Timeline, lane: LaneId, id: string): Timeli
  * Clamped at zero: the output timeline starts there, and an item dragged past
  * the left edge would export as though its head had been trimmed.
  */
-export function moveItem(
-  timeline: Timeline,
-  lane: LaneId,
-  id: string,
-  start: number,
-): Timeline {
-  return {
-    ...timeline,
-    [lane]: timeline[lane].map((item) =>
-      item.id === id ? { ...item, start: Math.max(0, start) } : item,
-    ),
-  }
+export function moveItem(timeline: Timeline, lane: LaneId, id: string, start: number): Timeline {
+  const moved = timeline[lane].find((item) => item.id === id)
+  if (!moved) return timeline
+
+  /*
+   * Linked clips move by the same amount, not to the same place: they may have
+   * been offset on purpose, and snapping them together on the first drag would
+   * throw that away. The clamp is applied to the group, so the one at the front
+   * stops the rest at zero rather than everything piling up on it.
+   */
+  const group = linkedWith(timeline, lane, id)
+  const earliest = Math.min(...group.map((entry) => entry.item.start))
+  const delta = Math.max(start, 0) - moved.start
+  const shift = Math.max(delta, -earliest)
+
+  const ids = new Set(group.map((entry) => entry.item.id))
+  const apply = (items: TimelineItem[]): TimelineItem[] =>
+    items.map((item) =>
+      ids.has(item.id) ? { ...item, start: Math.max(0, item.start + shift) } : item,
+    )
+
+  return { video: apply(timeline.video), audio: apply(timeline.audio) }
 }
 
 /**

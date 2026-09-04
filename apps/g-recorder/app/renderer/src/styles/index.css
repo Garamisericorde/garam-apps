@@ -1838,3 +1838,63 @@ kbd {
 .settings-section {
   scroll-margin-top: 52px;
 }
+
+/* ── Clip loudness and links ─────────────────────────────────────────────── */
+
+/*
+ * The loudness line, dragged vertically.
+ *
+ * Its own band rather than the whole clip body: the body is already the
+ * horizontal drag that moves the clip, and one surface cannot mean both.
+ */
+.clip-gain {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  height: 9px;
+  margin-bottom: -4px;
+  cursor: ns-resize;
+  z-index: 2;
+}
+
+.clip-gain::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 4px;
+  height: 1px;
+  background: var(--text);
+  opacity: 0.75;
+}
+
+.clip:hover .clip-gain::before,
+.clip.is-selected .clip-gain::before {
+  opacity: 1;
+  box-shadow: 0 0 4px rgb(0 0 0 / 0.8);
+}
+
+.clip-gain-value {
+  position: absolute;
+  right: 4px;
+  bottom: 8px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgb(0 0 0 / 0.65);
+  color: var(--text);
+  font-size: 10px;
+  pointer-events: none;
+}
+
+/* A clip that moves with another. A mark, not a control. */
+.clip-link {
+  position: absolute;
+  top: 3px;
+  left: 5px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.7);
+  pointer-events: none;
+}

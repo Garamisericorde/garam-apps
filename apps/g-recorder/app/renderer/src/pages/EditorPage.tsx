@@ -8,8 +8,11 @@ import {
   itemAt,
   itemDuration,
   itemEnd,
+  linkItems,
   moveItem,
   removeItem,
+  setItemGain,
+  unlinkItem,
   sortLane,
   sourceTimeAt,
   splitAt,
@@ -405,6 +408,28 @@ export default function EditorPage(): JSX.Element {
     [edit, sources],
   )
 
+  const handleGain = useCallback(
+    (lane: LaneId, id: string, gain: number) => {
+      // Part of the drag that began it, so the whole slide is one undo.
+      apply((previous) => setItemGain(previous, lane, id, gain))
+    },
+    [apply],
+  )
+
+  const handleUnlink = useCallback(
+    (lane: LaneId, id: string) => {
+      edit((previous) => unlinkItem(previous, lane, id))
+    },
+    [edit],
+  )
+
+  const handleLink = useCallback(
+    (a: Selection, b: Selection) => {
+      edit((previous) => linkItems(previous, a, b))
+    },
+    [edit],
+  )
+
   const handleRemove = useCallback(
     (lane: LaneId, id: string) => {
       edit((previous) => removeItem(previous, lane, id))
@@ -656,6 +681,7 @@ export default function EditorPage(): JSX.Element {
         start: item.start,
         sourceIn: item.sourceIn,
         sourceOut: item.sourceOut,
+        gain: item.gain,
       }))
 
     return { sources: paths, video: toItems(timeline.video), audio: toItems(timeline.audio), duration }
@@ -798,6 +824,9 @@ export default function EditorPage(): JSX.Element {
             onMove={handleMove}
             onEditBegin={beginEdit}
             onRemove={handleRemove}
+            onGain={handleGain}
+            onUnlink={handleUnlink}
+            onLink={handleLink}
             onSplit={(lane, both) => handleSplit(playhead, both ? undefined : [lane])}
             onViewChange={setView}
           />

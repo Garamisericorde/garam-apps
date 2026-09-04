@@ -111,6 +111,8 @@ export interface ExportTimelineItem {
   start: number
   sourceIn: number
   sourceOut: number
+  /** This clip's own loudness, 1 or absent being the source untouched */
+  gain?: number
 }
 
 /**

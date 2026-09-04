@@ -598,6 +598,23 @@ describe('buildTimelineExportArgs across several sources', () => {
     expect(graph).not.toContain('fps=30')
   })
 
+  it('applies each clip its own gain, before the branches are joined', () => {
+    // After the concat there is one stream and no way to tell the clips apart
+    // again, so a per-clip level has to be set on its own branch.
+    const args = buildTimelineExportArgs({
+      ...twoClips,
+      audio: [
+        { input: 0, start: 0, sourceIn: 1, sourceOut: 4, gain: 1.5 },
+        { input: 1, start: 3, sourceIn: 0, sourceOut: 2 },
+      ],
+    })
+    const graph = args[args.indexOf('-filter_complex') + 1]
+
+    expect(graph).toContain('volume=1.500')
+    // The untouched clip gets no filter at all rather than volume=1.
+    expect(graph.match(/volume=/g)).toHaveLength(1)
+  })
+
   it('drops the audio graph entirely when the lane is empty', () => {
     const args = buildTimelineExportArgs({ ...twoClips, audio: [] })
     expect(args).toContain('-an')

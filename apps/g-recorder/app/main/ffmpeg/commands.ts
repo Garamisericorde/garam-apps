@@ -473,6 +473,8 @@ export interface TimelineExportItem {
   start: number
   sourceIn: number
   sourceOut: number
+  /** This clip's own loudness, 1 or absent being the source untouched */
+  gain?: number
 }
 
 export interface TimelineExportOptions extends Omit<ClipExportOptions, 'ranges'> {
@@ -551,8 +553,13 @@ export function buildTimelineExportArgs(options: TimelineExportOptions): string[
       }
 
       const label = `a${audioLabels.length}`
+      // Per-clip gain, applied before the branches are joined: after the concat
+      // there is only one stream and no way to tell the clips apart again.
+      const gain = item.gain ?? 1
+      const gainFilter = Math.abs(gain - 1) > 0.001 ? `volume=${gain.toFixed(3)},` : ''
       parts.push(
         `[${item.input}:a]atrim=start=${item.sourceIn.toFixed(3)}:end=${item.sourceOut.toFixed(3)},` +
+          gainFilter +
           // Same agreement on the audio side: a mono track next to a stereo one
           // stops the concat, and a game capture beside a phone clip is exactly
           // that pair.
