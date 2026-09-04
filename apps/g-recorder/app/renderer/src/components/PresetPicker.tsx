@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ASPECT_OPTIONS,
   DEFAULT_PRESET_ID,
@@ -18,6 +18,22 @@ interface PresetPickerProps {
   ranges?: { start: number; end: number }[]
   hasAudio: boolean
   disabled?: boolean
+  /**
+   * Reports the export action so it can be driven from elsewhere.
+   *
+   * Export belongs at the top of the page with the other things you do to a
+   * clip, not buried under the settings that shape it — but the settings are
+   * what the action needs, so the state stays here and only the handle travels.
+   */
+  onControlChange?: (control: ExportControl) => void
+}
+
+export interface ExportControl {
+  canExport: boolean
+  isExporting: boolean
+  percent: number
+  run: () => void
+  cancel: () => void
 }
 
 type ExportState = 'idle' | 'exporting' | 'done' | 'error'
@@ -35,6 +51,7 @@ export default function PresetPicker({
   ranges,
   hasAudio,
   disabled = false,
+  onControlChange,
 }: PresetPickerProps): JSX.Element {
   const [presetId, setPresetId] = useState(DEFAULT_PRESET_ID)
   const [format, setFormat] = useState<ExportFormat>('mp4')
@@ -48,6 +65,8 @@ export default function PresetPicker({
   const [result, setResult] = useState<string | null>(null)
 
   const unsubscribeRef = useRef<(() => void) | null>(null)
+  /** Last control reported upward, so an unchanged one is not re-sent */
+  const controlRef = useRef<string>('')
 
   useEffect(() => {
     return () => unsubscribeRef.current?.()
@@ -63,7 +82,7 @@ export default function PresetPicker({
   const isExporting = state === 'exporting'
   const canExport = !disabled && !!clipPath && sourceDuration > 0 && !isExporting
 
-  async function handleExport(): Promise<void> {
+  const handleExport = useCallback(async (): Promise<void> => {
     if (!clipPath) return
 
     setState('exporting')
@@ -103,7 +122,29 @@ export default function PresetPicker({
       unsubscribeRef.current?.()
       unsubscribeRef.current = null
     }
-  }
+  }, [aspect, clipPath, format, hasAudio, inPoint, outPoint, presetId, ranges, speed, targetSizeMb, volume])
+
+  /*
+   * Reported only when something the caller can see actually changed.
+   *
+   * The caller renders a button from this and feeds its own state back down as
+   * props — publishing a fresh object on every render would put the two in a
+   * loop that no amount of memoising on their side reliably prevents.
+   */
+  const percent = progress?.percent ?? 0
+  useEffect(() => {
+    const signature = `${canExport}|${isExporting}|${percent.toFixed(0)}`
+    if (signature === controlRef.current) return
+    controlRef.current = signature
+
+    onControlChange?.({
+      canExport,
+      isExporting,
+      percent,
+      run: () => void handleExport(),
+      cancel: () => void window.api.export.cancel(),
+    })
+  }, [canExport, handleExport, isExporting, onControlChange, percent])
 
   return (
     <div className="card stack" style={{ gap: 14 }}>
@@ -226,18 +267,8 @@ export default function PresetPicker({
         )}
       </div>
 
-      {/* ── Action row ── */}
+      {/* ── Outcome row. The Export button itself lives in the page header. ── */}
       <div className="row" style={{ gap: 10 }}>
-        <button className="btn btn-primary" onClick={() => void handleExport()} disabled={!canExport}>
-          {isExporting ? `Exporting ${(progress?.percent ?? 0).toFixed(0)}%` : 'Export'}
-        </button>
-
-        {isExporting && (
-          <button className="btn" onClick={() => void window.api.export.cancel()}>
-            Cancel
-          </button>
-        )}
-
         {state === 'done' && result && (
           <>
             <span className="pill" style={{ color: 'var(--success)' }}>

@@ -49,7 +49,12 @@ export const EXPORT_PRESETS: ExportPreset[] = [
   },
 ]
 
-export const DEFAULT_PRESET_ID = 'balanced'
+/*
+ * High by default. These are game clips kept for their own sake, and the
+ * export runs once — the moment to save space is when a specific upload
+ * demands it, which is what the size limit is for.
+ */
+export const DEFAULT_PRESET_ID = 'high'
 
 export function getPreset(id: string): ExportPreset | undefined {
   return EXPORT_PRESETS.find((p) => p.id === id)

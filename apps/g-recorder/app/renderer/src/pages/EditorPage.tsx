@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import type { MediaInfo } from '../../../shared/types'
 import { clamp, formatBytes, formatTime } from '../../../shared/time'
@@ -7,6 +7,7 @@ import type { VideoPlayerHandle } from '../components/VideoPlayer'
 import Timeline from '../components/Timeline'
 import TrimControls from '../components/TrimControls'
 import PresetPicker from '../components/PresetPicker'
+import type { ExportControl } from '../components/PresetPicker'
 
 /** Shortest part a cut may create — below this it cannot be aimed at or seen */
 const MIN_PART_SECONDS = 0.25
@@ -38,6 +39,7 @@ export default function EditorPage(): JSX.Element {
    * discarding a part is a separate, reversible act. That keeps S free to be
    * pressed while scrubbing without destroying anything.
    */
+  const [exportControl, setExportControl] = useState<ExportControl | null>(null)
   const [cuts, setCuts] = useState<number[]>([])
   /** Parts the export should leave out, keyed by their start time */
   const [discarded, setDiscarded] = useState<number[]>([])
@@ -214,16 +216,32 @@ export default function EditorPage(): JSX.Element {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  // Parts are derived, never stored: cuts and the trim are the only state, so
-  // moving a handle cannot leave a stale part behind.
-  const bounds = [inPoint, ...cuts.filter((c) => c > inPoint && c < outPoint), outPoint]
-  const parts = bounds.slice(0, -1).map((start, index) => ({
-    start,
-    end: bounds[index + 1] ?? outPoint,
-    kept: !discarded.some((d) => Math.abs(d - start) < 0.001),
-  }))
-  const keptRanges = parts.filter((p) => p.kept).map(({ start, end }) => ({ start, end }))
+  /*
+   * Parts are derived, never stored: cuts and the trim are the only state, so
+   * moving a handle cannot leave a stale part behind.
+   *
+   * Memoised because the kept ranges are handed to the export, which reports a
+   * control back up — a fresh array on every render would make those two chase
+   * each other indefinitely.
+   */
+  const parts = useMemo(() => {
+    const bounds = [inPoint, ...cuts.filter((c) => c > inPoint && c < outPoint), outPoint]
+    return bounds.slice(0, -1).map((start, index) => ({
+      start,
+      end: bounds[index + 1] ?? outPoint,
+      kept: !discarded.some((d) => Math.abs(d - start) < 0.001),
+    }))
+  }, [cuts, discarded, inPoint, outPoint])
+
   const hasCuts = parts.length > 1
+  const keptRanges = useMemo(
+    () => (hasCuts ? parts.filter((p) => p.kept).map(({ start, end }) => ({ start, end })) : undefined),
+    [hasCuts, parts],
+  )
+  const visibleCuts = useMemo(
+    () => cuts.filter((c) => c > inPoint && c < outPoint),
+    [cuts, inPoint, outPoint],
+  )
 
   return (
     <div className="editor">
@@ -237,9 +255,29 @@ export default function EditorPage(): JSX.Element {
           )}
         </div>
 
-        <button className="btn" onClick={() => void handleOpenFile()} disabled={busy !== null}>
-          Open video…
-        </button>
+        <div className="row">
+          <button className="btn" onClick={() => void handleOpenFile()} disabled={busy !== null}>
+            Open video…
+          </button>
+
+          {/* Export sits with the other things you do to a clip, not under the
+              settings that shape it. */}
+          <button
+            className="btn btn-primary"
+            onClick={() => exportControl?.run()}
+            disabled={!exportControl?.canExport}
+          >
+            {exportControl?.isExporting
+              ? `Exporting ${exportControl.percent.toFixed(0)}%`
+              : 'Export'}
+          </button>
+
+          {exportControl?.isExporting && (
+            <button className="btn" onClick={() => exportControl.cancel()}>
+              Cancel
+            </button>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -298,7 +336,7 @@ export default function EditorPage(): JSX.Element {
         currentTime={currentTime}
         thumbnails={thumbnails}
         loadingThumbnails={loadingThumbnails}
-        cuts={cuts.filter((c) => c > inPoint && c < outPoint)}
+        cuts={visibleCuts}
         onSeek={handleSeek}
         onTrimChange={handleTrimChange}
       />
@@ -356,9 +394,10 @@ export default function EditorPage(): JSX.Element {
         clipPath={clip?.path ?? null}
         inPoint={inPoint}
         outPoint={outPoint}
-        ranges={hasCuts ? keptRanges : undefined}
+        ranges={keptRanges}
         hasAudio={clip?.info.hasAudio ?? false}
         disabled={!clip}
+        onControlChange={setExportControl}
       />
 
       {clip && (
