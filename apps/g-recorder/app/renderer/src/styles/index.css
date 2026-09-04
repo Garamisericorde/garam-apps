@@ -6,6 +6,18 @@
  */
 @import '@garam/theme/all.css';
 
+:root {
+  /*
+   * The lane badges on the left of the timeline, and the gap after them. The
+   * lanes start after both, so anything that has to line up with a lane —
+   * the transport below it, above all — has to shift by the same amount.
+   * One definition, so the two cannot drift apart.
+   */
+  --lane-badge-width: 30px;
+  --lane-gutter-gap: 8px;
+  --lane-inset: calc(var(--lane-badge-width) + var(--lane-gutter-gap));
+}
+
 /* ── App shell ───────────────────────────────────────────────────────────── */
 
 .layout {
@@ -555,6 +567,13 @@ input:focus {
   display: flex;
   align-items: center;
   gap: 6px;
+  /*
+   * Centred on the lanes, not on the row. The lanes begin after the badge
+   * gutter, so a row-centred play button sits half a gutter to the left of
+   * everything it controls. A left margin on a centred flex item moves the
+   * visible content by half of it, which is exactly the offset needed.
+   */
+  margin-left: var(--lane-inset);
 }
 
 .transport-clock {
@@ -1454,7 +1473,7 @@ kbd {
 
 .lanes {
   display: flex;
-  gap: 8px;
+  gap: var(--lane-gutter-gap);
   align-items: stretch;
 }
 
@@ -1471,7 +1490,7 @@ kbd {
 }
 
 .lane-badge {
-  width: 30px;
+  width: var(--lane-badge-width);
   height: 52px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
