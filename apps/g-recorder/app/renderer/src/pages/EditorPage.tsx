@@ -627,7 +627,6 @@ export default function EditorPage(): JSX.Element {
             onSelect={setSelected}
             onSeek={handleSeek}
             onMove={handleMove}
-            onTrim={handleTrim}
             onRemove={handleRemove}
             onSplit={(lane) => handleSplit(lane, playhead)}
             onViewChange={setView}

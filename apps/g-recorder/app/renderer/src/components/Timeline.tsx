@@ -47,16 +47,12 @@ interface TimelineProps {
   onSelect: (selection: Selection | null) => void
   onSeek: (seconds: number) => void
   onMove: (lane: LaneId, id: string, start: number) => void
-  onTrim: (lane: LaneId, id: string, edge: 'start' | 'end', seconds: number) => void
   onRemove: (lane: LaneId, id: string) => void
   onSplit: (lane: LaneId, id: string, seconds: number) => void
   onViewChange: (view: TimelineView) => void
 }
 
-type DragKind = 'body' | 'start' | 'end'
-
 interface Drag {
-  kind: DragKind
   lane: LaneId
   id: string
   /** Where inside the item the grab landed, so it does not jump to the cursor */
@@ -99,7 +95,6 @@ export default function Timeline({
   onSelect,
   onSeek,
   onMove,
-  onTrim,
   onRemove,
   onSplit,
   onViewChange,
@@ -207,19 +202,12 @@ export default function Timeline({
       const item = timeline[drag.lane].find((candidate) => candidate.id === drag.id)
       if (!item) return
 
-      if (drag.kind === 'body') {
-        const start = Math.max(0, time - drag.grab)
-        const { delta, at } = pull([start, start + itemDuration(item)], item.id)
-        setSnapAt(at)
-        onMove(drag.lane, drag.id, Math.max(0, start + delta))
-        return
-      }
-
-      const { delta, at } = pull([time], item.id)
+      const start = Math.max(0, time - drag.grab)
+      const { delta, at } = pull([start, start + itemDuration(item)], item.id)
       setSnapAt(at)
-      onTrim(drag.lane, drag.id, drag.kind === 'start' ? 'start' : 'end', time + delta)
+      onMove(drag.lane, drag.id, Math.max(0, start + delta))
     },
-    [onMove, onTrim, pull, timeline],
+    [onMove, pull, timeline],
   )
 
   /** Follow the pointer until it is released, then clean up after it */
@@ -255,7 +243,7 @@ export default function Timeline({
 
       const downX = event.clientX
       const downTime = timeFromEvent(event.clientX)
-      const drag: Drag = { kind: 'body', lane, id: item.id, grab: downTime - item.start }
+      const drag: Drag = { lane, id: item.id, grab: downTime - item.start }
       let moved = false
 
       follow(
@@ -273,19 +261,6 @@ export default function Timeline({
       )
     },
     [applyDrag, follow, onSeek, onSelect, timeFromEvent],
-  )
-
-  const pressHandle = useCallback(
-    (lane: LaneId, item: TimelineItem, edge: 'start' | 'end', event: React.PointerEvent): void => {
-      event.preventDefault()
-      event.stopPropagation()
-      onSelect({ lane, id: item.id })
-
-      const drag: Drag = { kind: edge, lane, id: item.id, grab: 0 }
-      dragRef.current = drag
-      follow((moveEvent) => applyDrag(drag, timeFromEvent(moveEvent.clientX)))
-    },
-    [applyDrag, follow, onSelect, timeFromEvent],
   )
 
   /** Scrubbing on empty track, which is also how you seek past the last clip */
@@ -399,17 +374,6 @@ export default function Timeline({
               <span className="clip-label">{baseName(item.path)}</span>
             ))}
         </div>
-
-        <div
-          className="clip-handle is-start"
-          onPointerDown={(event) => pressHandle(lane, item, 'start', event)}
-          title="Drag to trim the start"
-        />
-        <div
-          className="clip-handle is-end"
-          onPointerDown={(event) => pressHandle(lane, item, 'end', event)}
-          title="Drag to trim the end"
-        />
       </div>
     )
   }

@@ -1713,35 +1713,6 @@ kbd {
   text-overflow: ellipsis;
 }
 
-/*
- * Trim handles. Inside the clip rather than straddling its edge: a handle that
- * hung outside would overlap the neighbouring clip, and grabbing it would be a
- * coin toss between trimming one and moving the other.
- */
-.clip-handle {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 8px;
-  cursor: ew-resize;
-  background: var(--accent-gradient);
-  opacity: 0;
-  transition: opacity 0.12s;
-}
-
-.clip-handle.is-start {
-  left: 0;
-}
-
-.clip-handle.is-end {
-  right: 0;
-}
-
-.clip:hover .clip-handle,
-.clip.is-selected .clip-handle {
-  opacity: 0.9;
-}
-
 /* Where a dropped clip would land, and how much room it would take */
 .drop-ghost {
   position: absolute;
