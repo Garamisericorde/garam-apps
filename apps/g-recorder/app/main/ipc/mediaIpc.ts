@@ -10,6 +10,7 @@ import {
 } from '../ffmpeg/MediaProbe'
 import { SettingsStore } from '../settings/SettingsStore'
 import { registerClipFile } from '../protocol/clipProtocol'
+import { hide, listHidden, unhideAll } from '../settings/HiddenClips'
 import { logger } from '../logging/logger'
 
 export interface OpenedClip {
@@ -98,7 +99,8 @@ export function registerMediaIpc(getMainWindow: () => BrowserWindow | null): voi
    * hundred replays would otherwise spawn a hundred FFmpeg processes before the
    * panel could paint; posters are fetched per item, as they come into view.
    */
-  ipcMain.handle('media:library', (): LibraryItem[] => {
+  ipcMain.handle('media:library', async (): Promise<LibraryItem[]> => {
+    const hidden = await listHidden()
     const dir = SettingsStore.getInstance().get().outputPath
     const items = new Map<string, LibraryItem>()
 
@@ -120,7 +122,10 @@ export function registerMediaIpc(getMainWindow: () => BrowserWindow | null): voi
       }
     }
 
-    if (!existsSync(dir)) return [...items.values()].sort((a, b) => b.modifiedAt - a.modifiedAt)
+    if (!existsSync(dir)) {
+      for (const path of hidden) items.delete(path)
+      return [...items.values()].sort((a, b) => b.modifiedAt - a.modifiedAt)
+    }
 
     try {
       readdirSync(dir)
@@ -140,7 +145,15 @@ export function registerMediaIpc(getMainWindow: () => BrowserWindow | null): voi
       logger.warn('Could not read the clip library', String(err))
     }
 
+    for (const path of hidden) items.delete(path)
     return [...items.values()].sort((a, b) => b.modifiedAt - a.modifiedAt)
+  })
+
+  /** How many clips are hidden, so the list can offer to bring them back */
+  ipcMain.handle('media:hiddenCount', async (): Promise<number> => (await listHidden()).length)
+
+  ipcMain.handle('media:unhideAll', async (): Promise<void> => {
+    await unhideAll()
   })
 
   ipcMain.handle(
@@ -168,22 +181,16 @@ export function registerMediaIpc(getMainWindow: () => BrowserWindow | null): voi
   })
 
   /**
-   * Send a clip to the recycle bin.
+   * Take a clip out of the list, leaving the file alone.
    *
-   * Trash rather than unlink: this is the user's footage, reached from a list
-   * where the neighbouring entry is "open", and a misclick that permanently
-   * destroys a recording is not a risk worth taking to save a keystroke.
+   * This app does not delete anyone's footage. Removing a recording from a
+   * folder is something a file manager does, with the confirmation and the undo
+   * that come with it, and a video editor offering the same button beside
+   * "open" is one misclick away from destroying a recording.
    */
-  ipcMain.handle('media:delete', async (_event, filePath: string): Promise<void> => {
-    if (typeof filePath !== 'string' || !existsSync(filePath)) return
-    await shell.trashItem(filePath)
+  ipcMain.handle('media:forget', async (_event, filePath: string): Promise<void> => {
     forget(filePath)
-    logger.info('Clip moved to the recycle bin', { filePath })
-  })
-
-  /** Drop a clip from the list without touching the file */
-  ipcMain.handle('media:forget', (_event, filePath: string): void => {
-    forget(filePath)
+    await hide(filePath)
   })
 
   /** Open Explorer with the file selected */

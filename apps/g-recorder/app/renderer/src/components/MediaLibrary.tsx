@@ -36,6 +36,8 @@ export default function MediaLibrary({
 }: MediaLibraryProps): JSX.Element {
   const [items, setItems] = useState<LibraryItem[]>([])
   const [loading, setLoading] = useState(true)
+  /** Clips taken out of the list, which is the only way one can be missing */
+  const [hiddenCount, setHiddenCount] = useState(0)
   const posterRequests = useRef(new Set<string>())
   /*
    * The rows the user has picked.
@@ -60,6 +62,7 @@ export default function MediaLibrary({
           poster: previous.find((p) => p.path === item.path)?.poster,
         })),
       )
+      setHiddenCount(await window.api.media.hiddenCount())
     } finally {
       setLoading(false)
     }
@@ -190,13 +193,11 @@ export default function MediaLibrary({
           onSelect: () => void window.api.media.revealInFolder(paths[0]),
         },
         {
-          label: many ? `Remove ${count} from the list` : 'Remove from the list',
-          onSelect: forEach((path) => window.api.media.forget(path)),
-        },
-        {
+          // Deletes it from the app, never from disk. The footage is the
+          // user's; taking it out of a list is not a reason to destroy it.
           label: many ? `Delete ${count}` : 'Delete clip',
           destructive: true,
-          onSelect: forEach((path) => window.api.media.delete(path)),
+          onSelect: forEach((path) => window.api.media.forget(path)),
         },
       ]
     },
@@ -267,6 +268,16 @@ export default function MediaLibrary({
             </span>
           </button>
         ))}
+        {hiddenCount > 0 && (
+          <button
+            className="btn btn-ghost small"
+            onClick={() => void window.api.media.unhideAll().then(refresh)}
+          >
+            {/* A clip taken out of the list is otherwise gone for good, with the
+                file still sitting there and no way to reach it from here. */}
+            Show {hiddenCount} hidden clip{hiddenCount === 1 ? '' : 's'}
+          </button>
+        )}
       </div>
 
       <ContextMenu

@@ -129,10 +129,10 @@ export const api = {
     revealInFolder: (filePath: string): Promise<void> =>
       ipcRenderer.invoke('media:revealInFolder', filePath),
 
-    /** Move a clip to the recycle bin — recoverable, never a hard delete */
-    delete: (filePath: string): Promise<void> => ipcRenderer.invoke('media:delete', filePath),
-    /** Drop a clip from the list without touching the file */
+    /** Take a clip out of the list. The file itself is never touched. */
     forget: (filePath: string): Promise<void> => ipcRenderer.invoke('media:forget', filePath),
+    hiddenCount: (): Promise<number> => ipcRenderer.invoke('media:hiddenCount'),
+    unhideAll: (): Promise<void> => ipcRenderer.invoke('media:unhideAll'),
 
     /**
      * Resolve the absolute path of a dropped File. Reading `File.path`
