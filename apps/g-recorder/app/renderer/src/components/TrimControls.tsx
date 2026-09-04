@@ -8,15 +8,15 @@ const SKIP_SECONDS = 5
 interface TrimControlsProps {
   duration: number
   currentTime: number
-  inPoint: number
-  outPoint: number
   isPlaying: boolean
   disabled: boolean
+  /** Whether a clip is selected, which is what split and remove act on */
+  canRemove: boolean
   onTogglePlay: () => void
-  onSetIn: () => void
-  onSetOut: () => void
-  onReset: () => void
-  onNudge: (deltaSeconds: number) => void
+  onSplit: () => void
+  onRemove: () => void
+  onClear: () => void
+  onSeek: (seconds: number) => void
   onToggleFullscreen: () => void
   /* The timeline's zoom rides here rather than in a row of its own: it is
      three small controls, and a whole row of window height for them costs more
@@ -34,24 +34,20 @@ interface TrimControlsProps {
 export default function TrimControls({
   duration,
   currentTime,
-  inPoint,
-  outPoint,
   isPlaying,
   disabled,
+  canRemove,
   onTogglePlay,
-  onSetIn,
-  onSetOut,
-  onReset,
-  onNudge,
+  onSplit,
+  onRemove,
+  onClear,
+  onSeek,
   onToggleFullscreen,
   view,
   onViewChange,
   snap,
   onSnapChange,
 }: TrimControlsProps): JSX.Element {
-  const selection = Math.max(outPoint - inPoint, 0)
-  const trimmed = inPoint > 0.001 || outPoint < duration - 0.001
-
   return (
     <div className="transport">
       {/*
@@ -79,7 +75,7 @@ export default function TrimControls({
       <div className="transport-main">
         <button
           className="transport-btn"
-          onClick={() => onNudge(-currentTime)}
+          onClick={() => onSeek(0)}
           disabled={disabled}
           title="Back to the start (Home)"
         >
@@ -91,7 +87,7 @@ export default function TrimControls({
 
         <button
           className="transport-btn"
-          onClick={() => onNudge(-SKIP_SECONDS)}
+          onClick={() => onSeek(currentTime - SKIP_SECONDS)}
           disabled={disabled}
           title={`Back ${SKIP_SECONDS} seconds`}
         >
@@ -122,7 +118,7 @@ export default function TrimControls({
 
         <button
           className="transport-btn"
-          onClick={() => onNudge(SKIP_SECONDS)}
+          onClick={() => onSeek(currentTime + SKIP_SECONDS)}
           disabled={disabled}
           title={`Forward ${SKIP_SECONDS} seconds`}
         >
@@ -135,7 +131,7 @@ export default function TrimControls({
 
         <button
           className="transport-btn"
-          onClick={() => onNudge(duration - currentTime)}
+          onClick={() => onSeek(duration)}
           disabled={disabled}
           title="Jump to the end (End)"
         >
@@ -158,32 +154,30 @@ export default function TrimControls({
           </svg>
         </button>
 
-        <button className="btn" onClick={onSetIn} disabled={disabled} title="Cut the start here (I)">
-          Cut start
+        <button
+          className="btn"
+          onClick={onSplit}
+          disabled={disabled}
+          title="Cut the selected lane at the playhead (S)"
+        >
+          Split
         </button>
-        <button className="btn" onClick={onSetOut} disabled={disabled} title="Cut the end here (O)">
-          Cut end
+        <button
+          className="btn"
+          onClick={onRemove}
+          disabled={disabled || !canRemove}
+          title="Remove the selected clip (Delete)"
+        >
+          Remove
         </button>
-
-        {/*
-         * One readout, not two. The range and the selection length used to sit
-         * side by side, and on an untrimmed clip they print the same number.
-         */}
-        {trimmed ? (
-          <span className="pill pill-accent" title={`${formatTime(inPoint)} → ${formatTime(outPoint)}`}>
-            {formatTime(selection)} selected
-          </span>
-        ) : (
-          <span className="small faint">Whole clip</span>
-        )}
 
         <button
           className="btn btn-ghost"
-          onClick={onReset}
-          disabled={disabled || !trimmed}
-          title="Clear the cut and select the whole clip"
+          onClick={onClear}
+          disabled={disabled}
+          title="Empty the timeline"
         >
-          Reset
+          Clear
         </button>
       </div>
     </div>

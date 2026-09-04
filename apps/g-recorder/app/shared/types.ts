@@ -94,36 +94,35 @@ export type AspectId = 'source' | '16:9' | '9:16' | '1:1' | '4:5'
 
 export type ExportFormat = 'mp4' | 'gif'
 
+/** One piece of a lane: a window into a source, placed on the output timeline */
+export interface ExportTimelineItem {
+  /** Index into ExportTimeline.sources */
+  input: number
+  start: number
+  sourceIn: number
+  sourceOut: number
+}
+
+/**
+ * What the exporter renders.
+ *
+ * The whole timeline, not a clip plus trim points: with several clips on two
+ * independent lanes there is no single in and out to name, and describing it
+ * any other way would mean the editor and the exporter each deciding what the
+ * gaps between clips mean.
+ */
+export interface ExportTimeline {
+  /** Distinct source files, in the order they are passed as inputs */
+  sources: string[]
+  video: ExportTimelineItem[]
+  audio: ExportTimelineItem[]
+  /** Length of the output — the furthest edge on either lane */
+  duration: number
+}
+
 export interface ExportOptions {
   presetId: string
-  /** Absolute path to the source clip to trim + transcode */
-  clipPath: string
-  inPoint: number
-  outPoint: number
-  /**
-   * Pieces to keep when the clip has been cut into parts, in order.
-   *
-   * Omitted or a single entry means an ordinary trim. inPoint/outPoint always
-   * describe the outer bounds, so size estimates and the fast seek path keep
-   * working without knowing about parts.
-   */
-  ranges?: { start: number; end: number }[]
-  /**
-   * The audio lane's own window, when it has been trimmed away from the video.
-   *
-   * Absent means the audio follows the video, which is the ordinary case and
-   * takes the fast single-pass path. Present and different means the two lanes
-   * are edited apart, and the export has to place them independently.
-   */
-  audio?: {
-    inPoint: number
-    outPoint: number
-    /**
-     * Where the audio sits against the picture, in seconds. Positive means it
-     * plays later than the video; negative, earlier.
-     */
-    offsetSeconds: number
-  }
+  timeline: ExportTimeline
   /** Absolute output path; empty string = auto-generate in settings.outputPath */
   outputPath: string
   /** Playback speed multiplier (1 = normal) */

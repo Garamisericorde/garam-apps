@@ -12,18 +12,14 @@ import type {
   ExportFormat,
   ExportOptions,
   ExportProgress,
+  ExportTimeline,
   UserExportPreset,
 } from '../../../shared/types'
 import { formatBytes, formatDuration } from '../../../shared/time'
 
 interface PresetPickerProps {
-  clipPath: string | null
-  inPoint: number
-  outPoint: number
-  /** Kept pieces when the clip has been cut; undefined for a plain trim */
-  ranges?: { start: number; end: number }[]
-  /** The audio lane's window, when it has been trimmed away from the video */
-  audio?: { inPoint: number; outPoint: number; offsetSeconds: number }
+  /** The whole timeline, which is what gets rendered */
+  timeline: ExportTimeline
   hasAudio: boolean
   disabled?: boolean
   /**
@@ -56,11 +52,7 @@ type ExportState = 'idle' | 'exporting' | 'done' | 'error'
  * size — so the whole thing stays readable without opening a dialog.
  */
 export default function PresetPicker({
-  clipPath,
-  inPoint,
-  outPoint,
-  ranges,
-  audio,
+  timeline,
   hasAudio,
   disabled = false,
   onControlChange,
@@ -87,17 +79,13 @@ export default function PresetPicker({
   }, [])
 
   const preset = getPreset(presetId)
-  // With parts, the footage kept is the sum of the pieces, not the span they
-  // sit in — the size estimate and the progress bar both read from this.
-  const sourceDuration = ranges?.length
-    ? ranges.reduce((total, r) => total + Math.max(r.end - r.start, 0), 0)
-    : Math.max(outPoint - inPoint, 0)
+  const sourceDuration = timeline.duration
   const outputDuration = sourceDuration / speed
   const isExporting = state === 'exporting'
-  const canExport = !disabled && !!clipPath && sourceDuration > 0 && !isExporting
+  const canExport = !disabled && sourceDuration > 0 && !isExporting
 
   const handleExport = useCallback(async (): Promise<void> => {
-    if (!clipPath) return
+    if (timeline.sources.length === 0) return
 
     setState('exporting')
     setResult(null)
@@ -108,11 +96,7 @@ export default function PresetPicker({
 
     const options: ExportOptions = {
       presetId,
-      clipPath,
-      inPoint,
-      outPoint,
-      ranges,
-      audio,
+      timeline,
       outputPath: '', // the main process names the file
       speed,
       volume: hasAudio ? volume : 0,
@@ -137,20 +121,7 @@ export default function PresetPicker({
       unsubscribeRef.current?.()
       unsubscribeRef.current = null
     }
-  }, [
-    aspect,
-    audio,
-    clipPath,
-    format,
-    hasAudio,
-    inPoint,
-    outPoint,
-    presetId,
-    ranges,
-    speed,
-    targetSizeMb,
-    volume,
-  ])
+  }, [aspect, format, hasAudio, presetId, speed, targetSizeMb, timeline, volume])
 
   /*
    * Reported only when something the caller can see actually changed.

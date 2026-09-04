@@ -1,46 +1,67 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { clamp } from '../../../shared/time'
+import {
+  itemDuration,
+  itemEnd,
+  timelineDuration,
+  type LaneId,
+  type Timeline as TimelineModel,
+  type TimelineItem,
+} from '../../../shared/timeline'
 import ContextMenu from './ContextMenu'
 import type { MenuPosition } from './ContextMenu'
 import { MAX_ZOOM, MIN_ZOOM, TAIL_FACTOR } from './timelineView'
 import type { TimelineView } from './timelineView'
 
-interface TimelineProps {
-  duration: number
-  inPoint: number
-  outPoint: number
-  currentTime: number
-  /** Split points, in seconds, that carve the clip into parts */
-  cuts: number[]
+/** What a source file looks like on the lanes, once it has been examined */
+export interface SourceAssets {
   thumbnails: string[]
-  loadingThumbnails: boolean
-  /** Peak levels across the clip's audio; empty when it has none */
   waveform: number[]
-  /** The audio lane's own window, which can be trimmed away from the video */
-  audioIn: number
-  audioOut: number
-  selectedLane: Lane
-  onSelectLane: (lane: Lane) => void
-  onAudioTrimChange: (inPoint: number, outPoint: number) => void
-  /** Drop a lane's content: the audio is silenced, the video cleared */
-  onRemoveLane: (lane: Lane) => void
-  onResetLane: (lane: Lane) => void
-  /** Where each lane's source zero sits on the timeline, in seconds */
-  videoStart: number
-  audioStart: number
-  /** Slide a whole lane along the timeline */
-  onLaneMove: (lane: Lane, start: number) => void
+  durationSeconds: number
+}
+
+export interface Selection {
+  lane: LaneId
+  id: string
+}
+
+/** A clip on its way in, drawn where it would land */
+export interface PendingDrop {
+  start: number
+  durationSeconds: number | null
+}
+
+interface TimelineProps {
+  timeline: TimelineModel
+  /** Thumbnails and waveforms, by source path */
+  assets: Record<string, SourceAssets>
+  /** Playhead, in timeline seconds */
+  currentTime: number
+  selected: Selection | null
+  loadingThumbnails: boolean
   /** Whether edges pull into line with each other while dragging */
   snap: boolean
-  onSeek: (seconds: number) => void
-  onTrimChange: (inPoint: number, outPoint: number) => void
-  /* The view is held above this: the transport bar's zoom controls change the
-     same window the wheel does, so neither can own it. */
   view: TimelineView
+  drop: PendingDrop | null
+
+  onSelect: (selection: Selection | null) => void
+  onSeek: (seconds: number) => void
+  onMove: (lane: LaneId, id: string, start: number) => void
+  onTrim: (lane: LaneId, id: string, edge: 'start' | 'end', seconds: number) => void
+  onRemove: (lane: LaneId, id: string) => void
+  onSplit: (lane: LaneId, id: string, seconds: number) => void
   onViewChange: (view: TimelineView) => void
 }
 
-type DragTarget = 'in' | 'out' | 'audio-in' | 'audio-out' | 'playhead' | 'video-body' | 'audio-body'
+type DragKind = 'body' | 'start' | 'end'
+
+interface Drag {
+  kind: DragKind
+  lane: LaneId
+  id: string
+  /** Where inside the item the grab landed, so it does not jump to the cursor */
+  grab: number
+}
 
 /**
  * How close two edges must come before one snaps to the other, in pixels.
@@ -54,70 +75,55 @@ const SNAP_PX = 8
  * How far the pointer must travel before a press on a clip becomes a move.
  *
  * Below it the press is a click, and a click on a clip means "play from here"
- * — the thing you do far more often than rearranging. Without a threshold
- * every attempt to seek nudges the clip a few milliseconds instead.
+ * — the thing you do far more often than rearranging.
  */
 const DRAG_THRESHOLD_PX = 4
-export type Lane = 'video' | 'audio'
-
-/** Smallest selection the user can drag down to */
-const MIN_SELECTION_SECONDS = 0.1
 
 /**
- * Scrubbing strip with draggable IN/OUT handles and a zoom.
+ * The editor's two lanes.
  *
- * Zooming exists because the strip is the only place a cut can be placed by
- * hand, and at whole-clip scale a five-minute replay puts about two seconds
- * under every pixel — fine enough to see, far too coarse to aim at. Zoom is a
- * pure view transform: it changes which slice of the clip the strip spans, and
- * nothing about the clip itself.
+ * Each lane holds its own list of clips, separate from the moment one is added
+ * — no "detach audio" step. That is what lets a cut land on one lane without
+ * touching the other, and what makes a split produce two clips rather than one
+ * clip with a line drawn on it.
  */
 export default function Timeline({
-  duration,
-  inPoint,
-  outPoint,
+  timeline,
+  assets,
   currentTime,
-  cuts,
-  thumbnails,
+  selected,
   loadingThumbnails,
-  waveform,
-  audioIn,
-  audioOut,
-  selectedLane,
-  onSelectLane,
-  videoStart,
-  audioStart,
-  onLaneMove,
   snap,
-  onAudioTrimChange,
-  onRemoveLane,
-  onResetLane,
-  onSeek,
-  onTrimChange,
   view,
+  drop,
+  onSelect,
+  onSeek,
+  onMove,
+  onTrim,
+  onRemove,
+  onSplit,
   onViewChange,
 }: TimelineProps): JSX.Element {
   const trackRef = useRef<HTMLDivElement>(null)
-  const dragRef = useRef<DragTarget | null>(null)
+  const dragRef = useRef<Drag | null>(null)
 
-  const [menu, setMenu] = useState<{ at: MenuPosition; lane: Lane } | null>(null)
-  const { zoom, offset } = view
-
-  /** Where the grab landed inside the clip, so it does not jump to the cursor */
-  const grabRef = useRef(0)
-  /** The edge a move has snapped to, drawn while it holds */
+  const [menu, setMenu] = useState<{ at: MenuPosition; target: Selection } | null>(null)
+  /** The edge a moving clip has locked onto, drawn while it holds */
   const [snapAt, setSnapAt] = useState<number | null>(null)
 
+  const { zoom, offset } = view
+  const duration = timelineDuration(timeline)
+
   /*
-   * Track, view and clip are three different lengths. Keeping them apart is
+   * Track, view and content are three different lengths. Keeping them apart is
    * what lets the wheel pull back into empty track instead of stopping dead at
-   * the last frame.
+   * the last frame, and what leaves room to drop a clip after the end.
    */
-  const span = duration > 0 ? duration * TAIL_FACTOR : 1
+  const span = duration > 0 ? duration * TAIL_FACTOR : 30
   const visible = span / zoom
   const maxOffset = Math.max(span - visible, 0)
 
-  // A shorter clip, or a zoom-out, can leave the window hanging past the end.
+  // A shorter timeline, or a zoom-out, can leave the window hanging past the end.
   useEffect(() => {
     const clamped = clamp(offset, 0, maxOffset)
     if (clamped !== offset) onViewChange({ zoom, offset: clamped })
@@ -130,192 +136,166 @@ export default function Timeline({
     onViewChange({ zoom, offset: clamp(currentTime - visible / 2, 0, maxOffset) })
   }, [currentTime, zoom, duration, offset, visible, maxOffset, onViewChange])
 
+  /** Fraction of the visible window a time sits at */
+  const position = useCallback(
+    (seconds: number): number => ((seconds - offset) / visible) * 100,
+    [offset, visible],
+  )
+
+  const timeFromEvent = useCallback(
+    (clientX: number): number => {
+      const element = trackRef.current
+      if (!element) return 0
+      const rect = element.getBoundingClientRect()
+      return offset + ((clientX - rect.left) / rect.width) * visible
+    },
+    [offset, visible],
+  )
+
   /** Seconds in one pixel of track, for distances that are really gestures */
   const secondsPerPixel = useCallback((): number => {
     const width = trackRef.current?.getBoundingClientRect().width ?? 0
     return width > 0 ? visible / width : 0
   }, [visible])
 
-  const timeFromEvent = useCallback(
-    (clientX: number): number => {
-      const track = trackRef.current
-      if (!track || duration <= 0) return 0
-
-      const rect = track.getBoundingClientRect()
-      const fraction = clamp((clientX - rect.left) / rect.width, 0, 1)
-      return offset + fraction * visible
+  /**
+   * Every edge a dragged clip is allowed to land on.
+   *
+   * Both lanes, not only its own: lining audio up with a picture edge is the
+   * whole reason snapping exists here. The clip being dragged is left out, or
+   * it would snap to where it already is.
+   */
+  const snapTargets = useCallback(
+    (exclude: string): number[] => {
+      const edges: number[] = [0, currentTime]
+      for (const lane of ['video', 'audio'] as LaneId[]) {
+        for (const item of timeline[lane]) {
+          if (item.id === exclude) continue
+          edges.push(item.start, itemEnd(item))
+        }
+      }
+      return edges
     },
-    [duration, offset, visible],
+    [currentTime, timeline],
   )
 
-  /**
-   * Pull a moving lane into line with the other one.
-   *
-   * Both edges are candidates against both of the other lane's edges, and
-   * against the timeline's own zero — the three places an edge is ever meant
-   * to land. The smallest pull inside the threshold wins, so a clip dropped
-   * near a boundary sits exactly on it rather than a frame off.
-   */
-  const snapStart = useCallback(
-    (lane: Lane, start: number): { start: number; at: number | null } => {
-      if (!snap) return { start, at: null }
+  /** Pull a value onto the nearest edge, when one is close enough */
+  const pull = useCallback(
+    (values: number[], exclude: string): { delta: number; at: number | null } => {
+      if (!snap) return { delta: 0, at: null }
 
       const tolerance = SNAP_PX * secondsPerPixel()
-      if (tolerance <= 0) return { start, at: null }
+      if (tolerance <= 0) return { delta: 0, at: null }
 
-      const [from, to] =
-        lane === 'video' ? [inPoint, outPoint] : [audioIn, audioOut]
-      const other =
-        lane === 'video'
-          ? [audioStart + audioIn, audioStart + audioOut]
-          : [videoStart + inPoint, videoStart + outPoint]
-
-      let best: { start: number; at: number } | null = null
-      for (const edge of [start + from, start + to]) {
-        for (const candidate of [...other, 0]) {
-          const delta = candidate - edge
+      let best: { delta: number; at: number } | null = null
+      for (const value of values) {
+        for (const candidate of snapTargets(exclude)) {
+          const delta = candidate - value
           if (Math.abs(delta) > tolerance) continue
-          if (best && Math.abs(delta) >= Math.abs(best.start - start)) continue
-          best = { start: start + delta, at: candidate }
+          if (best && Math.abs(delta) >= Math.abs(best.delta)) continue
+          best = { delta, at: candidate }
         }
       }
 
-      return best ?? { start, at: null }
+      return best ?? { delta: 0, at: null }
     },
-    [audioIn, audioOut, audioStart, inPoint, outPoint, secondsPerPixel, snap, videoStart],
+    [secondsPerPixel, snap, snapTargets],
   )
 
   const applyDrag = useCallback(
-    (target: DragTarget, time: number) => {
-      if (target === 'playhead') {
-        onSeek(clamp(time - videoStart, inPoint, outPoint))
+    (drag: Drag, time: number): void => {
+      const item = timeline[drag.lane].find((candidate) => candidate.id === drag.id)
+      if (!item) return
+
+      if (drag.kind === 'body') {
+        const start = Math.max(0, time - drag.grab)
+        const { delta, at } = pull([start, start + itemDuration(item)], item.id)
+        setSnapAt(at)
+        onMove(drag.lane, drag.id, Math.max(0, start + delta))
         return
       }
 
-      if (target === 'video-body' || target === 'audio-body') {
-        const lane: Lane = target === 'video-body' ? 'video' : 'audio'
-        const snapped = snapStart(lane, time - grabRef.current)
-        setSnapAt(snapped.at)
-        onLaneMove(lane, snapped.start)
-        return
-      }
-
-      if (target === 'in') {
-        const local = time - videoStart
-        onTrimChange(clamp(local, 0, outPoint - MIN_SELECTION_SECONDS), outPoint)
-        return
-      }
-
-      if (target === 'out') {
-        const local = time - videoStart
-        onTrimChange(inPoint, clamp(local, inPoint + MIN_SELECTION_SECONDS, duration))
-        return
-      }
-
-      if (target === 'audio-in') {
-        const local = time - audioStart
-        onAudioTrimChange(clamp(local, 0, audioOut - MIN_SELECTION_SECONDS), audioOut)
-        return
-      }
-
-      const local = time - audioStart
-      onAudioTrimChange(audioIn, clamp(local, audioIn + MIN_SELECTION_SECONDS, duration))
+      const { delta, at } = pull([time], item.id)
+      setSnapAt(at)
+      onTrim(drag.lane, drag.id, drag.kind === 'start' ? 'start' : 'end', time + delta)
     },
-    [
-      audioIn,
-      audioOut,
-      audioStart,
-      duration,
-      inPoint,
-      outPoint,
-      onAudioTrimChange,
-      onLaneMove,
-      onSeek,
-      onTrimChange,
-      snapStart,
-      videoStart,
-    ],
+    [onMove, onTrim, pull, timeline],
+  )
+
+  /** Follow the pointer until it is released, then clean up after it */
+  const follow = useCallback(
+    (onPointerMove: (event: PointerEvent) => void, onDone?: () => void): void => {
+      const handleMove = (event: PointerEvent): void => onPointerMove(event)
+      const handleUp = (): void => {
+        dragRef.current = null
+        setSnapAt(null)
+        onDone?.()
+        window.removeEventListener('pointermove', handleMove)
+        window.removeEventListener('pointerup', handleUp)
+      }
+
+      window.addEventListener('pointermove', handleMove)
+      window.addEventListener('pointerup', handleUp)
+    },
+    [],
   )
 
   /**
-   * A press on a clip body: a click seeks, a drag moves.
+   * A press on a clip: a click seeks, a drag moves.
    *
-   * Which one it was cannot be known at pointerdown, so nothing happens until
+   * Which one it is cannot be known at pointerdown, so nothing happens until
    * the pointer either travels far enough to be a drag or is released without
    * having done so.
    */
-  const beginBodyPress = useCallback(
-    (lane: Lane, event: React.PointerEvent): void => {
-      if (duration <= 0) return
-
+  const pressItem = useCallback(
+    (lane: LaneId, item: TimelineItem, event: React.PointerEvent): void => {
       event.preventDefault()
       event.stopPropagation()
+      onSelect({ lane, id: item.id })
 
-      const target: DragTarget = lane === 'video' ? 'video-body' : 'audio-body'
       const downX = event.clientX
       const downTime = timeFromEvent(event.clientX)
-      grabRef.current = downTime - (lane === 'video' ? videoStart : audioStart)
+      const drag: Drag = { kind: 'body', lane, id: item.id, grab: downTime - item.start }
       let moved = false
 
-      const handleMove = (moveEvent: PointerEvent): void => {
-        if (!moved) {
-          if (Math.abs(moveEvent.clientX - downX) < DRAG_THRESHOLD_PX) return
-          moved = true
-          dragRef.current = target
-        }
-        applyDrag(target, timeFromEvent(moveEvent.clientX))
-      }
-
-      const handleUp = (): void => {
-        if (!moved) applyDrag('playhead', downTime)
-        dragRef.current = null
-        setSnapAt(null)
-        window.removeEventListener('pointermove', handleMove)
-        window.removeEventListener('pointerup', handleUp)
-      }
-
-      window.addEventListener('pointermove', handleMove)
-      window.addEventListener('pointerup', handleUp)
+      follow(
+        (moveEvent) => {
+          if (!moved) {
+            if (Math.abs(moveEvent.clientX - downX) < DRAG_THRESHOLD_PX) return
+            moved = true
+            dragRef.current = drag
+          }
+          applyDrag(drag, timeFromEvent(moveEvent.clientX))
+        },
+        () => {
+          if (!moved) onSeek(Math.max(0, downTime))
+        },
+      )
     },
-    [applyDrag, audioStart, duration, timeFromEvent, videoStart],
+    [applyDrag, follow, onSeek, onSelect, timeFromEvent],
   )
 
-  const beginDrag = useCallback(
-    (target: DragTarget, event: React.PointerEvent): void => {
-      if (duration <= 0) return
-
+  const pressHandle = useCallback(
+    (lane: LaneId, item: TimelineItem, edge: 'start' | 'end', event: React.PointerEvent): void => {
       event.preventDefault()
       event.stopPropagation()
-      dragRef.current = target
+      onSelect({ lane, id: item.id })
 
-      /*
-       * A body drag keeps the grip where it was taken. Without this the clip
-       * jumps so its source zero lands under the cursor, which throws away the
-       * position the user was aiming from.
-       */
-      if (target === 'video-body' || target === 'audio-body') {
-        const start = target === 'video-body' ? videoStart : audioStart
-        grabRef.current = timeFromEvent(event.clientX) - start
-      }
-
-      applyDrag(target, timeFromEvent(event.clientX))
-
-      const handleMove = (moveEvent: PointerEvent): void => {
-        if (!dragRef.current) return
-        applyDrag(dragRef.current, timeFromEvent(moveEvent.clientX))
-      }
-
-      const handleUp = (): void => {
-        dragRef.current = null
-        setSnapAt(null)
-        window.removeEventListener('pointermove', handleMove)
-        window.removeEventListener('pointerup', handleUp)
-      }
-
-      window.addEventListener('pointermove', handleMove)
-      window.addEventListener('pointerup', handleUp)
+      const drag: Drag = { kind: edge, lane, id: item.id, grab: 0 }
+      dragRef.current = drag
+      follow((moveEvent) => applyDrag(drag, timeFromEvent(moveEvent.clientX)))
     },
-    [applyDrag, audioStart, duration, timeFromEvent, videoStart],
+    [applyDrag, follow, onSelect, timeFromEvent],
+  )
+
+  /** Scrubbing on empty track, which is also how you seek past the last clip */
+  const pressTrack = useCallback(
+    (event: React.PointerEvent): void => {
+      onSelect(null)
+      onSeek(Math.max(0, timeFromEvent(event.clientX)))
+      follow((moveEvent) => onSeek(Math.max(0, timeFromEvent(moveEvent.clientX))))
+    },
+    [follow, onSeek, onSelect, timeFromEvent],
   )
 
   /**
@@ -325,13 +305,12 @@ export default function Timeline({
    */
   const handleWheel = useCallback(
     (event: React.WheelEvent): void => {
-      if (duration <= 0) return
       event.preventDefault()
 
-      const track = trackRef.current
-      if (!track) return
+      const element = trackRef.current
+      if (!element) return
 
-      const rect = track.getBoundingClientRect()
+      const rect = element.getBoundingClientRect()
       const fraction = clamp((event.clientX - rect.left) / rect.width, 0, 1)
       const anchor = offset + fraction * visible
 
@@ -343,205 +322,148 @@ export default function Timeline({
         offset: clamp(anchor - fraction * nextVisible, 0, Math.max(span - nextVisible, 0)),
       })
     },
-    [duration, offset, span, visible, zoom, onViewChange],
+    [offset, span, visible, zoom, onViewChange],
   )
 
-  /** Fraction of the visible window a time sits at, or null when off-screen */
-  const position = (seconds: number): number => ((seconds - offset) / visible) * 100
-
-  const hasClip = duration > 0
-
-  /**
-   * One lane's body: what is kept, what is trimmed away, and the handles.
-   *
-   * Everything is drawn against the lane's own start, so the two lanes can sit
-   * at different places on the timeline and still each describe their own clip.
-   */
-  const laneOverlay = (lane: Lane, start: number, from: number, to: number): JSX.Element => {
-    const left = clamp(position(start + from), 0, 100)
-    const right = clamp(position(start + to), 0, 100)
-
-    return (
-      <>
-        <div
-          className="timeline-shade"
-          style={{
-            left: `${clamp(position(start), 0, 100)}%`,
-            width: `${Math.max(left - clamp(position(start), 0, 100), 0)}%`,
-          }}
-        />
-        <div
-          className="timeline-shade"
-          style={{
-            left: `${right}%`,
-            // Stops at the end of the clip: past that there is nothing to
-            // discard, and shading it would read as trimmed-away footage.
-            width: `${clamp(position(start + duration) - right, 0, 100)}%`,
-          }}
-        />
-
-        {/* The body is the grip. Dragging it slides the whole lane, which is
-            the one gesture an editor has that a trimmer does not. */}
-        <div
-          className="timeline-body"
-          style={{ left: `${left}%`, width: `${Math.max(right - left, 0)}%` }}
-          onPointerDown={(event) => {
-            onSelectLane(lane)
-            beginBodyPress(lane, event)
-          }}
-          title="Click to play from here · drag to move this clip"
-        />
-
-        {cuts.map((cut) => (
-          <div key={cut} className="timeline-cut" style={{ left: `${position(start + cut)}%` }}>
-            <span className="timeline-cut-mark" />
-          </div>
-        ))}
-
-        <div
-          className="timeline-handle"
-          style={{ left: `calc(${left}% - 7px)` }}
-          onPointerDown={(event) => beginDrag(lane === 'video' ? 'in' : 'audio-in', event)}
-          title="Drag to set the start"
-        />
-        <div
-          className="timeline-handle"
-          style={{ left: `calc(${right}% - 7px)` }}
-          onPointerDown={(event) => beginDrag(lane === 'video' ? 'out' : 'audio-out', event)}
-          title="Drag to set the end"
-        />
-      </>
-    )
-  }
-
-  const laneMenu = menu
+  const menuItems = menu
     ? [
         {
-          label: menu.lane === 'audio' ? 'Reset audio trim' : 'Reset trim',
-          onSelect: () => onResetLane(menu.lane),
+          label: 'Split at the playhead',
+          onSelect: () => onSplit(menu.target.lane, menu.target.id, currentTime),
         },
         {
-          label: menu.lane === 'audio' ? 'Remove audio' : 'Remove clip',
+          label: menu.target.lane === 'audio' ? 'Remove audio clip' : 'Remove clip',
           destructive: true,
-          onSelect: () => onRemoveLane(menu.lane),
+          onSelect: () => onRemove(menu.target.lane, menu.target.id),
         },
       ]
     : []
 
-  return (
-    <div className="timeline-wrap">
-      <ContextMenu position={menu?.at ?? null} items={laneMenu} onClose={() => setMenu(null)} />
-      {/*
-        * Two lanes, not one strip with a waveform painted into it. They carry
-        * the same seconds but are edited apart, and a lane you can select is
-        * the only way that difference is visible before it is exported.
-        */}
-      <div className="lanes" onWheel={handleWheel}>
-        <div className="lane-gutter">
-          <button
-            className={`lane-badge${selectedLane === 'video' ? ' is-selected' : ''}`}
-            onClick={() => onSelectLane('video')}
-            title="Video lane"
-          >
-            🎞
-          </button>
-          {waveform.length > 0 && (
-            <button
-              className={`lane-badge${selectedLane === 'audio' ? ' is-selected' : ''}`}
-              onClick={() => onSelectLane('audio')}
-              title="Audio lane"
-            >
-              🔊
-            </button>
-          )}
-        </div>
+  const renderItem = (lane: LaneId, item: TimelineItem): JSX.Element => {
+    const asset = assets[item.path]
+    const length = itemDuration(item)
+    const isSelected = selected?.lane === lane && selected.id === item.id
 
-        <div className="lane-stack" ref={trackRef}>
-          <div
-            className={`lane lane-video${selectedLane === 'video' ? ' is-selected' : ''}`}
-            onPointerDown={(event) => {
-              onSelectLane('video')
-              beginDrag('playhead', event)
-            }}
-            onContextMenu={(event) => {
-              event.preventDefault()
-              onSelectLane('video')
-              setMenu({ at: { x: event.clientX, y: event.clientY }, lane: 'video' })
-            }}
-          >
-            {thumbnails.length > 0 && (
+    /*
+     * The strip covers the whole source and is clipped to the item. Trimming
+     * then slides the picture behind a narrower window rather than rebuilding
+     * thumbnails, so the frames stay put under the pointer.
+     */
+    const sourceWidth = asset ? (asset.durationSeconds / Math.max(length, 0.001)) * 100 : 100
+    const sourceLeft = asset
+      ? (-item.sourceIn / Math.max(asset.durationSeconds, 0.001)) * sourceWidth
+      : 0
+
+    return (
+      <div
+        key={item.id}
+        className={`clip${isSelected ? ' is-selected' : ''}`}
+        style={{ left: `${position(item.start)}%`, width: `${(length / visible) * 100}%` }}
+        onPointerDown={(event) => pressItem(lane, item, event)}
+        onContextMenu={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          onSelect({ lane, id: item.id })
+          setMenu({ at: { x: event.clientX, y: event.clientY }, target: { lane, id: item.id } })
+        }}
+        title="Click to play from here · drag to move"
+      >
+        <div className="clip-inner">
+          {lane === 'video' &&
+            (asset && asset.thumbnails.length > 0 ? (
               <div
-                className="timeline-thumbs"
-                /* The strip covers the clip, not the whole track: zooming scales
-                   and slides it rather than re-rendering thumbnails, and the
-                   space past the end stays deliberately empty. */
-                style={{
-                  width: `${(duration / visible) * 100}%`,
-                  left: `${position(videoStart)}%`,
-                }}
+                className="clip-thumbs"
+                style={{ width: `${sourceWidth}%`, left: `${sourceLeft}%` }}
               >
-                {thumbnails.map((frame, index) => (
+                {asset.thumbnails.map((frame, index) => (
                   <img key={index} src={frame} alt="" draggable={false} />
                 ))}
               </div>
-            )}
+            ) : (
+              <span className="clip-label">
+                {loadingThumbnails ? 'Building preview…' : baseName(item.path)}
+              </span>
+            ))}
 
-            {thumbnails.length === 0 && (
-              <div className="timeline-empty">
-                {!hasClip
-                  ? 'No clip loaded'
-                  : loadingThumbnails
-                    ? 'Building preview…'
-                    : 'Drag the handles to trim'}
-              </div>
-            )}
-
-            {hasClip && laneOverlay('video', videoStart, inPoint, outPoint)}
-          </div>
-
-          {waveform.length > 0 && (
-            <div
-              className={`lane lane-audio${selectedLane === 'audio' ? ' is-selected' : ''}`}
-              onPointerDown={(event) => {
-                onSelectLane('audio')
-                beginDrag('playhead', event)
-              }}
-              onContextMenu={(event) => {
-                event.preventDefault()
-                onSelectLane('audio')
-                setMenu({ at: { x: event.clientX, y: event.clientY }, lane: 'audio' })
-              }}
-            >
+          {lane === 'audio' &&
+            (asset && asset.waveform.length > 0 ? (
               <div
-                className="timeline-audio"
-                style={{
-                  width: `${(duration / visible) * 100}%`,
-                  left: `${position(audioStart)}%`,
-                }}
+                className="clip-wave"
+                style={{ width: `${sourceWidth}%`, left: `${sourceLeft}%` }}
               >
-                {waveform.map((peak, index) => (
+                {asset.waveform.map((peak, index) => (
                   <span key={index} style={{ height: `${Math.max(peak * 100, 2)}%` }} />
                 ))}
               </div>
+            ) : (
+              <span className="clip-label">{baseName(item.path)}</span>
+            ))}
+        </div>
 
-              {hasClip && laneOverlay('audio', audioStart, audioIn, audioOut)}
-            </div>
-          )}
+        <div
+          className="clip-handle is-start"
+          onPointerDown={(event) => pressHandle(lane, item, 'start', event)}
+          title="Drag to trim the start"
+        />
+        <div
+          className="clip-handle is-end"
+          onPointerDown={(event) => pressHandle(lane, item, 'end', event)}
+          title="Drag to trim the end"
+        />
+      </div>
+    )
+  }
 
-          {/* One playhead across both, because there is one moment in time. */}
-          {hasClip && (
+  const isEmpty = timeline.video.length === 0 && timeline.audio.length === 0
+
+  return (
+    <div className="timeline-wrap">
+      <ContextMenu position={menu?.at ?? null} items={menuItems} onClose={() => setMenu(null)} />
+
+      <div className="lanes" onWheel={handleWheel}>
+        <div className="lane-gutter">
+          <span className="lane-badge" title="Video">
+            🎞
+          </span>
+          <span className="lane-badge" title="Audio">
+            🔊
+          </span>
+        </div>
+
+        <div className="lane-stack" ref={trackRef}>
+          <div className="lane lane-video" onPointerDown={pressTrack}>
+            {timeline.video.map((item) => renderItem('video', item))}
+            {isEmpty && <div className="timeline-empty">No clip loaded</div>}
+          </div>
+
+          <div className="lane lane-audio" onPointerDown={pressTrack}>
+            {timeline.audio.map((item) => renderItem('audio', item))}
+          </div>
+
+          {/* Where a dropped clip would land, and how much room it would take */}
+          {drop && (
             <div
-              className="lane-playhead"
-              style={{ left: `${position(videoStart + currentTime)}%` }}
+              className={`drop-ghost${drop.durationSeconds === null ? ' is-thin' : ''}`}
+              style={{
+                left: `${position(drop.start)}%`,
+                width:
+                  drop.durationSeconds !== null
+                    ? `${(drop.durationSeconds / visible) * 100}%`
+                    : undefined,
+              }}
             />
           )}
 
-          {/* The line a moving clip has locked onto, drawn only while it holds */}
-          {snapAt !== null && (
-            <div className="lane-snap" style={{ left: `${position(snapAt)}%` }} />
-          )}
+          {/* One playhead across both, because there is one moment in time. */}
+          <div className="lane-playhead" style={{ left: `${position(currentTime)}%` }} />
+
+          {snapAt !== null && <div className="lane-snap" style={{ left: `${position(snapAt)}%` }} />}
         </div>
       </div>
     </div>
   )
+}
+
+function baseName(path: string): string {
+  return path.split(/[\\/]/).pop() ?? path
 }

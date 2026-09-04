@@ -1,19 +1,34 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
-import type { MediaInfo } from '../../../shared/types'
-import { clamp, formatBytes, formatTime } from '../../../shared/time'
+import type { AppSettings, MediaInfo } from '../../../shared/types'
+import { formatBytes, formatTime } from '../../../shared/time'
+import {
+  appendClip,
+  EMPTY_TIMELINE,
+  itemAt,
+  itemDuration,
+  moveItem,
+  removeItem,
+  sortLane,
+  sourceTimeAt,
+  splitAt,
+  timelineDuration,
+  trimItem,
+  type LaneId,
+  type Timeline as TimelineModel,
+  type TimelineItem,
+} from '../../../shared/timeline'
 import VideoPlayer from '../components/VideoPlayer'
 import type { VideoPlayerHandle } from '../components/VideoPlayer'
 import Timeline from '../components/Timeline'
-import type { Lane } from '../components/Timeline'
+import type { PendingDrop, Selection, SourceAssets } from '../components/Timeline'
 import TrimControls from '../components/TrimControls'
-import { FIT_VIEW } from '../components/timelineView'
+import { FIT_VIEW, TAIL_FACTOR } from '../components/timelineView'
 import type { TimelineView } from '../components/timelineView'
 import PresetPicker from '../components/PresetPicker'
 import MediaLibrary from '../components/MediaLibrary'
 import type { ExportControl } from '../components/PresetPicker'
 import { DEFAULT_EDITOR_KEYS } from '../../../shared/hotkeyDefaults'
-import type { AppSettings } from '../../../shared/types'
 
 /** null is a key the user has cleared, which is not the same as unset */
 interface EditorKeys {
@@ -23,7 +38,6 @@ interface EditorKeys {
   editorKeySplit: string | null
   editorKeyFullscreen: string | null
 }
-
 
 /**
  * Whether a keypress is the configured key.
@@ -39,7 +53,7 @@ function matches(event: KeyboardEvent, configured: string | null): boolean {
 }
 
 /**
- * Bars in the waveform lane.
+ * Bars in the waveform strip.
  *
  * Roughly one per two pixels at a typical window width: fine enough that a
  * transient is visible, coarse enough that zooming in does not turn it into a
@@ -47,11 +61,8 @@ function matches(event: KeyboardEvent, configured: string | null): boolean {
  */
 const WAVEFORM_BUCKETS = 600
 
-/** Shortest part a cut may create — below this it cannot be aimed at or seen */
-const MIN_PART_SECONDS = 0.25
-
-interface LoadedClip {
-  path: string
+/** Everything known about one source file the timeline references */
+interface Source extends SourceAssets {
   url: string
   info: MediaInfo
 }
@@ -66,17 +77,25 @@ export default function EditorPage(): JSX.Element {
 
   const playerRef = useRef<VideoPlayerHandle>(null)
   const stageRef = useRef<HTMLDivElement>(null)
+  const timelineRef = useRef<HTMLDivElement>(null)
 
-  const [clip, setClip] = useState<LoadedClip | null>(null)
-  const [duration, setDuration] = useState(0)
-  const [inPoint, setInPoint] = useState(0)
-  /**
-   * Split points inside the selection, in seconds.
-   *
-   * A cut on its own removes nothing: it divides the selection into parts, and
-   * discarding a part is a separate, reversible act. That keeps S free to be
-   * pressed while scrubbing without destroying anything.
+  /*
+   * The timeline is the document. Everything else on this page either shows it
+   * or edits it — there is no second copy of "what is being edited" for the two
+   * to disagree about.
    */
+  const [timeline, setTimeline] = useState<TimelineModel>(EMPTY_TIMELINE)
+  const [sources, setSources] = useState<Record<string, Source>>({})
+  const [selected, setSelected] = useState<Selection | null>(null)
+
+  /** Playhead, in timeline seconds */
+  const [playhead, setPlayhead] = useState(0)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [loadingThumbnails, setLoadingThumbnails] = useState(false)
+
+  const [keys, setKeys] = useState<EditorKeys>(DEFAULT_EDITOR_KEYS)
+  const [snapEnabled, setSnapEnabled] = useState(true)
+
   const [exportControl, setExportControl] = useState<ExportControl | null>(null)
   const [exportOpen, setExportOpen] = useState(false)
   const [libraryOpen, setLibraryOpen] = useState(true)
@@ -89,38 +108,112 @@ export default function EditorPage(): JSX.Element {
    * came, which is what makes the button feel like a hinge rather than a state.
    */
   const [chevron, setChevron] = useState(0)
-  const [cuts, setCuts] = useState<number[]>([])
-  /** Parts the export should leave out, keyed by their start time */
-  const [discarded, setDiscarded] = useState<number[]>([])
-  const [outPoint, setOutPoint] = useState(0)
-  const [currentTime, setCurrentTime] = useState(0)
-  const [isPlaying, setIsPlaying] = useState(false)
 
-  const [thumbnails, setThumbnails] = useState<string[]>([])
-  const [waveform, setWaveform] = useState<number[]>([])
-  /*
-   * The audio lane's own window. It starts matching the video, and only parts
-   * company when the audio's handles are dragged — so the ordinary case still
-   * exports through the fast single-pass path.
+  const [busy, setBusy] = useState<'open' | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  /* How much of the timeline the strip spans. Held here because the strip's
+     wheel and the transport's buttons both move it. */
+  const [view, setView] = useState<TimelineView>(FIT_VIEW)
+  const [dragOver, setDragOver] = useState<'stage' | 'timeline' | null>(null)
+  /** Where an incoming clip would land, drawn while it is over the lanes */
+  const [pendingDrop, setPendingDrop] = useState<PendingDrop | null>(null)
+
+  const duration = timelineDuration(timeline)
+
+  // ── Sources ────────────────────────────────────────────────────────────────
+
+  /**
+   * Load a file and put it on both lanes.
+   *
+   * Added rather than replacing what is there: a library that swapped the
+   * timeline out on every click would make a second clip impossible to reach.
    */
-  const [audioIn, setAudioIn] = useState(0)
-  const [audioOut, setAudioOut] = useState(0)
-  const [selectedLane, setSelectedLane] = useState<Lane>('video')
-  /*
-   * Audio dropped from the timeline. Kept as a flag rather than by clearing the
-   * waveform: the lane has to be able to come back, and the footage still has
-   * the track — the export is simply told to leave it out.
-   */
-  const [audioRemoved, setAudioRemoved] = useState(false)
-  /*
-   * Where each lane sits on the timeline. Only the difference between them
-   * survives to the export — one clip slid along an empty timeline is the same
-   * clip — but both are tracked so the picture matches what was dragged.
-   */
-  const [videoStart, setVideoStart] = useState(0)
-  const [audioStart, setAudioStart] = useState(0)
-  const [keys, setKeys] = useState<EditorKeys>(DEFAULT_EDITOR_KEYS)
-  const [snapEnabled, setSnapEnabled] = useState(true)
+  const addClip = useCallback(async (clipPath: string, start?: number): Promise<void> => {
+    setError(null)
+
+    try {
+      const opened = await window.api.media.loadPath(clipPath)
+      const { info } = opened
+
+      setSources((previous) => ({
+        ...previous,
+        [opened.clipPath]: {
+          url: opened.clipUrl,
+          info,
+          thumbnails: previous[opened.clipPath]?.thumbnails ?? [],
+          waveform: previous[opened.clipPath]?.waveform ?? [],
+          durationSeconds: info.durationSeconds,
+        },
+      }))
+
+      setTimeline((previous) => {
+        const appended = appendClip(previous, {
+          path: opened.clipPath,
+          durationSeconds: info.durationSeconds,
+          hasAudio: info.hasAudio,
+        })
+        if (start === undefined) return appended
+
+        // Placed where it was dropped, which is the whole point of dropping it
+        // somewhere in particular. appendClip puts it last on each lane.
+        const place = (items: TimelineItem[]): TimelineItem[] =>
+          items.map((item, index) =>
+            index === items.length - 1 ? { ...item, start: Math.max(0, start) } : item,
+          )
+        return { video: place(appended.video), audio: place(appended.audio) }
+      })
+
+      // Both strips are nice-to-haves — never block the preview on them.
+      setLoadingThumbnails(true)
+      window.api.media
+        .thumbnails(opened.clipPath, info.durationSeconds)
+        .then((strip) => patchSource(setSources, opened.clipPath, { thumbnails: strip.frames }))
+        .catch(() => undefined)
+        .finally(() => setLoadingThumbnails(false))
+
+      if (info.hasAudio) {
+        window.api.media
+          .waveform(opened.clipPath, WAVEFORM_BUCKETS)
+          .then((waveform) => patchSource(setSources, opened.clipPath, { waveform }))
+          .catch(() => undefined)
+      }
+    } catch (err) {
+      setError(cleanError(err))
+    }
+  }, [])
+
+  const handleImport = useCallback(async () => {
+    setBusy('open')
+    setError(null)
+    try {
+      const opened = await window.api.media.openFile()
+      if (opened) await addClip(opened.clipPath)
+    } catch (err) {
+      setError(cleanError(err))
+    } finally {
+      setBusy(null)
+    }
+  }, [addClip])
+
+  /** Empty the timeline, leaving the editor as it opens */
+  const clearTimeline = useCallback(() => {
+    setTimeline(EMPTY_TIMELINE)
+    setSelected(null)
+    setPlayhead(0)
+    setView(FIT_VIEW)
+  }, [])
+
+  // A replay saved from the tray or a hotkey lands here
+  useEffect(() => {
+    return window.api.recorder.onReplaySaved((saved) => void addClip(saved.clipPath))
+  }, [addClip])
+
+  // Navigating in with a clip already chosen
+  useEffect(() => {
+    if (requestedPath) void addClip(requestedPath)
+    // Only react to a genuinely new requested path
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedPath])
 
   useEffect(() => {
     const apply = (settings: AppSettings): void => {
@@ -131,139 +224,53 @@ export default function EditorPage(): JSX.Element {
     window.api.settings.get().then(apply).catch(() => undefined)
     return window.api.settings.onChange(apply)
   }, [])
-  const [loadingThumbnails, setLoadingThumbnails] = useState(false)
 
-  const [busy, setBusy] = useState<'save' | 'record' | 'open' | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  /* How much of the clip the strip spans. Held here because the strip's wheel
-     and the transport's buttons both move it. */
-  const [view, setView] = useState<TimelineView>(FIT_VIEW)
-  /* Which region is under the cursor, so only that one lights up */
-  const [dragOver, setDragOver] = useState<'stage' | 'timeline' | null>(null)
+  // ── Playback ───────────────────────────────────────────────────────────────
 
-  // ── Clip loading ───────────────────────────────────────────────────────────
+  /*
+   * The clip under the playhead. The preview plays one item at a time and hands
+   * over at its edge, which is what lets a timeline of several files play as
+   * one piece without stitching anything first.
+   */
+  const activeItem = useMemo(() => itemAt(timeline, 'video', playhead), [timeline, playhead])
+  const activeSource = activeItem ? sources[activeItem.path] : undefined
 
-  /** Let go of the loaded clip, leaving the editor as it opens */
-  const clearClip = useCallback(() => {
-    setClip(null)
-    setDuration(0)
-    setInPoint(0)
-    setOutPoint(0)
-    setAudioIn(0)
-    setAudioOut(0)
-    setAudioRemoved(false)
-    setVideoStart(0)
-    setAudioStart(0)
-    setThumbnails([])
-    setWaveform([])
-    setCuts([])
-    setDiscarded([])
-    setView(FIT_VIEW)
-  }, [])
+  const handleSeek = useCallback(
+    (seconds: number) => {
+      const time = Math.max(0, seconds)
+      setPlayhead(time)
 
-  const loadClip = useCallback(async (clipPath: string) => {
-    setError(null)
-    setThumbnails([])
-    setWaveform([])
+      const item = itemAt(timeline, 'video', time)
+      if (item) playerRef.current?.seek(sourceTimeAt(item, time))
+    },
+    [timeline],
+  )
 
-    try {
-      const opened = await window.api.media.loadPath(clipPath)
-      const nextDuration = opened.info.durationSeconds
+  /** Player time is a position in one source; the timeline wants where that is */
+  const handlePlayerTime = useCallback(
+    (sourceSeconds: number) => {
+      if (!activeItem) return
+      setPlayhead(activeItem.start + (sourceSeconds - activeItem.sourceIn))
 
-      setClip({ path: opened.clipPath, url: opened.clipUrl, info: opened.info })
-      setDuration(nextDuration)
-      setInPoint(0)
-      setOutPoint(nextDuration)
-      setAudioIn(0)
-      setAudioOut(nextDuration)
-      setAudioRemoved(false)
-      setVideoStart(0)
-      setAudioStart(0)
-      setView(FIT_VIEW)
-      setCurrentTime(0)
-
-      // Both strips are nice-to-haves — never block the preview on them.
-      setLoadingThumbnails(true)
-      window.api.media
-        .thumbnails(opened.clipPath, nextDuration)
-        .then((strip) => setThumbnails(strip.frames))
-        .catch(() => setThumbnails([]))
-        .finally(() => setLoadingThumbnails(false))
-
-      if (opened.info.hasAudio) {
-        window.api.media
-          .waveform(opened.clipPath, WAVEFORM_BUCKETS)
-          .then(setWaveform)
-          .catch(() => setWaveform([]))
-      }
-    } catch (err) {
-      setError(cleanError(err))
-    }
-  }, [])
-
-  // A replay saved from the tray or a hotkey lands here
-  useEffect(() => {
-    return window.api.recorder.onReplaySaved((saved) => {
-      void loadClip(saved.clipPath)
-    })
-  }, [loadClip])
-
-  // Navigating in with a clip already chosen
-  useEffect(() => {
-    if (requestedPath && requestedPath !== clip?.path) void loadClip(requestedPath)
-    // Only react to a genuinely new requested path
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestedPath])
-
-  // ── Actions ────────────────────────────────────────────────────────────────
-
-  const runAction = useCallback(
-    async (kind: 'save' | 'record' | 'open', work: () => Promise<void>) => {
-      setBusy(kind)
-      setError(null)
-      try {
-        await work()
-      } catch (err) {
-        setError(cleanError(err))
-      } finally {
-        setBusy(null)
+      // Hand over at the edge, so a run of clips plays through rather than
+      // stopping at the first boundary.
+      if (isPlaying && sourceSeconds >= activeItem.sourceOut - 0.02) {
+        const next = sortLane(timeline.video).find((item) => item.start > activeItem.start)
+        if (next) {
+          setPlayhead(next.start)
+          playerRef.current?.seek(next.sourceIn)
+        }
       }
     },
-    [],
+    [activeItem, isPlaying, timeline.video],
   )
-
-  const handleOpenFile = useCallback(
-    () =>
-      runAction('open', async () => {
-        const opened = await window.api.media.openFile()
-        if (opened) await loadClip(opened.clipPath)
-      }),
-    [loadClip, runAction],
-  )
-
-  const handleTrimChange = useCallback(
-    (nextIn: number, nextOut: number) => {
-      setInPoint(nextIn)
-      setOutPoint(nextOut)
-
-      // Keep the playhead inside the new selection so the preview matches the export
-      const clamped = clamp(currentTime, nextIn, nextOut)
-      if (Math.abs(clamped - currentTime) > 0.001) playerRef.current?.seek(clamped)
-    },
-    [currentTime],
-  )
-
-  const handleSeek = useCallback((seconds: number) => {
-    playerRef.current?.seek(seconds)
-  }, [])
 
   /**
    * Fullscreen the stage rather than the video element.
    *
    * The element that goes fullscreen is the only thing on screen, so making it
    * the container leaves room for anything drawn over the picture. Handing the
-   * <video> to the browser instead would give away that option, and with it the
-   * app's own controls.
+   * <video> to the browser instead would give away that option.
    */
   const toggleFullscreen = useCallback(() => {
     if (document.fullscreenElement) {
@@ -273,52 +280,71 @@ export default function EditorPage(): JSX.Element {
     void stageRef.current?.requestFullscreen().catch(() => undefined)
   }, [])
 
-  // ── Keyboard shortcuts ─────────────────────────────────────────────────────
+  // ── Editing ────────────────────────────────────────────────────────────────
+
+  const handleMove = useCallback((lane: LaneId, id: string, start: number) => {
+    setTimeline((previous) => moveItem(previous, lane, id, start))
+  }, [])
+
+  const handleTrim = useCallback(
+    (lane: LaneId, id: string, edge: 'start' | 'end', seconds: number) => {
+      setTimeline((previous) => {
+        const item = previous[lane].find((candidate) => candidate.id === id)
+        const sourceDuration = item ? (sources[item.path]?.durationSeconds ?? 0) : 0
+        return trimItem(previous, lane, id, edge, seconds, sourceDuration)
+      })
+    },
+    [sources],
+  )
+
+  const handleRemove = useCallback((lane: LaneId, id: string) => {
+    setTimeline((previous) => removeItem(previous, lane, id))
+    setSelected((previous) => (previous?.id === id ? null : previous))
+  }, [])
+
+  /**
+   * Cut one lane at a moment.
+   *
+   * One lane, not both: the lanes are independent everywhere else, and a split
+   * that always took the audio with it would be a decision made on the user's
+   * behalf every single time.
+   */
+  const handleSplit = useCallback((lane: LaneId, time: number) => {
+    setTimeline((previous) => splitAt(previous, time, [lane]))
+  }, [])
+
+  // ── Keyboard ───────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!clip) return
-
-    const frameStep = 1 / (clip.info.fps > 0 ? clip.info.fps : 30)
-
-    const splitAtPlayhead = (): void => {
-      // A cut on top of an existing one, or hard against an edge, would make a
-      // part too short to see or select.
-      const tooClose = (a: number, b: number): boolean => Math.abs(a - b) < MIN_PART_SECONDS
-      if (tooClose(currentTime, inPoint) || tooClose(currentTime, outPoint)) return
-      if (cuts.some((cut) => tooClose(cut, currentTime))) return
-
-      setCuts((previous) => [...previous, currentTime].sort((a, b) => a - b))
-    }
+    const frameStep = 1 / (activeSource?.info.fps || 30)
 
     const handleKey = (event: KeyboardEvent): void => {
       if (isTypingTarget(event.target)) return
 
-      // Matched against the configured keys rather than hard-coded letters:
-      // S for split is a convention, not everyone's convention.
       if (matches(event, keys.editorKeyPlayPause)) {
         event.preventDefault()
         playerRef.current?.togglePlay()
         return
       }
       if (matches(event, keys.editorKeyCutStart)) {
-        setInPoint(clamp(currentTime, 0, outPoint - 0.1))
+        if (selected) handleTrim(selected.lane, selected.id, 'start', playhead)
         return
       }
       if (matches(event, keys.editorKeyCutEnd)) {
-        setOutPoint(clamp(currentTime, inPoint + 0.1, duration))
+        if (selected) handleTrim(selected.lane, selected.id, 'end', playhead)
         return
       }
       if (matches(event, keys.editorKeySplit)) {
-        splitAtPlayhead()
+        // The selected lane, or the picture when nothing is selected — the lane
+        // you are working on is the one you meant.
+        handleSplit(selected?.lane ?? 'video', playhead)
         return
       }
       if (event.key === 'Delete' || event.key === 'Backspace') {
         event.preventDefault()
-        if (selectedLane === 'audio') setAudioRemoved(true)
-        else clearClip()
+        if (selected) handleRemove(selected.lane, selected.id)
         return
       }
-
       if (matches(event, keys.editorKeyFullscreen)) {
         toggleFullscreen()
         return
@@ -327,17 +353,17 @@ export default function EditorPage(): JSX.Element {
       switch (event.key) {
         case 'ArrowLeft':
           event.preventDefault()
-          playerRef.current?.nudge(event.shiftKey ? -1 : -frameStep)
+          handleSeek(playhead - (event.shiftKey ? 1 : frameStep))
           break
         case 'ArrowRight':
           event.preventDefault()
-          playerRef.current?.nudge(event.shiftKey ? 1 : frameStep)
+          handleSeek(playhead + (event.shiftKey ? 1 : frameStep))
           break
         case 'Home':
-          playerRef.current?.seek(inPoint)
+          handleSeek(0)
           break
         case 'End':
-          playerRef.current?.seek(outPoint)
+          handleSeek(duration)
           break
         default:
           break
@@ -347,30 +373,31 @@ export default function EditorPage(): JSX.Element {
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
   }, [
-    clearClip,
-    clip,
-    cuts,
-    currentTime,
+    activeSource,
     duration,
-    inPoint,
+    handleRemove,
+    handleSeek,
+    handleSplit,
+    handleTrim,
     keys,
-    outPoint,
-    selectedLane,
+    playhead,
+    selected,
     toggleFullscreen,
   ])
 
   // ── Drag and drop ──────────────────────────────────────────────────────────
 
   const handleDrop = useCallback(
-    (event: React.DragEvent) => {
+    (event: React.DragEvent, at?: number) => {
       event.preventDefault()
       setDragOver(null)
+      setPendingDrop(null)
 
-      // The library drags a path; Explorer drags a file. Check ours first —
-      // an internal drag carries no File at all.
+      // The library drags a path; Explorer drags a file. Check ours first — an
+      // internal drag carries no File at all.
       const fromLibrary = event.dataTransfer.getData('application/x-grecorder-clip')
       if (fromLibrary) {
-        void loadClip(fromLibrary)
+        void addClip(fromLibrary, at)
         return
       }
 
@@ -378,71 +405,111 @@ export default function EditorPage(): JSX.Element {
       if (!file) return
 
       const path = window.api.media.pathForFile(file)
-      if (path) void loadClip(path)
+      if (path) void addClip(path, at)
     },
-    [loadClip],
+    [addClip],
+  )
+
+  /** Where on the timeline the cursor is, in seconds */
+  const dropTimeFrom = useCallback(
+    (clientX: number): number => {
+      const lanes = timelineRef.current?.querySelector('.lane-stack')
+      if (!lanes) return duration
+
+      const rect = lanes.getBoundingClientRect()
+      const span = duration > 0 ? duration * TAIL_FACTOR : 30
+      const visible = span / view.zoom
+      return Math.max(0, view.offset + ((clientX - rect.left) / rect.width) * visible)
+    },
+    [duration, view],
   )
 
   /*
-   * A drop is a drop wherever it lands. The stage and the timeline are the two
-   * places a clip visibly belongs, so both take the same handlers rather than
-   * the picture being the only thing that accepts one.
+   * A drop is a drop wherever it lands. The stage takes one at the end; the
+   * lanes take one where the cursor is, which is how a clip goes before or
+   * after what is already there rather than on top of it.
    */
-  const dropZone = useCallback(
-    (zone: 'stage' | 'timeline') => ({
-      onDragOver: (event: React.DragEvent) => {
-        event.preventDefault()
-        // Explorer defaults to "link"; without this the cursor says no.
-        event.dataTransfer.dropEffect = 'copy'
-        setDragOver(zone)
-      },
-      onDragLeave: () => setDragOver(null),
-      onDrop: handleDrop,
-    }),
-    [handleDrop],
-  )
+  const stageDrop = {
+    onDragOver: (event: React.DragEvent) => {
+      event.preventDefault()
+      // Explorer defaults to "link"; without this the cursor says no.
+      event.dataTransfer.dropEffect = 'copy'
+      setDragOver('stage')
+    },
+    onDragLeave: () => setDragOver(null),
+    onDrop: (event: React.DragEvent) => handleDrop(event),
+  }
+
+  const timelineDrop = {
+    onDragOver: (event: React.DragEvent) => {
+      event.preventDefault()
+      event.dataTransfer.dropEffect = 'copy'
+      setDragOver('timeline')
+
+      /*
+       * Explorer will not reveal a path until the drop itself, so a file from
+       * outside can only be drawn as a line. One of ours is already known, and
+       * if it has been loaded before its length is too — which is what lets the
+       * ghost show how much room it will take.
+       */
+      const path = event.dataTransfer.types.includes('application/x-grecorder-clip')
+        ? event.dataTransfer.getData('application/x-grecorder-clip')
+        : ''
+      const known = path ? sources[path]?.durationSeconds : undefined
+
+      setPendingDrop({
+        start: snapDropTo(timeline, dropTimeFrom(event.clientX), snapEnabled),
+        durationSeconds: known ?? null,
+      })
+    },
+    onDragLeave: () => {
+      setDragOver(null)
+      setPendingDrop(null)
+    },
+    onDrop: (event: React.DragEvent) =>
+      handleDrop(event, snapDropTo(timeline, dropTimeFrom(event.clientX), snapEnabled)),
+  }
+
+  // ── Export ─────────────────────────────────────────────────────────────────
+
+  /**
+   * The timeline as the exporter wants it: sources by index, and every item
+   * pointing at one. Memoised because the picker reports a control back up, and
+   * a fresh object every render would make the two chase each other.
+   */
+  const exportTimeline = useMemo(() => {
+    const paths = [...new Set([...timeline.video, ...timeline.audio].map((item) => item.path))]
+    const toItems = (
+      items: TimelineItem[],
+    ): { input: number; start: number; sourceIn: number; sourceOut: number }[] =>
+      sortLane(items).map((item) => ({
+        input: paths.indexOf(item.path),
+        start: item.start,
+        sourceIn: item.sourceIn,
+        sourceOut: item.sourceOut,
+      }))
+
+    return { sources: paths, video: toItems(timeline.video), audio: toItems(timeline.audio), duration }
+  }, [duration, timeline])
+
+  const firstSource = timeline.video[0] ? sources[timeline.video[0].path] : undefined
 
   // ── Render ─────────────────────────────────────────────────────────────────
-
-  /*
-   * Parts are derived, never stored: cuts and the trim are the only state, so
-   * moving a handle cannot leave a stale part behind.
-   *
-   * Memoised because the kept ranges are handed to the export, which reports a
-   * control back up — a fresh array on every render would make those two chase
-   * each other indefinitely.
-   */
-  const parts = useMemo(() => {
-    const bounds = [inPoint, ...cuts.filter((c) => c > inPoint && c < outPoint), outPoint]
-    return bounds.slice(0, -1).map((start, index) => ({
-      start,
-      end: bounds[index + 1] ?? outPoint,
-      kept: !discarded.some((d) => Math.abs(d - start) < 0.001),
-    }))
-  }, [cuts, discarded, inPoint, outPoint])
-
-  const hasCuts = parts.length > 1
-  const keptRanges = useMemo(
-    () =>
-      hasCuts ? parts.filter((p) => p.kept).map(({ start, end }) => ({ start, end })) : undefined,
-    [hasCuts, parts],
-  )
-  const visibleCuts = useMemo(
-    () => cuts.filter((c) => c > inPoint && c < outPoint),
-    [cuts, inPoint, outPoint],
-  )
 
   return (
     <div className={`editor-layout${libraryOpen ? '' : ' is-collapsed'}`}>
       <MediaLibrary
         busy={busy === 'open'}
-        activePath={clip?.path ?? null}
-        onOpen={(clipPath) => void loadClip(clipPath)}
-        onImport={() => void handleOpenFile()}
+        activePath={activeItem?.path ?? null}
+        onOpen={(clipPath) => void addClip(clipPath)}
+        onImport={() => void handleImport()}
         onRemoved={(removed) => {
-          // A clip that is gone cannot stay loaded — the editor would be
-          // holding a picture of a file that no longer exists.
-          if (clip?.path === removed) clearClip()
+          // A file that is gone cannot stay on the timeline — the editor would
+          // be holding a picture of something that no longer exists.
+          setTimeline((previous) => ({
+            video: previous.video.filter((item) => item.path !== removed),
+            audio: previous.audio.filter((item) => item.path !== removed),
+          }))
         }}
       />
 
@@ -477,10 +544,11 @@ export default function EditorPage(): JSX.Element {
             </button>
 
             <div className="stack">
-              <h1>{clip ? baseName(clip.path) : 'Edit'}</h1>
-            {clip && (
-              <span className="muted small mono">
-                  {clip.info.width}×{clip.info.height} · {formatTime(duration)}
+              <h1>{activeItem ? baseName(activeItem.path) : 'Edit'}</h1>
+              {duration > 0 && (
+                <span className="muted small mono">
+                  {timeline.video.length} clip{timeline.video.length === 1 ? '' : 's'} ·{' '}
+                  {formatTime(duration)}
                 </span>
               )}
             </div>
@@ -492,7 +560,7 @@ export default function EditorPage(): JSX.Element {
             <button
               className="btn btn-primary"
               onClick={() => setExportOpen(true)}
-              disabled={!clip || exportControl?.isExporting}
+              disabled={duration <= 0 || exportControl?.isExporting}
             >
               {exportControl?.isExporting
                 ? `Exporting ${exportControl.percent.toFixed(0)}%`
@@ -519,21 +587,16 @@ export default function EditorPage(): JSX.Element {
         <div
           ref={stageRef}
           className={`stage${dragOver === 'stage' ? ' drag-over' : ''}`}
-          {...dropZone('stage')}
+          {...stageDrop}
         >
-          {clip ? (
+          {activeItem && activeSource ? (
             <VideoPlayer
               ref={playerRef}
-              src={clip.url}
-              inPoint={inPoint}
-              outPoint={outPoint}
-              onTimeUpdate={setCurrentTime}
-              onDurationChange={(value) => {
-                // Trust the container metadata over ffprobe when they disagree
-                if (!Number.isFinite(value) || value <= 0) return
-                setDuration((previous) => (Math.abs(previous - value) > 0.25 ? value : previous))
-                setOutPoint((previous) => (previous <= 0 ? value : previous))
-              }}
+              src={activeSource.url}
+              inPoint={activeItem.sourceIn}
+              outPoint={activeItem.sourceOut}
+              onTimeUpdate={handlePlayerTime}
+              onDurationChange={() => undefined}
               onPlayingChange={setIsPlaying}
               onError={setError}
             />
@@ -548,101 +611,40 @@ export default function EditorPage(): JSX.Element {
         </div>
 
         <div
+          ref={timelineRef}
           className={`timeline-drop${dragOver === 'timeline' ? ' drag-over' : ''}`}
-          {...dropZone('timeline')}
+          {...timelineDrop}
         >
           <Timeline
-            duration={duration}
-            inPoint={inPoint}
-            outPoint={outPoint}
-            currentTime={currentTime}
-            thumbnails={thumbnails}
-            waveform={audioRemoved ? [] : waveform}
-            audioIn={audioIn}
-            audioOut={audioOut}
-            selectedLane={selectedLane}
-            onSelectLane={setSelectedLane}
-            onAudioTrimChange={(nextIn, nextOut) => {
-              setAudioIn(nextIn)
-              setAudioOut(nextOut)
-            }}
-            onRemoveLane={(lane) => {
-              if (lane === 'audio') setAudioRemoved(true)
-              else clearClip()
-            }}
-            onResetLane={(lane) => {
-              if (lane === 'audio') {
-                setAudioIn(0)
-                setAudioOut(duration)
-                setAudioStart(0)
-                setAudioRemoved(false)
-              } else {
-                handleTrimChange(0, duration)
-                setVideoStart(0)
-              }
-            }}
+            timeline={timeline}
+            assets={sources}
+            currentTime={playhead}
+            selected={selected}
             loadingThumbnails={loadingThumbnails}
-            cuts={visibleCuts}
-            onSeek={handleSeek}
-            onTrimChange={handleTrimChange}
-            view={view}
-            onViewChange={setView}
-            videoStart={videoStart}
-            audioStart={audioStart}
             snap={snapEnabled}
-            onLaneMove={(lane, start) => {
-              if (lane === 'audio') setAudioStart(start)
-              else setVideoStart(start)
-            }}
+            view={view}
+            drop={dragOver === 'timeline' ? pendingDrop : null}
+            onSelect={setSelected}
+            onSeek={handleSeek}
+            onMove={handleMove}
+            onTrim={handleTrim}
+            onRemove={handleRemove}
+            onSplit={(lane) => handleSplit(lane, playhead)}
+            onViewChange={setView}
           />
         </div>
 
-        {hasCuts && (
-          <div className="parts">
-            <span className="parts-label">Parts</span>
-            {parts.map((part) => (
-              <button
-                key={part.start}
-                className={`part${part.kept ? '' : ' is-dropped'}`}
-                title={part.kept ? 'Click to drop this part' : 'Click to keep this part'}
-                onClick={() =>
-                  setDiscarded((previous) =>
-                    part.kept
-                      ? [...previous, part.start]
-                      : previous.filter((d) => Math.abs(d - part.start) >= 0.001),
-                  )
-                }
-              >
-                <span className="mono">{formatTime(part.end - part.start)}</span>
-              </button>
-            ))}
-            <button
-              className="btn btn-ghost small"
-              onClick={() => {
-                setCuts([])
-                setDiscarded([])
-              }}
-            >
-              Clear cuts
-            </button>
-          </div>
-        )}
-
         <TrimControls
           duration={duration}
-          currentTime={currentTime}
-          inPoint={inPoint}
-          outPoint={outPoint}
+          currentTime={playhead}
           isPlaying={isPlaying}
-          disabled={!clip}
+          disabled={duration <= 0}
+          canRemove={selected !== null}
           onTogglePlay={() => playerRef.current?.togglePlay()}
-          onSetIn={() => setInPoint(clamp(currentTime, 0, outPoint - 0.1))}
-          onSetOut={() => setOutPoint(clamp(currentTime, inPoint + 0.1, duration))}
-          onReset={() => {
-            handleTrimChange(0, duration)
-            setCuts([])
-            setDiscarded([])
-          }}
+          onSplit={() => handleSplit(selected?.lane ?? 'video', playhead)}
+          onRemove={() => selected && handleRemove(selected.lane, selected.id)}
+          onClear={clearTimeline}
+          onSeek={handleSeek}
           view={view}
           onViewChange={setView}
           snap={snapEnabled}
@@ -650,33 +652,22 @@ export default function EditorPage(): JSX.Element {
             setSnapEnabled(next)
             void window.api.settings.set({ editorSnap: next })
           }}
-          onNudge={(delta) => playerRef.current?.nudge(delta)}
-        onToggleFullscreen={toggleFullscreen}
+          onToggleFullscreen={toggleFullscreen}
         />
 
         <PresetPicker
-          clipPath={clip?.path ?? null}
-          inPoint={inPoint}
-          outPoint={outPoint}
-          ranges={keptRanges}
-          audio={{
-            inPoint: audioIn,
-            outPoint: audioOut,
-            // Only the gap between the lanes matters; where the pair sits on
-            // an otherwise empty timeline is not something an export can show.
-            offsetSeconds: audioStart - videoStart,
-          }}
-          hasAudio={(clip?.info.hasAudio ?? false) && !audioRemoved}
-          disabled={!clip}
+          timeline={exportTimeline}
+          hasAudio={timeline.audio.length > 0}
+          disabled={duration <= 0}
           onControlChange={setExportControl}
           open={exportOpen}
           onClose={() => setExportOpen(false)}
         />
 
-        {clip && (
+        {firstSource && (
           <p className="small faint">
-            {clip.info.width}×{clip.info.height} · {clip.info.fps} fps ·{' '}
-            {formatBytes(clip.info.sizeBytes)} · {clip.path}
+            {firstSource.info.width}×{firstSource.info.height} · {firstSource.info.fps} fps ·{' '}
+            {formatBytes(firstSource.info.sizeBytes)}
           </p>
         )}
       </div>
@@ -684,9 +675,49 @@ export default function EditorPage(): JSX.Element {
   )
 }
 
-// ── Sub-components ───────────────────────────────────────────────────────────
-
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Update one source's assets without disturbing the others */
+function patchSource(
+  set: React.Dispatch<React.SetStateAction<Record<string, Source>>>,
+  path: string,
+  patch: Partial<SourceAssets>,
+): void {
+  set((previous) => {
+    const source = previous[path]
+    if (!source) return previous
+    return { ...previous, [path]: { ...source, ...patch } }
+  })
+}
+
+/**
+ * Pull an incoming clip onto the nearest clip edge.
+ *
+ * Judged in seconds against the content rather than in pixels against the
+ * pointer: a drop meant as "right after this one" should butt up against it
+ * exactly, and the pointer is nowhere near the edge it is aiming for.
+ */
+function snapDropTo(timeline: TimelineModel, time: number, snap: boolean): number {
+  if (!snap) return time
+
+  const edges = [0]
+  for (const lane of ['video', 'audio'] as LaneId[]) {
+    for (const item of timeline[lane]) {
+      edges.push(item.start, item.start + itemDuration(item))
+    }
+  }
+
+  let best = time
+  let bestGap = Math.max(timelineDuration(timeline) * 0.02, 0.25)
+  for (const edge of edges) {
+    const gap = Math.abs(edge - time)
+    if (gap < bestGap) {
+      best = edge
+      bestGap = gap
+    }
+  }
+  return best
+}
 
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false

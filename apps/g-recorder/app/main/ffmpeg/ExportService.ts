@@ -50,17 +50,24 @@ export class ExportService {
 
     const preset = getPreset(options.presetId)
     if (!preset) throw new Error(`Unknown export preset: ${options.presetId}`)
-    if (!options.clipPath) throw new Error('No clip selected to export')
 
-    const sourceDuration = options.outPoint - options.inPoint
-    if (sourceDuration <= 0) throw new Error('The OUT point must come after the IN point')
+    const { timeline } = options
+    if (timeline.sources.length === 0) throw new Error('There is nothing on the timeline')
+
+    const sourceDuration = timeline.duration
+    if (sourceDuration <= 0) throw new Error('The timeline is empty')
 
     const settings = SettingsStore.getInstance().get()
     const manager = FfmpegManager.getInstance()
     const status = await manager.ensureReady()
     if (status.state !== 'ready') throw new Error('FFmpeg is not installed')
 
-    const info = await probeMedia(options.clipPath)
+    /*
+     * The first source sets the output's shape. With several clips they may
+     * disagree, and something has to decide — picking the first is at least
+     * predictable, and every item is scaled onto that canvas anyway.
+     */
+    const info = await probeMedia(timeline.sources[0])
     const speed = options.speed > 0 ? options.speed : 1
     const outputDuration = sourceDuration / speed
 
@@ -80,11 +87,11 @@ export class ExportService {
     logger.info('ExportService: starting', {
       format: options.format,
       preset: preset.id,
-      clipPath: options.clipPath,
+      sources: timeline.sources.length,
+      videoItems: timeline.video.length,
+      audioItems: timeline.audio.length,
       outputPath,
-      inPoint: options.inPoint,
-      outPoint: options.outPoint,
-      ranges: options.ranges,
+      duration: sourceDuration,
       speed,
       aspect: options.aspect,
       targetSizeMb: options.targetSizeMb,
@@ -134,65 +141,28 @@ export class ExportService {
         )
       : undefined
 
+    const timeline = options.timeline
+
     /*
-     * Audio trimmed away from the video needs the two placed independently, so
-     * it goes through the timeline builder. Everything else keeps the single
-     * -ss path, which seeks by keyframe and never decodes the discarded head.
+     * One clip, whole, with its audio in step: the single -ss path, which seeks
+     * by keyframe and never decodes the head it is about to discard. It is far
+     * cheaper than the filter graph, and it is still the common case — a replay
+     * saved and trimmed at both ends.
      */
-    const audio = options.audio
-    const audioApart =
-      includeAudio &&
-      audio !== undefined &&
-      (Math.abs(audio.inPoint - options.inPoint) > 0.01 ||
-        Math.abs(audio.outPoint - options.outPoint) > 0.01 ||
-        Math.abs(audio.offsetSeconds) > 0.01)
+    const video = timeline.video
+    const audioLane = timeline.audio
+    const simple =
+      video.length === 1 &&
+      timeline.sources.length === 1 &&
+      Math.abs(video[0].start) < 0.01 &&
+      (audioLane.length === 0 ||
+        (audioLane.length === 1 &&
+          Math.abs(audioLane[0].start - video[0].start) < 0.01 &&
+          Math.abs(audioLane[0].sourceIn - video[0].sourceIn) < 0.01 &&
+          Math.abs(audioLane[0].sourceOut - video[0].sourceOut) < 0.01))
 
-    if (audioApart && audio) {
-      /*
-       * Two lanes placed against each other, then slid so the earlier one
-       * starts at zero. Whichever lane leads sets the origin: an export that
-       * opened with the gap the user dragged in would be a clip that starts
-       * with nothing in it.
-       */
-      const audioLead = audio.inPoint - options.inPoint + audio.offsetSeconds
-      const videoAt = Math.max(0, -audioLead)
-      const audioAt = Math.max(0, audioLead)
-      const videoLength = options.outPoint - options.inPoint
-      const audioLength = audio.outPoint - audio.inPoint
-
-      return buildTimelineExportArgs({
-        clipPath: options.clipPath,
-        outputPath,
-        inPoint: options.inPoint,
-        outPoint: options.outPoint,
-        sources: [options.clipPath],
-        video: [
-          { input: 0, start: videoAt, sourceIn: options.inPoint, sourceOut: options.outPoint },
-        ],
-        audio: [
-          { input: 0, start: audioAt, sourceIn: audio.inPoint, sourceOut: audio.outPoint },
-        ],
-        duration: Math.max(videoAt + videoLength, audioAt + audioLength),
-        encoder,
-        outWidth: framing.outWidth,
-        outHeight: framing.outHeight,
-        crop: framing.crop,
-        fps: preset.fps > 0 ? Math.min(preset.fps, info.fps || preset.fps) : 0,
-        quality: preset.quality,
-        maxBitrateKbps: preset.maxBitrateKbps,
-        audioBitrateKbps: preset.audioBitrateKbps,
-        speed: options.speed,
-        volume: options.volume,
-        hasAudio: info.hasAudio,
-        targetBitrateKbps,
-      })
-    }
-
-    return buildClipExportArgs({
-      clipPath: options.clipPath,
+    const shared = {
       outputPath,
-      inPoint: options.inPoint,
-      outPoint: options.outPoint,
       encoder,
       outWidth: framing.outWidth,
       outHeight: framing.outHeight,
@@ -202,9 +172,29 @@ export class ExportService {
       maxBitrateKbps: preset.maxBitrateKbps,
       audioBitrateKbps: preset.audioBitrateKbps,
       speed: options.speed,
-      volume: options.volume,
+      volume: includeAudio && audioLane.length > 0 ? options.volume : 0,
       hasAudio: info.hasAudio,
       targetBitrateKbps,
+    }
+
+    if (simple) {
+      return buildClipExportArgs({
+        ...shared,
+        clipPath: timeline.sources[0],
+        inPoint: video[0].sourceIn,
+        outPoint: video[0].sourceOut,
+      })
+    }
+
+    return buildTimelineExportArgs({
+      ...shared,
+      clipPath: timeline.sources[0],
+      inPoint: 0,
+      outPoint: timeline.duration,
+      sources: timeline.sources,
+      video: timeline.video,
+      audio: timeline.audio,
+      duration: timeline.duration,
     })
   }
 
@@ -212,11 +202,15 @@ export class ExportService {
     const framing = computeFraming(info, options.aspect, null)
     const scale = Math.min(1, GIF_MAX_WIDTH / framing.outWidth)
 
+    // A GIF of a multi-clip timeline is out of scope; the first clip is what
+    // the format is ever used for here.
+    const first = options.timeline.video[0]
+
     return buildGifExportArgs({
-      clipPath: options.clipPath,
+      clipPath: options.timeline.sources[first?.input ?? 0] ?? '',
       outputPath,
-      inPoint: options.inPoint,
-      outPoint: options.outPoint,
+      inPoint: first?.sourceIn ?? 0,
+      outPoint: first?.sourceOut ?? 0,
       outWidth: toEvenSize(framing.outWidth * scale),
       outHeight: toEvenSize(framing.outHeight * scale),
       crop: framing.crop,

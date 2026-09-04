@@ -686,12 +686,6 @@ input:focus {
   user-select: none;
 }
 
-.timeline-thumbs {
-  position: absolute;
-  inset: 0;
-  display: flex;
-}
-
 /*
  * The audio lane, under the frames and inside the same track.
  *
@@ -699,20 +693,6 @@ input:focus {
  * same seconds, so a shared edge and a shared time axis keep them read as one
  * clip with two parts instead of two unrelated strips.
  */
-.timeline-audio {
-  position: absolute;
-  bottom: 0;
-  height: 34%;
-  display: flex;
-  align-items: flex-end;
-  gap: 1px;
-  padding: 0 1px;
-  background: rgb(0 0 0 / 0.45);
-  border-top: 1px solid var(--border-subtle);
-  pointer-events: none;
-  overflow: hidden;
-}
-
 .timeline-audio span {
   flex: 1 1 0;
   min-width: 0;
@@ -729,55 +709,7 @@ input:focus {
   pointer-events: none;
 }
 
-.timeline-shade {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  /* Nearly opaque: what is cut away should read as gone, not as dimmed. */
-  background: rgb(0 0 0 / 0.66);
-  pointer-events: none;
-}
-
-.timeline-selection {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  border-top: 2px solid var(--accent);
-  border-bottom: 2px solid var(--accent);
-  box-shadow: 0 0 0 1px var(--accent-ring) inset;
-  pointer-events: none;
-}
-
-.timeline-handle {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 14px;
-  background: var(--accent-gradient);
-  cursor: ew-resize;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  /* A grip, so it reads as something to drag rather than an edge marker. */
-  gap: 2px;
-  transition: filter 0.12s;
-}
-
-.timeline-handle::before,
-.timeline-handle::after {
-  content: '';
-  width: 2px;
-  height: 18px;
-  border-radius: 1px;
-  background: var(--text-on-accent);
-  opacity: 0.85;
-}
-
 /* Brightness, not another colour: a gradient cannot take a flat hover fill. */
-.timeline-handle:hover {
-  filter: brightness(1.15);
-}
-
 /*
  * A split point.
  *
@@ -786,45 +718,11 @@ input:focus {
  * two read as the same thing at a glance. Dashed, neutral, with a notch at the
  * top — the shape every editor uses for a razor cut.
  */
-.timeline-cut {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  margin-left: -0.5px;
-  background: repeating-linear-gradient(
-    to bottom,
-    var(--text) 0 4px,
-    transparent 4px 8px
-  );
-  opacity: 0.85;
-  pointer-events: none;
-}
-
-.timeline-cut-mark {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  width: 0;
-  height: 0;
-  transform: translateX(-50%);
-  border-left: 4px solid transparent;
-  border-right: 4px solid transparent;
-  border-top: 5px solid var(--text);
-}
-
 /*
  * The clip body, as a grip. Invisible: the thumbnails and the waveform are
  * what the eye follows, and a tint over them would only make the picture
  * harder to read. The cursor is what says it can be moved.
  */
-.timeline-body {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  cursor: grab;
-}
-
 .timeline-body:active {
   cursor: grabbing;
 }
@@ -1594,8 +1492,13 @@ kbd {
   flex: 0 0 auto;
 }
 
+.lane-gutter .lane-badge:last-child {
+  height: 40px;
+}
+
 .lane-badge {
   width: var(--lane-badge-width);
+  /* Matches the lane it labels, so the two columns stay in step */
   height: 52px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
@@ -1606,18 +1509,6 @@ kbd {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: border-color 0.12s, background 0.12s, color 0.12s;
-}
-
-.lane-badge:hover {
-  color: var(--text);
-  border-color: var(--border-strong);
-}
-
-.lane-badge.is-selected {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-  color: var(--text);
 }
 
 .lane-stack {
@@ -1634,24 +1525,18 @@ kbd {
   position: relative;
   height: 52px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--bg-elevated);
+  /* The lane is the empty track; the clips on it carry their own edges, so it
+     reads as a surface rather than as one long clip. */
+  border: 1px dashed var(--border);
+  background: var(--bg);
   overflow: hidden;
   cursor: pointer;
 }
 
-/* The selected lane is the one the cut buttons and the keys act on, so it is
-   outlined rather than merely tinted — the difference decides what gets cut. */
-.lane.is-selected {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent-ring);
-}
-
-.lane-audio .timeline-audio {
-  top: 0;
-  height: 100%;
-  background: transparent;
-  border-top: none;
+/* Shorter than the picture: the waveform needs less room to be read, and the
+   space is better spent on the frames. */
+.lane-audio {
+  height: 40px;
 }
 
 /* One playhead over both lanes: there is one moment in time, not two. */
@@ -1743,4 +1628,136 @@ kbd {
 /* A refusal that explains itself, beside the field that refused */
 .danger {
   color: var(--danger);
+}
+
+/* ── Clips on the lanes ──────────────────────────────────────────────────── */
+
+/*
+ * A clip is a box with edges, not a region of a strip.
+ *
+ * That is the whole difference a split makes: cutting used to draw a line on
+ * one continuous filmstrip, so the two halves still read as one thing. Two
+ * boxes with a gap between them cannot be mistaken for one.
+ */
+.clip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  overflow: hidden;
+  cursor: grab;
+  /* Hairline gap, so butted-up clips still show two edges */
+  margin-right: 1px;
+}
+
+.clip:active {
+  cursor: grabbing;
+}
+
+.clip.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+
+.clip-inner {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* The strip covers the whole source and is clipped to the item, so trimming
+   slides the picture rather than rebuilding it. */
+.clip-thumbs,
+.clip-wave {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  pointer-events: none;
+}
+
+.clip-thumbs img {
+  height: 100%;
+  flex: 1 1 0;
+  min-width: 0;
+  object-fit: cover;
+}
+
+.clip-wave {
+  align-items: center;
+  gap: 1px;
+  padding: 0 2px;
+}
+
+.clip-wave span {
+  flex: 1 1 0;
+  min-width: 1px;
+  border-radius: 1px;
+  background: var(--accent);
+  opacity: 0.85;
+}
+
+.clip-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  color: var(--text-faint);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/*
+ * Trim handles. Inside the clip rather than straddling its edge: a handle that
+ * hung outside would overlap the neighbouring clip, and grabbing it would be a
+ * coin toss between trimming one and moving the other.
+ */
+.clip-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: ew-resize;
+  background: var(--accent-gradient);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.clip-handle.is-start {
+  left: 0;
+}
+
+.clip-handle.is-end {
+  right: 0;
+}
+
+.clip:hover .clip-handle,
+.clip.is-selected .clip-handle {
+  opacity: 0.9;
+}
+
+/* Where a dropped clip would land, and how much room it would take */
+.drop-ghost {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--accent);
+  background: var(--accent-soft);
+  pointer-events: none;
+  z-index: 4;
+}
+
+.drop-ghost.is-thin {
+  width: 2px;
+  margin-left: -1px;
+  border: none;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
 }
