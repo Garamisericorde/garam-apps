@@ -1,33 +1,32 @@
-// Garam Setup — kucuk indirici kurulum programi.
+// Garam Setup — a small downloader-style installer.
 //
-// Yaptigi is:
-//   1. catalog.json'u indirir (uygulama listesi + surum + sha256)
-//   2. Kullanicinin sectigi kurulumlari indirir, ilerlemeyi arayuze bildirir
-//   3. SHA-256 dogrular — eslesmezse KURMAZ
-//   4. NSIS kurulumunu sessiz (/S) calistirir ve cikis kodunu bekler
+// What it does:
+//   1. Downloads catalog.json (app list + version + sha256)
+//   2. Downloads the installers the user picked, reporting progress to the UI
+//   3. Verifies SHA-256 — a mismatch means it does NOT install
+//   4. Runs the NSIS installer silently (/S) and waits for its exit code
 //
-// Kurulum dosyalari uygulamanin kendi icine gomulmez; bu yuzden setup birkac
-// MB kalir ve yeni uygulama eklemek icin setup'i yeniden yayinlamak gerekmez.
+// Installers are never embedded in this binary, so the setup stays a few MB
+// and adding a new app does not require republishing the setup.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tauri::Manager;
 
-/// catalog.json'un varsayilan adresi.
+/// Default catalog.json URL.
 ///
-/// Derleme sirasinda GARAM_CATALOG_URL ortam degiskeniyle ezilir. `env!` yerine
-/// `option_env!` kullaniliyor ki degisken tanimli degilken de proje derlensin —
-/// aksi halde depoyu klonlayan herkesin once degiskeni ayarlamasi gerekirdi.
+/// Overridden at build time with the GARAM_CATALOG_URL environment variable.
+/// `option_env!` is used rather than `env!` so the project still compiles when
+/// the variable is unset — otherwise every fresh clone would fail to build.
 const DEFAULT_CATALOG_URL: &str = match option_env!("GARAM_CATALOG_URL") {
     Some(url) => url,
-    None => "https://GARAM_GITHUB_KULLANICI_ADI.github.io/garam-apps/catalog.json",
+    None => "https://raw.githubusercontent.com/Garamisericorde/garam-apps/main/catalog.json",
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,19 +59,19 @@ struct Installer {
     silent_args: Vec<String>,
 }
 
-/// Arayuze yayinlanan ilerleme olayi.
+/// Progress event emitted to the UI.
 #[derive(Debug, Clone, Serialize)]
 struct Progress {
     app_id: String,
     /// "downloading" | "verifying" | "installing" | "done" | "error"
     phase: String,
-    /// 0.0 - 1.0; bilinmiyorsa -1.
+    /// 0.0 - 1.0, or -1 when unknown.
     ratio: f64,
     message: String,
 }
 
 fn emit(window: &tauri::Window, progress: Progress) {
-    // Arayuz kapanmis olabilir; yayin hatasi kurulumu durdurmamali.
+    // The UI may have closed; a failed emit must not stop the install.
     let _ = window.emit("install-progress", progress);
 }
 
@@ -82,11 +81,11 @@ async fn fetch_catalog(url: Option<String>) -> Result<Catalog, String> {
 
     let response = reqwest::get(&url)
         .await
-        .map_err(|e| format!("Katalog indirilemedi: {e}"))?;
+        .map_err(|e| format!("Could not download the catalog: {e}"))?;
 
     if !response.status().is_success() {
         return Err(format!(
-            "Katalog sunucusu {} dondu ({url})",
+            "Catalog server returned {} ({url})",
             response.status()
         ));
     }
@@ -94,11 +93,11 @@ async fn fetch_catalog(url: Option<String>) -> Result<Catalog, String> {
     let catalog: Catalog = response
         .json()
         .await
-        .map_err(|e| format!("Katalog cozumlenemedi: {e}"))?;
+        .map_err(|e| format!("Could not parse the catalog: {e}"))?;
 
     if catalog.schema_version != 1 {
         return Err(format!(
-            "Bu kurulum programi katalog surumu {}'i desteklemiyor. Guncel setup'i indirin.",
+            "This setup does not support catalog version {}. Download the latest setup.",
             catalog.schema_version
         ));
     }
@@ -106,16 +105,12 @@ async fn fetch_catalog(url: Option<String>) -> Result<Catalog, String> {
     Ok(catalog)
 }
 
-/// Secilen uygulamalari sirayla indirir, dogrular ve kurar.
+/// Downloads, verifies and installs the selected apps one after another.
 #[tauri::command]
-async fn install_apps(
-    window: tauri::Window,
-    apps: Vec<AppEntry>,
-    install_dir: Option<String>,
-) -> Result<Vec<String>, String> {
+async fn install_apps(window: tauri::Window, apps: Vec<AppEntry>) -> Result<Vec<String>, String> {
     let temp_dir = std::env::temp_dir().join("garam-setup");
     std::fs::create_dir_all(&temp_dir)
-        .map_err(|e| format!("Gecici klasor olusturulamadi: {e}"))?;
+        .map_err(|e| format!("Could not create the temp folder: {e}"))?;
 
     let mut installed = Vec::new();
 
@@ -128,7 +123,7 @@ async fn install_apps(
                 app_id: app.id.clone(),
                 phase: "downloading".into(),
                 ratio: 0.0,
-                message: format!("{} indiriliyor...", app.name),
+                message: format!("Downloading {}...", app.name),
             },
         );
 
@@ -140,16 +135,16 @@ async fn install_apps(
                 app_id: app.id.clone(),
                 phase: "verifying".into(),
                 ratio: -1.0,
-                message: "Dosya dogrulaniyor...".into(),
+                message: "Verifying download...".into(),
             },
         );
 
-        let actual = sha256_file(&target).map_err(|e| format!("Dogrulama okunamadi: {e}"))?;
+        let actual = sha256_file(&target).map_err(|e| format!("Could not read the file to verify it: {e}"))?;
         if !actual.eq_ignore_ascii_case(&app.installer.sha256) {
-            // Bozuk veya degistirilmis dosyayi CALISTIRMA.
+            // NEVER run a corrupted or tampered installer.
             let _ = std::fs::remove_file(&target);
             return Err(format!(
-                "{}: dosya dogrulanamadi. Indirme bozulmus olabilir; kurulum durduruldu.",
+                "{}: checksum did not match. The download may be corrupt; install stopped.",
                 app.name
             ));
         }
@@ -160,11 +155,11 @@ async fn install_apps(
                 app_id: app.id.clone(),
                 phase: "installing".into(),
                 ratio: -1.0,
-                message: format!("{} kuruluyor...", app.name),
+                message: format!("Installing {}...", app.name),
             },
         );
 
-        run_installer(&target, &app.installer.silent_args, install_dir.as_deref())
+        run_installer(&target, &app.installer.silent_args)
             .map_err(|e| format!("{}: {e}", app.name))?;
 
         let _ = std::fs::remove_file(&target);
@@ -175,7 +170,7 @@ async fn install_apps(
                 app_id: app.id.clone(),
                 phase: "done".into(),
                 ratio: 1.0,
-                message: format!("{} kuruldu", app.name),
+                message: format!("{} installed", app.name),
             },
         );
 
@@ -185,38 +180,38 @@ async fn install_apps(
     Ok(installed)
 }
 
-/// Dosyayi akitarak indirir ve her parcada ilerleme yayinlar.
+/// Streams the download to disk, emitting progress as chunks arrive.
 async fn download(window: &tauri::Window, app: &AppEntry, target: &Path) -> Result<(), String> {
     let response = reqwest::get(&app.installer.url)
         .await
-        .map_err(|e| format!("{}: baglanti kurulamadi ({e})", app.name))?;
+        .map_err(|e| format!("{}: could not connect ({e})", app.name))?;
 
     if !response.status().is_success() {
         return Err(format!(
-            "{}: sunucu {} dondu",
+            "{}: server returned {}",
             app.name,
             response.status()
         ));
     }
 
-    // Content-Length yoksa katalogdaki boyutu kullan; o da yoksa oransiz goster.
+    // Fall back to the catalog size when Content-Length is absent.
     let total = response.content_length().unwrap_or(app.size_bytes);
 
     let mut file = std::fs::File::create(target)
-        .map_err(|e| format!("{}: dosya olusturulamadi ({e})", app.name))?;
+        .map_err(|e| format!("{}: could not create the file ({e})", app.name))?;
 
     let mut downloaded: u64 = 0;
     let mut last_emit = 0u64;
     let mut stream = response.bytes_stream();
 
     while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| format!("{}: indirme kesildi ({e})", app.name))?;
+        let chunk = chunk.map_err(|e| format!("{}: download interrupted ({e})", app.name))?;
         file.write_all(&chunk)
-            .map_err(|e| format!("{}: diske yazilamadi ({e})", app.name))?;
+            .map_err(|e| format!("{}: could not write to disk ({e})", app.name))?;
 
         downloaded += chunk.len() as u64;
 
-        // Her parcada olay yayinlamak arayuzu bogar; ~1 MB'de bir yeter.
+        // Emitting on every chunk floods the UI; about once per MB is plenty.
         if downloaded - last_emit > 1_048_576 || downloaded == total {
             last_emit = downloaded;
             emit(
@@ -230,7 +225,7 @@ async fn download(window: &tauri::Window, app: &AppEntry, target: &Path) -> Resu
                         -1.0
                     },
                     message: format!(
-                        "{} indiriliyor  {:.1} / {:.1} MB",
+                        "Downloading {}  {:.1} / {:.1} MB",
                         app.name,
                         downloaded as f64 / 1_048_576.0,
                         total as f64 / 1_048_576.0
@@ -241,7 +236,7 @@ async fn download(window: &tauri::Window, app: &AppEntry, target: &Path) -> Resu
     }
 
     file.flush()
-        .map_err(|e| format!("{}: dosya kapatilamadi ({e})", app.name))?;
+        .map_err(|e| format!("{}: could not close the file ({e})", app.name))?;
 
     Ok(())
 }
@@ -253,46 +248,34 @@ fn sha256_file(path: &Path) -> std::io::Result<String> {
     Ok(format!("{:x}", hasher.finalize()))
 }
 
-/// NSIS kurulumunu sessiz calistirir ve bitmesini bekler.
-fn run_installer(path: &Path, silent_args: &[String], install_dir: Option<&str>) -> Result<(), String> {
+/// Runs the NSIS installer silently and waits for it to finish.
+///
+/// No install-directory override on purpose. Each app's installer already knows
+/// where it belongs, and they no longer agree: g-snap is per-MACHINE (it needs
+/// administrator to run at all, so it lives in Program Files) while the others
+/// are per-user. Forcing one path on all three would put a per-machine app in
+/// the local app data folder, which is the kind of thing that works until it
+/// does not.
+fn run_installer(path: &Path, silent_args: &[String]) -> Result<(), String> {
     let mut command = Command::new(path);
     command.args(silent_args);
 
-    // electron-builder NSIS: /D=<yol> TIRNAKSIZ ve EN SON argüman olmali.
-    if let Some(dir) = install_dir {
-        if !dir.trim().is_empty() {
-            command.arg(format!("/D={dir}"));
-        }
-    }
-
     let status = command
         .status()
-        .map_err(|e| format!("kurulum baslatilamadi ({e})"))?;
+        .map_err(|e| format!("could not start the installer ({e})"))?;
 
     match status.code() {
         Some(0) => Ok(()),
-        // NSIS 1223 = kullanici UAC istemini reddetti
-        Some(1223) => Err("kurulum kullanici tarafindan iptal edildi".into()),
-        Some(code) => Err(format!("kurulum {code} kodu ile basarisiz oldu")),
-        None => Err("kurulum beklenmedik sekilde sonlandi".into()),
+        // NSIS 1223 = the user declined the UAC prompt
+        Some(1223) => Err("the install was cancelled by the user".into()),
+        Some(code) => Err(format!("the installer failed with exit code {code}")),
+        None => Err("the installer terminated unexpectedly".into()),
     }
-}
-
-/// Varsayilan kurulum klasoru — arayuzde gosterilir.
-#[tauri::command]
-fn default_install_dir() -> String {
-    std::env::var("LOCALAPPDATA")
-        .map(|p| PathBuf::from(p).join("Programs").to_string_lossy().into_owned())
-        .unwrap_or_else(|_| String::from("C:\\Program Files"))
 }
 
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![
-            fetch_catalog,
-            install_apps,
-            default_install_dir
-        ])
+        .invoke_handler(tauri::generate_handler![fetch_catalog, install_apps])
         .run(tauri::generate_context!())
-        .expect("Tauri uygulamasi baslatilamadi");
+        .expect("failed to start the Tauri application");
 }

@@ -1,9 +1,9 @@
 /**
- * Garam Setup arayuzu.
+ * Garam Setup UI.
  *
- * Cerceve kullanmiyor — setup birkac MB kalmali. Gorsel dil @garam/theme
- * tokenlariyla ayni (styles.css icinde kopyalanmis), boylece kurulum programi
- * kurdugu uygulamalarla ayni gorunuyor.
+ * No framework — the setup has to stay a few MB. The visual language matches
+ * the @garam/theme tokens (copied into styles.css) so the installer looks like
+ * the apps it installs.
  */
 import { invoke } from '@tauri-apps/api/tauri'
 import { listen } from '@tauri-apps/api/event'
@@ -18,7 +18,7 @@ let installing = false
 boot()
 
 async function boot() {
-  render(viewLoading('Uygulama listesi aliniyor...'))
+  render(viewLoading('Fetching the app list...'))
 
   try {
     catalog = await invoke('fetch_catalog', { url: null })
@@ -29,7 +29,7 @@ async function boot() {
   }
 }
 
-// ── Gorunumler ─────────────────────────────────────────────────────────────
+// ── Views ──────────────────────────────────────────────────────────────────
 
 function viewLoading(text) {
   const el = node('div', 'screen')
@@ -39,10 +39,10 @@ function viewLoading(text) {
 
 function viewError(message, retry) {
   const el = node('div', 'screen')
-  el.append(node('h1', '', 'Bir sorun olustu'), node('p', 'error-text', message))
+  el.append(node('h1', '', 'Something went wrong'), node('p', 'error-text', message))
 
   const actions = node('div', 'actions')
-  const again = button('Yeniden dene', 'primary', retry)
+  const again = button('Try again', 'primary', retry)
   actions.append(again)
   el.append(actions)
   return el
@@ -51,8 +51,8 @@ function viewError(message, retry) {
 function viewPicker() {
   const el = node('div', 'screen screen--list')
 
-  el.append(node('h1', '', 'Garam uygulamalari'))
-  el.append(node('p', 'muted', 'Kurmak istediklerini sec. Sonradan tekrar calistirip digerlerini ekleyebilirsin.'))
+  el.append(node('h1', '', 'Garam apps'))
+  el.append(node('p', 'muted', 'Pick what you want to install. You can run this again later to add the rest.'))
 
   const list = node('div', 'list')
   for (const entry of catalog.apps) {
@@ -62,15 +62,15 @@ function viewPicker() {
 
   const footer = node('div', 'footer')
   const total = node('span', 'muted total')
-  const install = button('Kur', 'primary', () => startInstall())
+  const install = button('Install', 'primary', () => startInstall())
 
   const updateFooter = () => {
     const bytes = catalog.apps
       .filter((a) => selected.has(a.id))
       .reduce((sum, a) => sum + a.sizeBytes, 0)
     total.textContent = selected.size
-      ? `${selected.size} uygulama  ·  ${mb(bytes)} indirilecek`
-      : 'Hicbir sey secilmedi'
+      ? `${selected.size} app(s)  ·  ${mb(bytes)} to download`
+      : 'Nothing selected'
     install.disabled = selected.size === 0
   }
 
@@ -78,7 +78,7 @@ function viewPicker() {
   footer.append(total, install)
   el.append(footer)
 
-  // Ilk durumu yaz
+  // Paint the initial state
   queueMicrotask(updateFooter)
   return el
 }
@@ -106,9 +106,9 @@ function appRow(entry) {
 
 function viewProgress() {
   const el = node('div', 'screen')
-  el.append(node('h1', '', 'Kuruluyor'))
+  el.append(node('h1', '', 'Installing'))
 
-  const label = node('p', 'muted', 'Hazirlaniyor...')
+  const label = node('p', 'muted', 'Preparing...')
   const track = node('div', 'bar')
   const fill = node('div', 'bar__fill')
   track.append(fill)
@@ -124,16 +124,16 @@ function viewProgress() {
 function viewDone(installedNames) {
   const el = node('div', 'screen')
   el.append(node('div', 'tick', '✓'))
-  el.append(node('h1', '', 'Kurulum tamamlandi'))
+  el.append(node('h1', '', 'Installation complete'))
   el.append(node('p', 'muted', installedNames.join(', ')))
 
   const actions = node('div', 'actions')
-  actions.append(button('Kapat', 'primary', () => window.close()))
+  actions.append(button('Close', 'primary', () => window.close()))
   el.append(actions)
   return el
 }
 
-// ── Kurulum akisi ──────────────────────────────────────────────────────────
+// ── Install flow ───────────────────────────────────────────────────────────
 
 async function startInstall() {
   if (installing) return
@@ -149,7 +149,7 @@ async function startInstall() {
     const p = event.payload
     screen._parts.label.textContent = p.message
 
-    // Genel ilerleme: biten uygulamalar + suren uygulamanin orani
+    // Overall progress: completed apps plus the current app's own ratio
     const per = 1 / chosen.length
     const current = p.ratio >= 0 ? p.ratio * per : per * 0.5
     const ratio = Math.min(1, done.size * per + current)
@@ -162,7 +162,7 @@ async function startInstall() {
   })
 
   try {
-    const ids = await invoke('install_apps', { apps: chosen, installDir: null })
+    const ids = await invoke('install_apps', { apps: chosen })
     const names = catalog.apps.filter((a) => ids.includes(a.id)).map((a) => a.name)
     render(viewDone(names))
   } catch (err) {
@@ -173,7 +173,7 @@ async function startInstall() {
   }
 }
 
-// ── Kucuk yardimcilar ──────────────────────────────────────────────────────
+// ── Small helpers ──────────────────────────────────────────────────────────
 
 function render(el) {
   app.replaceChildren(el)

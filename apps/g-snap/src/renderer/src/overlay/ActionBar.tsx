@@ -1,5 +1,6 @@
 import { Copy, Download, Save, X } from 'lucide-react'
 import { Button, Toolbar, ToolbarSeparator } from '@garam/ui'
+import { t } from '@shared/i18n/index.js'
 
 export interface ActionBarProps {
   style: React.CSSProperties
@@ -10,7 +11,7 @@ export interface ActionBarProps {
   onCancel: () => void
 }
 
-/** Secimin altinda duran yatay eylem cubugu. */
+/** Horizontal action bar shown below the selection. */
 export function ActionBar({ style, busy, onCopy, onSave, onSaveAs, onCancel }: ActionBarProps) {
   return (
     <div className="snap-actionbar" style={style} onMouseDown={(e) => e.stopPropagation()}>
@@ -23,7 +24,7 @@ export function ActionBar({ style, busy, onCopy, onSave, onSaveAs, onCancel }: A
           onClick={onCopy}
           data-tooltip="Ctrl+C"
         >
-          Kopyala
+          {t('action.copy')}
         </Button>
         <Button
           size="sm"
@@ -33,7 +34,7 @@ export function ActionBar({ style, busy, onCopy, onSave, onSaveAs, onCancel }: A
           onClick={onSave}
           data-tooltip="Ctrl+S"
         >
-          Kaydet
+          {t('action.save')}
         </Button>
         <Button
           size="sm"
@@ -43,7 +44,7 @@ export function ActionBar({ style, busy, onCopy, onSave, onSaveAs, onCancel }: A
           onClick={onSaveAs}
           data-tooltip="Ctrl+Shift+S"
         >
-          Farkli kaydet
+          {t('action.saveAs')}
         </Button>
 
         <ToolbarSeparator />
@@ -56,7 +57,7 @@ export function ActionBar({ style, busy, onCopy, onSave, onSaveAs, onCancel }: A
           onClick={onCancel}
           data-tooltip="Esc"
         >
-          Iptal
+          {t('action.cancel')}
         </Button>
       </Toolbar>
     </div>

@@ -4,16 +4,16 @@ import { app } from 'electron'
 import { readJson, writeJson } from '../fs/atomicWrite.js'
 
 export interface SettingsStoreOptions<T extends object> {
-  /** userData altindaki dosya adi. Varsayilan: settings.json */
+  /** File name under userData. Default: settings.json */
   fileName?: string
-  /** Hicbir sey kayitli degilken kullanilacak degerler. */
+  /** Values used when nothing has been persisted yet. */
   defaults: T
   /**
-   * Eski surumden yeni surume tasima. `version` diske yazilan surum numarasi,
-   * `raw` ham JSON. Yeni sekilde nesne dondurun.
+   * Migration from an older schema. `version` is the version stored on disk,
+   * `raw` is the raw JSON. Return an object in the new shape.
    */
   migrate?: (raw: Record<string, unknown>, version: number) => Partial<T>
-  /** Guncel sema surumu. Artirilinca migrate calisir. */
+  /** Current schema version. Bumping it triggers `migrate`. */
   version?: number
 }
 
@@ -23,14 +23,14 @@ interface Persisted<T> {
 }
 
 /**
- * Uygulama ayarlarini userData altinda tek bir JSON dosyasinda tutar.
+ * Keeps app settings in a single JSON file under userData.
  *
- * - Yazma atomik (yarim yazilmis dosya olusmaz)
- * - Yazmalar 200 ms geciktirilerek toplanir (ayar penceresinde her tusa basista
- *   diske gitmemek icin)
- * - `change` olayi degisen anahtarlarla yayinlanir
+ * - Writes are atomic; a half-written file can never appear
+ * - Writes are debounced by 200 ms, so typing in the settings window does
+ *   not hit the disk on every keystroke
+ * - A `change` event is emitted with the list of changed keys
  *
- * Kullanim:
+ * Usage:
  *   const store = new SettingsStore({ defaults: DEFAULTS, version: 1 })
  *   await store.load()
  *   store.get('hotkey')
@@ -59,7 +59,7 @@ export class SettingsStore<T extends object> extends EventEmitter {
     return this.filePath
   }
 
-  /** Diskten okur. Uygulama acilisinda bir kez cagrilmali. */
+  /** Reads from disk. Call once during app startup. */
   async load(): Promise<T> {
     const raw = await readJson<Partial<Persisted<T>> & Record<string, unknown>>(this.filePath, {})
 
@@ -72,7 +72,7 @@ export class SettingsStore<T extends object> extends EventEmitter {
       }
     }
 
-    // Bilinmeyen anahtarlari at, eksikleri varsayilandan tamamla.
+    // Drop unknown keys and fill missing ones from the defaults.
     this.values = { ...this.defaults }
     for (const key of Object.keys(this.defaults) as Array<keyof T>) {
       if (stored[key] !== undefined) this.values[key] = stored[key] as T[keyof T]
@@ -89,7 +89,7 @@ export class SettingsStore<T extends object> extends EventEmitter {
     return this.values[key]
   }
 
-  /** Bir veya birden fazla ayari gunceller ve degisiklikleri yayinlar. */
+  /** Updates one or more settings and emits the change. */
   set(patch: Partial<T>): void {
     const changed: Array<keyof T> = []
     for (const key of Object.keys(patch) as Array<keyof T>) {
@@ -106,7 +106,7 @@ export class SettingsStore<T extends object> extends EventEmitter {
     this.scheduleFlush()
   }
 
-  /** Tum ayarlari fabrika degerlerine dondurur. */
+  /** Restores every setting to its factory value. */
   reset(): void {
     this.values = { ...this.defaults }
     this.emit('change', this.values, Object.keys(this.defaults) as Array<keyof T>)
@@ -121,13 +121,13 @@ export class SettingsStore<T extends object> extends EventEmitter {
     }, 200)
   }
 
-  /** Bekleyen yazmayi hemen diske indirir (uygulama kapanirken cagirin). */
+  /** Flushes any pending write to disk immediately; call this on shutdown. */
   async flush(): Promise<void> {
     if (this.flushTimer) {
       clearTimeout(this.flushTimer)
       this.flushTimer = null
     }
-    // Ust uste gelen flush cagrilarini tek yazmaya indirge.
+    // Collapse overlapping flush calls into a single write.
     if (this.pendingFlush) return this.pendingFlush
 
     const payload: Persisted<T> = { __version: this.version, values: this.values }

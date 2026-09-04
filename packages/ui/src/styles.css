@@ -50,16 +50,18 @@
 }
 
 .g-btn--primary {
-  background: var(--accent);
+  background: var(--accent-gradient);
   color: var(--text-on-accent);
 }
 
+/* Brightness rather than another colour: a gradient cannot be swapped for a
+   flat hover colour without the fill visibly collapsing. */
 .g-btn--primary:hover:not(:disabled) {
-  background: var(--accent-hover);
+  filter: brightness(1.12);
 }
 
 .g-btn--primary:active:not(:disabled) {
-  background: var(--accent-active);
+  filter: brightness(0.9);
 }
 
 .g-btn--default {
@@ -300,9 +302,32 @@
 /* ── Panel ────────────────────────────────────────────────────────────── */
 
 .g-panel {
+  position: relative;
+  overflow: hidden;
   background: var(--bg-surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+/*
+ * A hairline of the accent along the top edge, fading out to the right.
+ * It costs nothing and gives a flat card a direction and a light source, which
+ * is most of what separates a modern panel from a bordered rectangle.
+ */
+.g-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    var(--accent-from) 0%,
+    var(--accent-to) 45%,
+    transparent 100%
+  );
+  opacity: 0.85;
+  pointer-events: none;
 }
 
 .g-panel__head {
@@ -310,13 +335,14 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--sp-3);
-  padding: var(--sp-3) var(--sp-4);
-  border-bottom: 1px solid var(--border);
+  padding: var(--sp-4) var(--sp-4) var(--sp-3);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .g-panel__title {
   font-size: var(--fs-lg);
-  font-weight: var(--fw-semibold);
+  font-weight: var(--fw-bold);
+  letter-spacing: -0.2px;
   color: var(--text);
 }
 
@@ -334,7 +360,7 @@
 }
 
 .g-panel__body {
-  padding: var(--sp-2) var(--sp-4);
+  padding: var(--sp-2) var(--sp-4) var(--sp-3);
 }
 
 /* ── Field ────────────────────────────────────────────────────────────── */
@@ -385,13 +411,15 @@
 .g-input,
 .g-select {
   height: var(--control-h);
-  padding: 0 var(--sp-2);
+  padding: 0 var(--sp-3);
   background: var(--bg-inset);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   color: var(--text);
   font-size: var(--fs-md);
-  transition: border-color var(--t-fast);
+  transition:
+    border-color var(--t-fast),
+    box-shadow var(--t-fast);
   user-select: text;
 }
 
@@ -409,7 +437,7 @@
 .g-select:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  box-shadow: 0 0 0 3px var(--accent-ring);
 }
 
 .g-input.is-invalid {
@@ -436,7 +464,7 @@
 }
 
 .g-switch.is-on {
-  background: var(--accent);
+  background: var(--accent-gradient);
   border-color: var(--accent);
 }
 
@@ -480,8 +508,8 @@
   border-radius: var(--radius-full);
   background: linear-gradient(
     to right,
-    var(--accent) 0%,
-    var(--accent) var(--g-slider-pct, 0%),
+    var(--accent-from) 0%,
+    var(--accent-to) var(--g-slider-pct, 0%),
     var(--border) var(--g-slider-pct, 0%),
     var(--border) 100%
   );
@@ -548,14 +576,29 @@
 
 .g-colorpicker__popover {
   position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
   z-index: var(--z-dropdown);
   padding: var(--sp-2);
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg);
+}
+
+/* Placement is decided at open time from the room actually available. */
+.g-colorpicker__popover--bottom {
+  top: calc(100% + 6px);
+}
+
+.g-colorpicker__popover--top {
+  bottom: calc(100% + 6px);
+}
+
+.g-colorpicker__popover--start {
+  left: 0;
+}
+
+.g-colorpicker__popover--end {
+  right: 0;
 }
 
 .g-colorpicker__grid {

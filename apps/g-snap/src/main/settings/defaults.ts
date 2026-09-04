@@ -2,16 +2,22 @@ import { app } from 'electron'
 import { join } from 'node:path'
 import { palette } from '@garam/theme'
 import type { SnapSettings } from '@shared/types'
+import { DEFAULT_LOCALE } from '@shared/i18n/index.js'
 
 /**
- * Varsayilan ayarlar. Buradaki anahtar kumesi ayni zamanda gecerli ayar
- * semasini tanimlar — SettingsStore bilinmeyen anahtarlari diskten okurken atar.
+ * Default settings. This key set also defines the valid schema — SettingsStore
+ * drops any unknown key it reads from disk.
  */
 export function createDefaults(): SnapSettings {
   return {
-    // PrintScreen'i global olarak yakalamak Windows'ta calisir; baska bir
-    // uygulama (OneDrive, GeForce Experience) kapmissa kayit basarisiz olur ve
-    // Ayarlar penceresinde uyari gosterilir.
+    // English by default, not the system locale: the app ships in nine
+    // languages but a wrong guess is worse than a predictable default, and the
+    // picker is the first row in Settings.
+    language: DEFAULT_LOCALE,
+
+    // Capturing PrintScreen globally works on Windows, but if another app
+    // (OneDrive, GeForce Experience) already grabbed it the registration
+    // fails and Settings shows a warning.
     hotkeyRegion: 'PrintScreen',
     hotkeyFullscreen: 'Ctrl+PrintScreen',
 
@@ -23,8 +29,7 @@ export function createDefaults(): SnapSettings {
     copyToClipboard: true,
     askWhereToSave: true,
 
-    showMagnifier: true,
-    launchAtStartup: false,
+    launchAtStartup: true,
 
     defaultColor: palette.accent,
     defaultThickness: 3,

@@ -10,6 +10,5 @@ Thumbs.db
 logs/
 .env
 .env.local
-installer/bootstrapper/target/
+installer/bootstrapper/src-tauri/target/
 resources/ffmpeg/
-catalog.json

@@ -1,3 +1,4 @@
+import { t } from '@shared/i18n/index.js'
 import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron'
 import type { Logger, SettingsStore } from '@garam/core'
 import { CHANNELS, EVENTS, type CommitRequest, type CommitResult, type SnapSettings } from '@shared/types'
@@ -11,13 +12,13 @@ export interface IpcDeps {
   saver: SaveService
   hotkeys: HotkeyManager
   log: Logger
-  /** Ayarlar degistiginde kisayollari yeniden kaydetmek icin. */
+  /** Used to re-register the shortcuts when the settings change. */
   onSettingsChanged: (changed: Array<keyof SnapSettings>) => void
 }
 
 /**
- * Renderer'in ulasabildigi tum ayricalikli islemler burada tanimli.
- * Baska hicbir yerde ipcMain.handle cagrilmiyor — saldiri yuzeyi tek dosyada.
+ * Every privileged operation the renderer can reach is declared here.
+ * Nothing else calls ipcMain.handle, so the attack surface stays in one file.
  */
 export function registerIpc(deps: IpcDeps): void {
   const { settings, overlay, saver, hotkeys, log } = deps
@@ -29,7 +30,7 @@ export function registerIpc(deps: IpcDeps): void {
   })
 
   ipcMain.handle(CHANNELS.OVERLAY_CANCEL, () => {
-    overlay.close()
+    overlay.close('cancelled by user')
   })
 
   ipcMain.handle(CHANNELS.OVERLAY_COMMIT, async (_event, request: CommitRequest): Promise<CommitResult> => {
@@ -37,16 +38,16 @@ export function registerIpc(deps: IpcDeps): void {
 
     const result = await saver.commit(request, parent, (fn) => overlay.withModal(fn))
 
-    // Kaydetme iptal edildiyse overlay acik kalsin — kullanici yeniden deneyebilsin.
+    // If the save was cancelled, keep the overlay open so the user can retry.
     const cancelled = !result.ok && !result.error
     if (!cancelled) {
-      overlay.close()
+      overlay.close(`committed (${request.action})`)
     }
 
     if (result.ok) {
       notify(deps, {
         tone: 'success',
-        text: result.filePath ? 'Kaydedildi' : 'Panoya kopyalandi',
+        text: result.filePath ? t('notice.saved') : t('notice.copied'),
         path: result.filePath,
       })
     } else if (result.error) {
@@ -56,7 +57,7 @@ export function registerIpc(deps: IpcDeps): void {
     return result
   })
 
-  // ── Ayarlar ─────────────────────────────────────────────────────────────
+  // ── Settings ────────────────────────────────────────────────────────────
 
   ipcMain.handle(CHANNELS.SETTINGS_GET, () => ({
     values: settings.all(),
@@ -83,7 +84,7 @@ export function registerIpc(deps: IpcDeps): void {
   ipcMain.handle(CHANNELS.SETTINGS_PICK_DIR, async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     const options: Electron.OpenDialogOptions = {
-      title: 'Kayit klasoru sec',
+      title: t('dialog.chooseSaveFolder'),
       defaultPath: settings.get('saveDirectory'),
       properties: ['openDirectory', 'createDirectory'],
     }
@@ -96,7 +97,7 @@ export function registerIpc(deps: IpcDeps): void {
     return result.filePaths[0]
   })
 
-  // ── Uygulama ────────────────────────────────────────────────────────────
+  // ── App ─────────────────────────────────────────────────────────────────
 
   ipcMain.handle(CHANNELS.APP_OPEN_LOGS, () => {
     log.openDirectory()
@@ -105,7 +106,7 @@ export function registerIpc(deps: IpcDeps): void {
   ipcMain.handle(CHANNELS.APP_OPEN_PATH, async (_event, target: string) => {
     if (typeof target !== 'string' || !target) return
 
-    // Dosya ise Explorer'da secili ac, klasor ise dogrudan ac.
+    // Reveal files in Explorer; open folders directly.
     if (/\.(png|jpe?g)$/i.test(target)) {
       shell.showItemInFolder(target)
     } else {
@@ -115,7 +116,7 @@ export function registerIpc(deps: IpcDeps): void {
 
   ipcMain.handle(CHANNELS.APP_VERSION, () => app.getVersion())
 
-  // ── Pencere kontrolleri (cercevesiz ayarlar penceresi) ──────────────────
+  // ── Window controls (frameless settings window) ─────────────────────────
 
   ipcMain.handle(CHANNELS.WINDOW_MINIMIZE, (event) => {
     BrowserWindow.fromWebContents(event.sender)?.minimize()
@@ -126,10 +127,10 @@ export function registerIpc(deps: IpcDeps): void {
   })
 }
 
-/** Acik olan tum pencerelere bildirim yayinlar. */
+/** Broadcasts a toast to every open window. */
 function notify(deps: IpcDeps, message: { tone: 'success' | 'error' | 'info'; text: string; path?: string }): void {
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) win.webContents.send(EVENTS.TOAST, message)
   }
-  deps.log.debug(`Bildirim: [${message.tone}] ${message.text}`)
+  deps.log.debug(`Toast: [${message.tone}] ${message.text}`)
 }

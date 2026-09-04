@@ -1,11 +1,11 @@
 /**
- * @garam/theme/dom — yalnizca renderer'da kullanilabilen yardimcilar.
+ * @garam/theme/dom — helpers that only work in a renderer process.
  *
- * Ana surecte DOM yoktur; bu yuzden bu dosya index.ts'ten AYRI tutuluyor.
- * index.ts'i ana surec de import ediyor (palette sabitleri icin).
+ * The main process has no DOM, which is why this is kept SEPARATE from
+ * index.ts — the main process imports index.ts for the palette constants.
  */
 
-/** Calisma zamaninda bir CSS degiskenini oku. */
+/** Read a CSS variable at runtime. */
 export function cssVar(name: string, el: Element = document.documentElement): string {
   return getComputedStyle(el).getPropertyValue(name).trim()
 }

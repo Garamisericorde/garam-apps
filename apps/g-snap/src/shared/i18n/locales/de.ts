@@ -1,0 +1,97 @@
+import type { Messages } from '../index.js'
+
+export const de: Messages = {
+  'tray.tooltip': 'G-Snap — Bildschirmaufnahme',
+  'tray.selectRegion': 'Bereich auswählen',
+  'tray.fullScreen': 'Vollbild in die Zwischenablage',
+  'tray.openSaveFolder': 'Speicherordner öffnen',
+  'tray.settings': 'Einstellungen...',
+  'tray.version': 'Version {version}',
+  'tray.quit': 'Beenden',
+
+  'dialog.saveScreenshot': 'Screenshot speichern',
+  'dialog.chooseSaveFolder': 'Speicherordner wählen',
+  'notice.saved': 'Gespeichert',
+  'notice.copied': 'In die Zwischenablage kopiert',
+  'notice.show': 'Anzeigen',
+  'error.buildImage': 'Das Bild konnte nicht erstellt werden',
+  'error.writeFile': 'Die Datei konnte nicht geschrieben werden. Prüfen Sie die Ordnerberechtigungen.',
+
+  'action.copy': 'Kopieren',
+  'action.save': 'Speichern',
+  'action.saveAs': 'Speichern unter',
+  'action.cancel': 'Abbrechen',
+
+  'tool.none': 'Verschieben / Größe ändern',
+  'tool.pen': 'Stift',
+  'tool.marker': 'Textmarker',
+  'tool.line': 'Linie',
+  'tool.arrow': 'Pfeil',
+  'tool.rect': 'Rechteck',
+  'tool.ellipse': 'Ellipse',
+  'tool.text': 'Text',
+  'tool.color': 'Farbe',
+  'tool.size': 'Größe',
+  'tool.undo': 'Rückgängig',
+  'tool.redo': 'Wiederholen',
+  'tool.clear': 'Markierungen löschen',
+  'overlay.ctrlHeld': 'Strg gedrückt · wird beim Loslassen kopiert',
+
+  'settings.title': 'G-Snap Einstellungen',
+  'settings.tagline': 'Bildschirmaufnahme und Markierung',
+  'settings.shortcutConflict': 'Tastenkürzel-Konflikt',
+
+  'settings.shortcuts': 'Tastenkürzel',
+  'settings.shortcutsDesc': 'Klicken Sie in ein Feld und drücken Sie die neue Tastenkombination.',
+  'settings.selectRegion': 'Bereich auswählen',
+  'settings.selectRegionHint': 'Öffnet die Oberfläche, um einen Bereich zu wählen und zu markieren.',
+  'settings.fullScreen': 'Vollbild',
+  'settings.fullScreenHint':
+    'Kopiert den aktiven Bildschirm direkt in die Zwischenablage. Ohne Oberfläche, ohne Datei.',
+  'settings.shortcutTaken':
+    'Dieses Tastenkürzel konnte nicht registriert werden — eine andere Anwendung belegt es möglicherweise.',
+
+  'settings.saving': 'Speichern',
+  'settings.saveFolder': 'Speicherordner',
+  'settings.browse': 'Durchsuchen',
+  'settings.fileNameTemplate': 'Dateinamen-Vorlage',
+  'settings.fileNameHint': 'Felder: {fields}',
+  'settings.imageFormat': 'Bildformat',
+  'settings.formatPng': 'PNG (verlustfrei)',
+  'settings.formatJpg': 'JPEG (kleinere Datei)',
+  'settings.jpegQuality': 'JPEG-Qualität',
+
+  'settings.behaviour': 'Verhalten',
+  'settings.copyOnConfirm': 'In die Zwischenablage kopieren, wenn eine Auswahl bestätigt wird',
+  'settings.askWhereToSave': 'Nach dem Speicherort fragen',
+  'settings.askWhereToSaveHint': 'Wenn aus, landen Dateien direkt im Speicherordner.',
+  'settings.launchAtStartup': 'Mit Windows starten',
+  'settings.launchAtStartupHint':
+    'Wird als geplante Aufgabe eingetragen, weil Windows eine Anwendung mit Administratorrechten nicht über den üblichen Autostart ausführt.',
+  'settings.language': 'Sprache',
+  'settings.languageHint': 'Gilt überall: Infobereich-Menü, Oberfläche und dieses Fenster.',
+
+  'settings.annotationDefaults': 'Markierungs-Standardwerte',
+  'settings.penColor': 'Stiftfarbe',
+  'settings.thickness': 'Stärke',
+
+  'settings.overlayShortcuts': 'Tastenkürzel der Oberfläche',
+  'settings.overlayShortcutsDesc':
+    'Alles, was die Aufnahmeoberfläche versteht. Es steht hier statt auf der Oberfläche selbst — die soll den Bildschirm zeigen und sonst nichts.',
+  'shortcut.drag': 'Einen Bereich auswählen',
+  'shortcut.ctrlDrag': 'Beim Loslassen kopieren und schließen',
+  'shortcut.shiftDrag': 'Rechteck und Ellipse bleiben quadratisch; Linie und Pfeil rasten auf 45° ein',
+  'shortcut.altDrag': 'Ein Quadrat oder Kreis, der vom Startpunkt aus wächst',
+  'shortcut.esc': 'Auswahl aufheben / Oberfläche schließen',
+  'shortcut.enter': 'In die Zwischenablage kopieren',
+  'shortcut.ctrlC': 'In die Zwischenablage kopieren',
+  'shortcut.ctrlS': 'Speichern',
+  'shortcut.ctrlShiftS': 'Speichern unter',
+  'shortcut.ctrlA': 'Den ganzen Bildschirm auswählen',
+  'shortcut.ctrlZ': 'Rückgängig',
+  'shortcut.tools': 'Werkzeug wählen (Zeiger, Stift, Textmarker, Linie, Pfeil, Rechteck, Ellipse, Text)',
+
+  'settings.about': 'Über',
+  'settings.openLogs': 'Protokolle öffnen',
+  'settings.restoreDefaults': 'Standardwerte wiederherstellen',
+}

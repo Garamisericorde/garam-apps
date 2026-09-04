@@ -1,6 +1,6 @@
 import { cx } from '../cx'
 
-/** Klavye kisayolunu gorsel tuslar halinde gosterir: Ctrl+Shift+S */
+/** Renders a keyboard shortcut as individual key caps: Ctrl+Shift+S */
 export function Kbd({ keys, className }: { keys: string; className?: string }) {
   const parts = keys
     .split('+')

@@ -1,0 +1,97 @@
+import type { Messages } from '../index.js'
+
+export const ru: Messages = {
+  'tray.tooltip': 'G-Snap — снимок экрана',
+  'tray.selectRegion': 'Выбрать область',
+  'tray.fullScreen': 'Весь экран в буфер обмена',
+  'tray.openSaveFolder': 'Открыть папку сохранения',
+  'tray.settings': 'Настройки...',
+  'tray.version': 'Версия {version}',
+  'tray.quit': 'Выход',
+
+  'dialog.saveScreenshot': 'Сохранить снимок',
+  'dialog.chooseSaveFolder': 'Выберите папку сохранения',
+  'notice.saved': 'Сохранено',
+  'notice.copied': 'Скопировано в буфер обмена',
+  'notice.show': 'Показать',
+  'error.buildImage': 'Не удалось создать изображение',
+  'error.writeFile': 'Не удалось записать файл. Проверьте права доступа к папке.',
+
+  'action.copy': 'Копировать',
+  'action.save': 'Сохранить',
+  'action.saveAs': 'Сохранить как',
+  'action.cancel': 'Отмена',
+
+  'tool.none': 'Переместить / изменить размер',
+  'tool.pen': 'Перо',
+  'tool.marker': 'Маркер',
+  'tool.line': 'Линия',
+  'tool.arrow': 'Стрелка',
+  'tool.rect': 'Прямоугольник',
+  'tool.ellipse': 'Эллипс',
+  'tool.text': 'Текст',
+  'tool.color': 'Цвет',
+  'tool.size': 'Размер',
+  'tool.undo': 'Отменить',
+  'tool.redo': 'Повторить',
+  'tool.clear': 'Очистить пометки',
+  'overlay.ctrlHeld': 'Ctrl зажат · будет скопировано при отпускании',
+
+  'settings.title': 'Настройки G-Snap',
+  'settings.tagline': 'Снимки экрана и пометки',
+  'settings.shortcutConflict': 'Конфликт сочетания клавиш',
+
+  'settings.shortcuts': 'Сочетания клавиш',
+  'settings.shortcutsDesc': 'Щёлкните по полю и нажмите новое сочетание.',
+  'settings.selectRegion': 'Выбрать область',
+  'settings.selectRegionHint': 'Открывает слой, чтобы выбрать область и сделать пометки.',
+  'settings.fullScreen': 'Весь экран',
+  'settings.fullScreenHint':
+    'Копирует активный экран прямо в буфер обмена. Без слоя, без файла.',
+  'settings.shortcutTaken':
+    'Не удалось зарегистрировать это сочетание — возможно, его занимает другое приложение.',
+
+  'settings.saving': 'Сохранение',
+  'settings.saveFolder': 'Папка сохранения',
+  'settings.browse': 'Обзор',
+  'settings.fileNameTemplate': 'Шаблон имени файла',
+  'settings.fileNameHint': 'Поля: {fields}',
+  'settings.imageFormat': 'Формат изображения',
+  'settings.formatPng': 'PNG (без потерь)',
+  'settings.formatJpg': 'JPEG (меньший файл)',
+  'settings.jpegQuality': 'Качество JPEG',
+
+  'settings.behaviour': 'Поведение',
+  'settings.copyOnConfirm': 'Копировать в буфер обмена при подтверждении выделения',
+  'settings.askWhereToSave': 'Спрашивать, куда сохранять',
+  'settings.askWhereToSaveHint': 'Когда выключено, файлы идут сразу в папку сохранения.',
+  'settings.launchAtStartup': 'Запускать вместе с Windows',
+  'settings.launchAtStartupHint':
+    'Регистрируется как задача планировщика, потому что Windows не запускает приложение с правами администратора из обычного списка автозагрузки.',
+  'settings.language': 'Язык',
+  'settings.languageHint': 'Действует везде: меню в трее, слой и это окно.',
+
+  'settings.annotationDefaults': 'Параметры пометок по умолчанию',
+  'settings.penColor': 'Цвет пера',
+  'settings.thickness': 'Толщина',
+
+  'settings.overlayShortcuts': 'Сочетания клавиш слоя',
+  'settings.overlayShortcutsDesc':
+    'Всё, что понимает слой захвата. Список здесь, а не на самом слое — слой должен показывать экран и ничего больше.',
+  'shortcut.drag': 'Выделить область',
+  'shortcut.ctrlDrag': 'Скопировать в буфер обмена и закрыть при отпускании',
+  'shortcut.shiftDrag': 'Прямоугольник и эллипс остаются квадратными; линия и стрелка встают под 45°',
+  'shortcut.altDrag': 'Квадрат или круг, растущий из точки, с которой вы начали',
+  'shortcut.esc': 'Снять выделение / закрыть слой',
+  'shortcut.enter': 'Скопировать в буфер обмена',
+  'shortcut.ctrlC': 'Скопировать в буфер обмена',
+  'shortcut.ctrlS': 'Сохранить',
+  'shortcut.ctrlShiftS': 'Сохранить как',
+  'shortcut.ctrlA': 'Выделить весь экран',
+  'shortcut.ctrlZ': 'Отменить',
+  'shortcut.tools': 'Выбрать инструмент (курсор, перо, маркер, линия, стрелка, прямоугольник, эллипс, текст)',
+
+  'settings.about': 'О программе',
+  'settings.openLogs': 'Открыть журналы',
+  'settings.restoreDefaults': 'Сбросить настройки',
+}

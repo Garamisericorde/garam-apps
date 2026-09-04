@@ -1,6 +1,7 @@
-/* G-Snap ayarlar penceresi */
+/* G-Snap settings window */
 
 .snap-settings {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -10,13 +11,81 @@
 .snap-settings__body {
   flex: 1;
   overflow-y: auto;
-  padding: var(--sp-4);
+  padding: 0 var(--sp-5) var(--sp-6);
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
 }
 
-/* Kayit klasoru satiri: uzun yol + "Sec" dugmesi */
+/* ── Hero ─────────────────────────────────────────────────────────────── */
+
+.snap-settings__hero {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-5) 0 var(--sp-3);
+}
+
+.snap-settings__logo {
+  width: 56px;
+  height: 56px;
+  flex: 0 0 auto;
+  /*
+   * The icon is the generated one, not a second drawing of the same mark. The
+   * ring seats it on the page and the glow ties it to the accent; both are
+   * derived from tokens, so they follow the ramp if it ever moves.
+   */
+  box-shadow:
+    0 0 0 1px var(--border),
+    0 12px 30px -14px var(--accent);
+  border-radius: var(--radius-lg);
+}
+
+.snap-settings__wordmark {
+  font-size: var(--fs-3xl);
+  font-weight: var(--fw-bold);
+  letter-spacing: -1px;
+  line-height: 1.1;
+  /*
+   * Painted with the accent ramp itself. NOT --accent-gradient: that ramp is
+   * tuned for filling a button, and across six characters it barely leaves the
+   * blue end. Spending the whole ramp over the width of the word is what makes
+   * the wordmark read as blue-to-purple instead of as one blue.
+   */
+  background: linear-gradient(100deg, var(--accent-from) 0%, var(--accent-to) 92%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  width: fit-content;
+}
+
+.snap-settings__tagline {
+  margin-top: 3px;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.snap-settings__tagline b {
+  color: var(--text-muted);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The ramp, spent and fading out — a rule that belongs to the accent. */
+.snap-settings__rule {
+  height: 4px;
+  flex: 0 0 auto;
+  margin-bottom: var(--sp-2);
+  border-radius: var(--radius-full);
+  background: linear-gradient(
+    90deg,
+    var(--accent-from) 0%,
+    var(--accent-to) 42%,
+    transparent 100%
+  );
+}
+
+/* Save-folder row: a long path plus the Browse button */
 .snap-settings__path {
   display: flex;
   align-items: center;
@@ -28,7 +97,7 @@
   flex: 1;
   min-width: 0;
   font-size: var(--fs-sm);
-  /* Uzun yollarda sonu (dosya adini) goster */
+  /* For long paths, keep the tail (the folder name) visible */
   direction: rtl;
   text-align: left;
 }
@@ -44,11 +113,6 @@
   cursor: pointer;
 }
 
-.snap-settings__version {
-  font-variant-numeric: tabular-nums;
-  color: var(--text-muted);
-}
-
 .snap-settings__about-actions {
   display: flex;
   flex-wrap: wrap;
@@ -56,21 +120,25 @@
   padding: var(--sp-3) 0;
 }
 
-/* ── Kisayol listesi ──────────────────────────────────────────────────── */
+/* ── Shortcut list ────────────────────────────────────────────────────── */
 
 .snap-settings__shortcuts {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2);
-  padding: var(--sp-2) 0;
+  padding: var(--sp-1) 0;
 }
 
 .snap-settings__shortcut {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
+  padding: var(--sp-2) 0;
   font-size: var(--fs-sm);
   color: var(--text-muted);
+}
+
+.snap-settings__shortcut + .snap-settings__shortcut {
+  border-top: 1px solid var(--border-subtle);
 }
 
 .snap-settings__shortcut .g-kbd {
@@ -78,7 +146,7 @@
   min-width: 120px;
 }
 
-/* ── Bildirim ─────────────────────────────────────────────────────────── */
+/* ── Toast ────────────────────────────────────────────────────────────── */
 
 .snap-toast {
   position: fixed;

@@ -6,7 +6,7 @@ export function Spinner({ size = 16, className }: { size?: number; className?: s
       className={cx('g-spinner', className)}
       style={{ width: size, height: size }}
       role="status"
-      aria-label="Yukleniyor"
+      aria-label="Loading"
     />
   )
 }

@@ -3,13 +3,13 @@ import { cx } from '../cx'
 
 export interface FieldProps {
   label: string
-  /** Etiketin altindaki aciklama satiri. */
+  /** Helper line shown under the label. */
   hint?: string
-  /** Dogrulama hatasi; verilirse hint yerine kirmizi gosterilir. */
+  /** Validation error; when set it replaces the hint and renders in red. */
   error?: string
   htmlFor?: string
   children: ReactNode
-  /** Kontrolu etiketin sagina koy (satir duzeni) — ayar listeleri icin. */
+  /** Put the control to the right of the label (row layout) — for settings lists. */
   inline?: boolean
   className?: string
 }

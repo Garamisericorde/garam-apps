@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Input } from '@garam/ui'
 
-/** Electron accelerator adina cevrilmesi gereken tuslar. */
+/** Keys that need translating into Electron accelerator names. */
 const KEY_ALIASES: Record<string, string> = {
   ' ': 'Space',
   ArrowUp: 'Up',
@@ -18,14 +18,14 @@ const MODIFIER_KEYS = new Set(['Control', 'Shift', 'Alt', 'Meta'])
 export interface HotkeyInputProps {
   value: string
   onChange: (accelerator: string) => void
-  /** Kisayol isletim sistemi tarafindan kabul edilmediyse uyari goster. */
+  /** Show a warning when the OS refused to register the shortcut. */
   invalid?: boolean
   id?: string
 }
 
 /**
- * Tiklaninca tus kombinasyonu bekler ve Electron accelerator metnine cevirir.
- * Yalnizca degistirici tuslara basmak kabul edilmez.
+ * Waits for a key combination once clicked and converts it into an Electron
+ * accelerator string. Pressing modifiers alone is not accepted.
  */
 export function HotkeyInput({ value, onChange, invalid, id }: HotkeyInputProps) {
   const [capturing, setCapturing] = useState(false)
@@ -42,7 +42,7 @@ export function HotkeyInput({ value, onChange, invalid, id }: HotkeyInputProps) 
         return
       }
 
-      // Sadece degistirici tusa basildiysa beklemeye devam et.
+      // Keep waiting while only modifier keys are held.
       if (MODIFIER_KEYS.has(e.key)) return
 
       const parts: string[] = []
@@ -68,8 +68,8 @@ export function HotkeyInput({ value, onChange, invalid, id }: HotkeyInputProps) 
       readOnly
       invalid={invalid}
       className="snap-hotkey-input"
-      value={capturing ? 'Tuslara basin...' : value}
-      placeholder="Atanmadi"
+      value={capturing ? 'Press keys...' : value}
+      placeholder="Not set"
       onFocus={() => setCapturing(true)}
       onBlur={() => setCapturing(false)}
       onClick={() => setCapturing(true)}

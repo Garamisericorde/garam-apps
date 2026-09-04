@@ -1,0 +1,97 @@
+import type { Messages } from '../index.js'
+
+export const ja: Messages = {
+  'tray.tooltip': 'G-Snap — 画面キャプチャ',
+  'tray.selectRegion': '範囲を選択',
+  'tray.fullScreen': '全画面をクリップボードへ',
+  'tray.openSaveFolder': '保存フォルダーを開く',
+  'tray.settings': '設定...',
+  'tray.version': 'バージョン {version}',
+  'tray.quit': '終了',
+
+  'dialog.saveScreenshot': 'スクリーンショットを保存',
+  'dialog.chooseSaveFolder': '保存フォルダーを選択',
+  'notice.saved': '保存しました',
+  'notice.copied': 'クリップボードにコピーしました',
+  'notice.show': '表示',
+  'error.buildImage': '画像を生成できませんでした',
+  'error.writeFile': 'ファイルを書き込めませんでした。フォルダーの権限を確認してください。',
+
+  'action.copy': 'コピー',
+  'action.save': '保存',
+  'action.saveAs': '名前を付けて保存',
+  'action.cancel': 'キャンセル',
+
+  'tool.none': '移動 / サイズ変更',
+  'tool.pen': 'ペン',
+  'tool.marker': 'マーカー',
+  'tool.line': '直線',
+  'tool.arrow': '矢印',
+  'tool.rect': '四角形',
+  'tool.ellipse': '楕円',
+  'tool.text': 'テキスト',
+  'tool.color': '色',
+  'tool.size': 'サイズ',
+  'tool.undo': '元に戻す',
+  'tool.redo': 'やり直す',
+  'tool.clear': '注釈を消去',
+  'overlay.ctrlHeld': 'Ctrl を押しています · 離すとクリップボードにコピーします',
+
+  'settings.title': 'G-Snap 設定',
+  'settings.tagline': '画面キャプチャと注釈',
+  'settings.shortcutConflict': 'ショートカットの競合',
+
+  'settings.shortcuts': 'ショートカット',
+  'settings.shortcutsDesc': 'ショートカット欄をクリックし、新しいキーの組み合わせを押してください。',
+  'settings.selectRegion': '範囲を選択',
+  'settings.selectRegionHint': 'オーバーレイを開き、範囲を選んで注釈を付けられます。',
+  'settings.fullScreen': '全画面',
+  'settings.fullScreenHint':
+    'アクティブなディスプレイをそのままクリップボードへコピーします。オーバーレイもファイルもありません。',
+  'settings.shortcutTaken':
+    'このショートカットを登録できませんでした — 他のアプリが使用している可能性があります。',
+
+  'settings.saving': '保存',
+  'settings.saveFolder': '保存フォルダー',
+  'settings.browse': '参照',
+  'settings.fileNameTemplate': 'ファイル名のテンプレート',
+  'settings.fileNameHint': 'フィールド: {fields}',
+  'settings.imageFormat': '画像形式',
+  'settings.formatPng': 'PNG（可逆）',
+  'settings.formatJpg': 'JPEG（ファイルが小さい）',
+  'settings.jpegQuality': 'JPEG 品質',
+
+  'settings.behaviour': '動作',
+  'settings.copyOnConfirm': '選択を確定したらクリップボードにコピーする',
+  'settings.askWhereToSave': '保存先を尋ねる',
+  'settings.askWhereToSaveHint': 'オフのときは、保存フォルダーへ直接保存します。',
+  'settings.launchAtStartup': 'Windows と一緒に起動',
+  'settings.launchAtStartupHint':
+    'タスク スケジューラに登録します。Windows は通常のスタートアップ一覧から管理者権限のアプリを自動起動しないためです。',
+  'settings.language': '言語',
+  'settings.languageHint': 'すべてに適用されます：トレイ メニュー、オーバーレイ、この画面。',
+
+  'settings.annotationDefaults': '注釈の既定値',
+  'settings.penColor': 'ペンの色',
+  'settings.thickness': '太さ',
+
+  'settings.overlayShortcuts': 'オーバーレイのショートカット',
+  'settings.overlayShortcutsDesc':
+    'キャプチャ オーバーレイが受け付ける操作の一覧です。オーバーレイ自体には描かずここに置いています。オーバーレイは画面を見せるためのもので、それ以外は何もしません。',
+  'shortcut.drag': '範囲を選択する',
+  'shortcut.ctrlDrag': '離した瞬間にクリップボードへコピーして閉じる',
+  'shortcut.shiftDrag': '四角形と楕円は正方形のまま、直線と矢印は 45° に吸着',
+  'shortcut.altDrag': '始点を中心に広がる正方形または円',
+  'shortcut.esc': '選択を解除 / オーバーレイを閉じる',
+  'shortcut.enter': 'クリップボードにコピー',
+  'shortcut.ctrlC': 'クリップボードにコピー',
+  'shortcut.ctrlS': '保存',
+  'shortcut.ctrlShiftS': '名前を付けて保存',
+  'shortcut.ctrlA': '画面全体を選択',
+  'shortcut.ctrlZ': '元に戻す',
+  'shortcut.tools': 'ツールを選ぶ（カーソル、ペン、マーカー、直線、矢印、四角形、楕円、テキスト）',
+
+  'settings.about': '情報',
+  'settings.openLogs': 'ログを開く',
+  'settings.restoreDefaults': '既定値に戻す',
+}

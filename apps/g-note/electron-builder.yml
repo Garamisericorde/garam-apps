@@ -1,0 +1,35 @@
+appId: com.garam.g-note
+productName: G-Note
+copyright: Copyright (c) 2026 Garam
+
+directories:
+  output: release
+  buildResources: resources
+
+files:
+  - out/**/*
+  - package.json
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: resources/icons/icon.ico
+  artifactName: ${productName}-${version}-setup.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: G-Note
+  # The bootstrapper installs silently with the /S flag.
+  deleteAppDataOnUninstall: false
+
+publish:
+  provider: github
+  owner: YOUR_GITHUB_USERNAME
+  repo: garam-apps
+  releaseType: release

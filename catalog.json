@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "publishedAt": "2026-09-04T07:46:48.525Z",
+  "apps": [
+    {
+      "id": "g-snap",
+      "name": "G-Snap",
+      "description": "Screen capture, annotation and quick sharing",
+      "version": "0.1.0",
+      "sizeBytes": 83639416,
+      "default": true,
+      "requires": [
+        "webview2:false"
+      ],
+      "installer": {
+        "fileName": "G-Snap-0.1.0-setup.exe",
+        "url": "https://github.com/Garamisericorde/garam-apps/releases/download/g-snap-v0.1.0/G-Snap-0.1.0-setup.exe",
+        "sha256": "9ebf4807b526bdf0d40a45c9e016bdfed31e58251abb15a3c0fba0c3b7f6ce8b",
+        "silentArgs": [
+          "/S"
+        ]
+      }
+    },
+    {
+      "id": "g-recorder",
+      "name": "G-Recorder",
+      "description": "Instant replay recording and simple video trimming",
+      "version": "0.1.0",
+      "sizeBytes": 83096053,
+      "default": false,
+      "requires": [],
+      "installer": {
+        "fileName": "G-Recorder-0.1.0-setup.exe",
+        "url": "https://github.com/Garamisericorde/garam-apps/releases/download/g-recorder-v0.1.0/G-Recorder-0.1.0-setup.exe",
+        "sha256": "5adae67ac3f908a660e8d65562ee0399998ab76fb46037db1c9b9de2a3b5d432",
+        "silentArgs": [
+          "/S"
+        ]
+      }
+    },
+    {
+      "id": "g-note",
+      "name": "G-Note",
+      "description": "Rich text, sticky notes and freehand drawing",
+      "version": "1.0.0",
+      "sizeBytes": 84068349,
+      "default": false,
+      "requires": [],
+      "installer": {
+        "fileName": "G-Note-1.0.0-setup.exe",
+        "url": "https://github.com/Garamisericorde/garam-apps/releases/download/g-note-v1.0.0/G-Note-1.0.0-setup.exe",
+        "sha256": "3e22f33ada65fb9f4a9dc3e59af9891e4a91603c2b630b26e7ff5ebb67da8139",
+        "silentArgs": [
+          "/S"
+        ]
+      }
+    }
+  ]
+}

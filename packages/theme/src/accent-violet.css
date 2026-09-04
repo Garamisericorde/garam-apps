@@ -1,0 +1,49 @@
+/*
+ * @garam/theme — violet accent
+ *
+ * An alternate accent set, imported AFTER tokens.css by an app that wants it
+ * (currently g-snap). Colour still lives only in this package: an app never
+ * writes hex, it just picks which of these files it imports.
+ *
+ * The surfaces move with the accent. Leaving them navy while the accent turned
+ * blue-violet made the two read as different blues fighting each other.
+ */
+
+:root {
+  /* ── Accent: blue -> purple ─────────────────────────────────────────── */
+  --accent-from: #2563eb;
+  --accent-to: #9333ea;
+  --accent-gradient: linear-gradient(135deg, var(--accent-from), var(--accent-to));
+
+  /* The midpoint of the ramp, for everything that needs one flat colour. */
+  --accent: #5c4bea;
+  --accent-hover: #7767f0;
+  --accent-active: #4a3ad4;
+  --accent-soft: rgba(92, 75, 234, 0.18);
+  --accent-ring: rgba(92, 75, 234, 0.42);
+
+  /*
+   * ── Surfaces ────────────────────────────────────────────────────────────
+   * A near-black base with the panels layered ABOVE it, rather than a mid navy
+   * with everything floating on top. The window then has a floor, and each
+   * step up is small enough to read as depth instead of as a colour change.
+   * The violet is a tint measured in single digits, not a hue of its own —
+   * saturated surfaces fight an accent that is already saturated.
+   */
+  --bg: #0c0c14;
+  --bg-surface: #12121e;
+  --bg-elevated: #191926;
+  --bg-hover: #1f1f30;
+  --bg-active: #2a2a46;
+  --bg-inset: rgba(0, 0, 0, 0.32);
+
+  /* ── Lines ──────────────────────────────────────────────────────────── */
+  --border: #232338;
+  --border-strong: #33334f;
+  --border-subtle: rgba(255, 255, 255, 0.05);
+
+  /* ── Text: three steps, so hierarchy does not need size or weight ────── */
+  --text: #e9eaf5;
+  --text-muted: #a9abc2;
+  --text-faint: #6f7288;
+}

@@ -15,7 +15,7 @@ export interface SegmentedProps<T extends string> {
   className?: string
 }
 
-/** Birbirini disliyan az sayida secenek icin sekme benzeri kontrol. */
+/** Tab-like control for a small set of mutually exclusive options. */
 export function Segmented<T extends string>({
   value,
   onChange,

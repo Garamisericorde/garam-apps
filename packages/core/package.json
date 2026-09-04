@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Garam uygulamalari icin ortak ana-surec altyapisi (ayarlar, log, dosya, IPC)",
+  "description": "Shared main-process infrastructure for the Garam apps (settings, logging, files, IPC)",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {

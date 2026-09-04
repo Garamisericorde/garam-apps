@@ -1,4 +1,4 @@
-/** Piksel/DIP dikdortgeni. */
+/** A rectangle in pixels or DIP. */
 export interface Rect {
   x: number
   y: number
@@ -6,103 +6,146 @@ export interface Rect {
   height: number
 }
 
-/** Tek bir ekranin dondurulmus goruntusu. */
+/** One display's frozen screenshot. */
+import type { LocaleId } from './i18n/index.js'
+
 export interface DisplayShot {
   displayId: number
-  /** Tum ekranlarin birlesik uzayindaki konum ve boyut (DIP). */
+  /** Position and size within the combined display space (DIP). */
   bounds: Rect
   /**
-   * Isletim sisteminin bildirdigi DPI olcegi (1 = %100, 1.5 = %150).
-   * Bilgi amacli; olcek hesaplarinda `nativeSize` kullanilmali.
+   * The DPI scale the OS reports (1 = 100%, 1.5 = 150%).
+   * Informational only; scaling maths should use `nativeSize`.
    */
   scaleFactor: number
   /**
-   * Yakalanan goruntunun GERCEK piksel boyutu.
+   * The REAL pixel size of the captured image.
    *
-   * Kesirli DPI olceginde `bounds * scaleFactor` tam sayi vermez ve gercek
-   * piksel sayisindan 1 piksel sapabilir. Buyutec ve disa aktarma bu sapmayi
-   * bulaniklik olarak gosterdigi icin olcek her yerde
-   * `nativeSize.width / bounds.width` uzerinden hesaplanir.
+   * At a fractional DPI scale `bounds * scaleFactor` is not a whole number and
+   * can miss the true pixel count by one. The export surfaces that drift as
+   * blur, so every scale is derived from
+   * `nativeSize.width / bounds.width` instead.
    */
   nativeSize: { width: number; height: number }
-  /** PNG data URL. */
-  dataUrl: string
+  /**
+   * Raw BGRA pixels, straight from `nativeImage.toBitmap()`.
+   *
+   * NOT a PNG data URL: encoding one costs ~137 ms and decoding it in the
+   * renderer costs more again, all on the hotkey path. `toBitmap()` takes 4 ms
+   * and the renderer can hand the buffer to `createImageBitmap` directly.
+   */
+  pixels: Uint8Array
 }
 
-/** Bir ekran goruntusunun DIP -> gercek piksel olcegi. */
+/** DIP -> real pixel scale for a captured display. */
 export function pixelScaleOf(shot: Pick<DisplayShot, 'bounds' | 'nativeSize'>): number {
   return shot.bounds.width > 0 ? shot.nativeSize.width / shot.bounds.width : 1
 }
 
-/** Overlay penceresine gonderilen acilis verisi. */
+/** Payload sent to the overlay window when it opens. */
 export interface OverlayInit {
   shots: DisplayShot[]
-  /** Tum ekranlari kapsayan dikdortgen (DIP) — overlay penceresinin bounds'u. */
+  /** Rectangle covering every display (DIP) — the overlay window's bounds. */
   union: Rect
-  /** Varsayilan kalem rengi ve kalinligi (ayarlardan). */
+  /**
+   * Where the mouse is right now, in the overlay window's own coordinates
+   * (DIP relative to `union`, which is what CSS pixels are here).
+   *
+   * The overlay window is reused between captures, so its React state survives
+   * a close. Without this the readout reappears at the position it held when
+   * the previous capture ended and only jumps to the truth on the first mouse
+   * move — the browser cannot know where the pointer is until an event arrives.
+   */
+  cursor: { x: number; y: number }
+  /** Default pen color and thickness, taken from the settings. */
   defaults: {
     color: string
     thickness: number
-    showMagnifier: boolean
   }
+  /**
+   * Interface language.
+   *
+   * The overlay never reads the settings itself — it is built on the hotkey
+   * path and a round trip there would be a round trip too many — so the
+   * language rides along with the frame.
+   */
+  language: LocaleId
+  /**
+   * A dry run sent at startup: render it, then throw it away. Nothing is shown
+   * and `overlay:ready` is not called. See OverlayWindow.warmRenderer().
+   */
+  warmup?: boolean
 }
 
 export type ImageFormat = 'png' | 'jpg'
 
-/** Secim tamamlaninca overlay'in ana surece gonderdigi istek. */
+/** Request the overlay sends to the main process once a selection is confirmed. */
 export interface CommitRequest {
-  /** Kirpilmis ve anotasyonlari islenmis goruntu. */
+  /** The cropped image with annotations already rendered in. */
   dataUrl: string
-  /** Kaynak secim dikdortgeni (DIP) — gunluk ve dosya adi icin. */
+  /** The source selection rectangle (DIP) — used for logging and file names. */
   rect: Rect
   action: 'copy' | 'save' | 'save-as'
 }
 
 export interface CommitResult {
   ok: boolean
-  /** Kaydedildiyse dosya yolu. */
+  /** Path to the file, when one was written. */
   filePath?: string
-  /** Basarisizsa kullaniciya gosterilecek mesaj. */
+  /** Message to show the user on failure. */
   error?: string
 }
 
 export interface SnapSettings {
-  /** Bolge secimi kisayolu. */
+  /** Interface language. Defaults to English rather than the system locale. */
+  language: LocaleId
+
+  /** Shortcut for the region selection overlay. */
   hotkeyRegion: string
-  /** Tum ekrani dogrudan yakalama kisayolu. */
+  /** Shortcut that copies the whole screen straight to the clipboard. */
   hotkeyFullscreen: string
 
-  /** Otomatik kaydetme klasoru. */
+  /** Folder screenshots are saved into. */
   saveDirectory: string
-  /** Dosya adi sablonu — {YYYY} {MM} {DD} {HH} {mm} {ss} {app} {n} */
+  /** File name template — {YYYY} {MM} {DD} {HH} {mm} {ss} {app} {n} */
   fileNameTemplate: string
   imageFormat: ImageFormat
-  /** JPEG kalitesi (1-100), yalnizca imageFormat 'jpg' iken kullanilir. */
+  /** JPEG quality (1-100); only used when imageFormat is 'jpg'. */
   jpegQuality: number
 
-  /** Bolge secimini onaylayinca otomatik panoya kopyala. */
+  /** Copy to the clipboard automatically when a selection is confirmed. */
   copyToClipboard: boolean
-  /** Kaydederken her seferinde konum sor. */
+  /** Ask where to save every time. */
   askWhereToSave: boolean
 
-  /** Secim sirasinda piksel buyutec goster. */
-  showMagnifier: boolean
-  /** Windows ile birlikte baslat. */
+  /** Start with Windows. */
   launchAtStartup: boolean
 
-  /** Anotasyon varsayilanlari. */
+  /** Annotation defaults. */
   defaultColor: string
   defaultThickness: number
 }
 
-/** Ana surecin renderer'a yayinladigi olaylar. */
+/** Events the main process broadcasts to renderers. */
 export const EVENTS = {
   OVERLAY_INIT: 'overlay:init',
+  /**
+   * The overlay has been put away — drop everything on screen.
+   *
+   * The window is kept alive at opacity 0 and goes on painting, so whatever was
+   * last drawn stays in its surface until the next frame lands. On the next
+   * capture that surface can be presented for an instant before the new one is
+   * ready, and the user sees the PREVIOUS session: the old readout position,
+   * the old frozen screenshot. Clearing on close makes the resting state plain
+   * black, which is the same black the overlay already uses to hide its first
+   * unpainted frame — so a stale present shows nothing instead of something wrong.
+   */
+  OVERLAY_CLEAR: 'overlay:clear',
   SETTINGS_CHANGED: 'settings:changed',
   TOAST: 'app:toast',
 } as const
 
-/** Renderer'in ana surece yaptigi invoke cagrilari. */
+/** Invoke channels the renderer calls on the main process. */
 export const CHANNELS = {
   OVERLAY_READY: 'overlay:ready',
   OVERLAY_CANCEL: 'overlay:cancel',
@@ -119,7 +162,7 @@ export const CHANNELS = {
   WINDOW_CLOSE: 'window:close',
 } as const
 
-/** Kisayol kaydi sonucunu ayar penceresine bildirmek icin. */
+/** Reports shortcut registration results back to the settings window. */
 export interface HotkeyStatus {
   hotkeyRegion: boolean
   hotkeyFullscreen: boolean
@@ -128,6 +171,6 @@ export interface HotkeyStatus {
 export interface ToastMessage {
   tone: 'success' | 'error' | 'info'
   text: string
-  /** Varsa, tiklaninca acilacak dosya/klasor yolu. */
+  /** When set, clicking the toast opens this file or folder. */
   path?: string
 }

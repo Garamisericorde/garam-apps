@@ -1,19 +1,30 @@
-/* G-Snap overlay — tam ekran secim ve anotasyon yuzeyi */
+/* G-Snap overlay — full-screen selection and annotation surface */
+
+/*
+ * Black, not transparent. A hidden Chromium window produces no frames, so the
+ * very first show displays whatever the page background is before the first
+ * paint lands — and the default is WHITE, which flashed across the screen.
+ * Black matches the dim layer, so the same gap is invisible.
+ */
+html,
+body,
+#root {
+  background: #000;
+}
 
 .overlay-body {
-  background: transparent;
   overflow: hidden;
   cursor: crosshair;
+}
+
+.snap-overlay--loading {
+  background: #000;
 }
 
 .snap-overlay {
   position: fixed;
   inset: 0;
   overflow: hidden;
-}
-
-.snap-overlay--loading {
-  background: transparent;
 }
 
 .snap-overlay.is-crosshair {
@@ -24,7 +35,7 @@
   cursor: crosshair;
 }
 
-/* ── Secim yok iken gorunen ipucu ─────────────────────────────────────── */
+/* ── Hint shown while nothing is selected ─────────────────────────────── */
 
 .snap-hint {
   position: absolute;
@@ -41,7 +52,7 @@
   z-index: var(--z-overlay);
 }
 
-/* Ctrl basili: birakinca dogrudan panoya kopyalanacak */
+/* Ctrl held: releasing will copy straight to the clipboard */
 .snap-hint--copy {
   border-color: var(--accent);
   color: var(--text);
@@ -60,57 +71,7 @@
   color: var(--text);
 }
 
-/* ── Buyutec ──────────────────────────────────────────────────────────── */
-
-.snap-magnifier {
-  position: absolute;
-  z-index: var(--z-overlay);
-  pointer-events: none;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-lg);
-  overflow: hidden;
-}
-
-.snap-magnifier__canvas {
-  display: block;
-  image-rendering: pixelated;
-}
-
-.snap-magnifier__info {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-2);
-  padding: 3px var(--sp-2);
-  border-top: 1px solid var(--border);
-  font-size: var(--fs-xs);
-  font-variant-numeric: tabular-nums;
-}
-
-.snap-magnifier__coords {
-  color: var(--text-muted);
-}
-
-.snap-magnifier__color {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--text);
-  font-family: var(--font-mono);
-}
-
-.snap-magnifier__color::before {
-  content: '';
-  width: 9px;
-  height: 9px;
-  border-radius: 2px;
-  border: 1px solid var(--border-strong);
-  background: var(--swatch, transparent);
-}
-
-/* ── Arac cubuklari ───────────────────────────────────────────────────── */
+/* ── Toolbars ─────────────────────────────────────────────────────────── */
 
 .snap-toolpanel,
 .snap-actionbar {
@@ -119,32 +80,91 @@
   cursor: default;
 }
 
-.snap-toolpanel__thickness {
+/*
+ * The toolbars float over a frozen screenshot, where a 1px border can vanish
+ * against a busy image. A band of the accent ramp along the top edge gives them
+ * a hard edge that reads on any background.
+ *
+ * A pseudo-element rather than `border-image`, which would square off the
+ * toolbar's rounded corners.
+ */
+.snap-toolpanel::before,
+.snap-actionbar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent-gradient);
+  border-radius: var(--radius) var(--radius) 0 0;
+  pointer-events: none;
+}
+
+/* ── Per-tool size flyout ─────────────────────────────────────────────── */
+
+.snap-tool {
+  position: relative;
   display: flex;
-  flex-direction: column;
+}
+
+/*
+ * Opens beside the button of the tool it belongs to, so it is obvious WHOSE
+ * size is being changed. The panel flips sides depending on where the selection
+ * sits, so the flyout has both directions.
+ */
+.snap-toolsize {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: var(--z-dropdown);
+  display: flex;
   align-items: center;
-  gap: 2px;
-  padding: var(--sp-1) 0;
-  width: 100%;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-3) var(--sp-1) var(--sp-1);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-lg);
+  white-space: nowrap;
 }
 
-.snap-toolpanel__slider {
-  width: 30px;
+.snap-toolsize--right {
+  left: calc(100% + 10px);
 }
 
-/* Dikey cubukta kaydiriciyi dikey cevir */
-.snap-toolpanel__slider .g-slider__input {
-  min-width: 0;
-  width: 30px;
+.snap-toolsize--left {
+  right: calc(100% + 10px);
 }
 
-.snap-toolpanel__thickness-value {
+/* Fixed box: the dot inside it grows, the flyout does not resize under the cursor. */
+.snap-toolsize__dot {
+  flex: 0 0 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.snap-toolsize__preview {
+  border-radius: var(--radius-full);
+  /* A ring, so a dark stroke colour is still visible on a dark panel. */
+  box-shadow: 0 0 0 1px var(--border-strong);
+}
+
+.snap-toolsize__slider {
+  width: 96px;
+}
+
+.snap-toolsize__value {
+  min-width: 20px;
   font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
   color: var(--text-muted);
+  text-align: right;
 }
 
-/* ── Metin girisi ─────────────────────────────────────────────────────── */
+/* ── Text input ───────────────────────────────────────────────────────── */
 
 .snap-textinput {
   position: absolute;
@@ -165,7 +185,7 @@
   user-select: text;
 }
 
-/* ── Bildirim ─────────────────────────────────────────────────────────── */
+/* ── Toast ────────────────────────────────────────────────────────────── */
 
 .snap-toast {
   position: fixed;
@@ -213,4 +233,21 @@
     opacity: 1;
     transform: translateX(-50%) translateY(0);
   }
+}
+
+/* ── Cursor position ──────────────────────────────────────────────────── */
+
+.snap-coords {
+  position: absolute;
+  z-index: var(--z-overlay);
+  padding: 2px var(--sp-2);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
 }

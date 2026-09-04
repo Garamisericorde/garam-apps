@@ -1,29 +1,29 @@
 import { join } from 'node:path'
 import { app } from 'electron'
 
-/** %APPDATA%/<uygulama> — ayarlar, gunlukler, onbellek buraya. */
+/** %APPDATA%/<app> — settings, logs and cache live here. */
 export function userDataDir(...segments: string[]): string {
   return join(app.getPath('userData'), ...segments)
 }
 
-/** Kullanicinin Resimler klasoru — ekran goruntusu varsayilani. */
+/** The user's Pictures folder — default target for screenshots. */
 export function picturesDir(...segments: string[]): string {
   return join(app.getPath('pictures'), ...segments)
 }
 
-/** Kullanicinin Videolar klasoru — kayit varsayilani. */
+/** The user's Videos folder — default target for recordings. */
 export function videosDir(...segments: string[]): string {
   return join(app.getPath('videos'), ...segments)
 }
 
-/** Kullanicinin Belgeler klasoru — not varsayilani. */
+/** The user's Documents folder — default target for notes. */
 export function documentsDir(...segments: string[]): string {
   return join(app.getPath('documents'), ...segments)
 }
 
 /**
- * Paketlenmis uygulamada `resources/` altindaki dosyalara, gelistirmede proje
- * kokundeki `resources/` klasorune isaret eder.
+ * Points at `resources/` inside the packaged app, or the project's own
+ * `resources/` folder during development.
  */
 export function resourcePath(...segments: string[]): string {
   const base = app.isPackaged ? process.resourcesPath : join(app.getAppPath(), 'resources')
@@ -31,10 +31,10 @@ export function resourcePath(...segments: string[]): string {
 }
 
 /**
- * Sablondan dosya adi uretir.
+ * Builds a file name from a template.
  *
- * Desteklenen alanlar: {YYYY} {MM} {DD} {HH} {mm} {ss} {app} {n}
- * Ornek: "g-snap_{YYYY}-{MM}-{DD}_{HH}{mm}{ss}" -> "g-snap_2026-08-25_174233"
+ * Supported fields: {YYYY} {MM} {DD} {HH} {mm} {ss} {app} {n}
+ * Example: "g-snap_{YYYY}-{MM}-{DD}_{HH}{mm}{ss}" -> "g-snap_2026-08-25_174233"
  */
 export function formatFileName(
   template: string,
@@ -58,31 +58,31 @@ export function formatFileName(
   return sanitizeFileName(named)
 }
 
-/** Windows'ta ayrilmis dosya adlari — uzantiyla birlikte bile kullanilamaz. */
+/** Names reserved by Windows — unusable even with an extension appended. */
 const RESERVED_NAMES = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i
 
-/** Windows dosya adinda yasak olan karakterler. */
+/** Characters Windows forbids in file names. */
 const ILLEGAL_CHARS = /[<>:"/\\|?*]/g
 
 /**
- * Dosya adini Windows icin guvenli hale getirir.
- * Bosluklar korunur; yalnizca yasak ve kontrol karakterleri temizlenir.
+ * Makes a file name safe for Windows.
+ * Spaces are preserved; only forbidden and control characters are removed.
  */
 export function sanitizeFileName(name: string): string {
   let safe = Array.from(name)
-    // Kontrol karakterlerini (0x00-0x1F ve 0x7F) tamamen at
+    // Drop control characters (0x00-0x1F and 0x7F) entirely
     .filter((ch) => {
       const code = ch.codePointAt(0) ?? 0
       return code > 0x1f && code !== 0x7f
     })
     .join('')
     .replace(ILLEGAL_CHARS, '-')
-    // Windows sondaki nokta ve boslugu sessizce kirpar; biz acikca yapalim
+    // Windows silently trims trailing dots and spaces; do it explicitly
     .replace(/[. ]+$/, '')
     .trim()
     .slice(0, 200)
 
-  if (!safe) safe = 'dosya'
+  if (!safe) safe = 'file'
   if (RESERVED_NAMES.test(safe)) safe = `_${safe}`
   return safe
 }

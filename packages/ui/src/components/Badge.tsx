@@ -10,7 +10,7 @@ export function Badge({
   className,
 }: {
   tone?: BadgeTone
-  /** Solda nabiz atan nokta goster (canli durum gostergesi). */
+  /** Show a pulsing dot on the left (live status indicator). */
   dot?: boolean
   children: ReactNode
   className?: string

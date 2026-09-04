@@ -1,4 +1,4 @@
-/* @garam/theme — gövde stilleri, kaydirma cubugu, secim, tooltip */
+/* @garam/theme — body styles, scrollbar, selection, tooltip */
 
 body {
   background: var(--bg);
@@ -17,7 +17,7 @@ body {
   color: var(--text);
 }
 
-/* ── Kaydirma cubugu ──────────────────────────────────────────────────── */
+/* ── Scrollbar ──────────────────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -43,7 +43,7 @@ body {
   background: transparent;
 }
 
-/* ── CSS-only tooltip: herhangi bir ogeye data-tooltip="..." ekle ─────── */
+/* ── CSS-only tooltip: add data-tooltip="..." to any element ─────────── */
 [data-tooltip] {
   position: relative;
 }
@@ -104,7 +104,7 @@ body {
   transform: translateY(-50%) translateX(0);
 }
 
-/* ── Cerceve siz pencerelerde suruklenebilir alan ─────────────────────── */
+/* ── Draggable region for frameless windows ─────────────────────── */
 .g-drag {
   -webkit-app-region: drag;
 }

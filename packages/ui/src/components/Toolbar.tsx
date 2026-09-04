@@ -2,9 +2,9 @@ import type { HTMLAttributes, ReactNode } from 'react'
 import { cx } from '../cx'
 
 export interface ToolbarProps extends HTMLAttributes<HTMLDivElement> {
-  /** Dikey yerlesim (or. g-snap anotasyon cubugu). */
+  /** Vertical layout (e.g. the g-snap annotation bar). */
   vertical?: boolean
-  /** Yuzen cubuk gorunumu: golge + kenarlik + yuvarlak kose. */
+  /** Floating bar look: shadow, border and rounded corners. */
   floating?: boolean
 }
 
@@ -22,9 +22,9 @@ export function Toolbar({ vertical, floating, className, children, ...rest }: To
 }
 
 export interface ToolbarGroupProps extends HTMLAttributes<HTMLDivElement> {
-  /** Grubun ustunde gosterilen kucuk buyuk-harf etiket. */
+  /** Small uppercase label shown above the group. */
   label?: string
-  /** Oyuk zeminli kutu icinde grupla. */
+  /** Group inside an inset, recessed box. */
   inset?: boolean
 }
 
@@ -47,7 +47,7 @@ export function ToolbarSeparator({ vertical }: { vertical?: boolean }) {
   return <div className={cx('g-toolbar__sep', vertical && 'g-toolbar__sep--vertical')} role="separator" />
 }
 
-/** Kalan bosluğu doldurur; sonrasindaki ogeleri saga iter. */
+/** Fills the remaining space, pushing later items to the right. */
 export function ToolbarSpacer() {
   return <div className="g-toolbar__spacer" />
 }

@@ -3,13 +3,13 @@ import { cx } from '../cx'
 
 export interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   icon: ReactNode
-  /** Erisilebilirlik etiketi; ayni zamanda tooltip metni olur. */
+  /** Accessibility label; also used as the tooltip text. */
   label: string
   size?: 'sm' | 'md' | 'lg'
   variant?: 'default' | 'ghost' | 'danger'
   active?: boolean
   tooltipSide?: 'top' | 'bottom' | 'left' | 'right'
-  /** Tooltip'i kapat (or. zaten metin gosteren yerlerde). */
+  /** Disable the tooltip (e.g. where a label is already visible). */
   noTooltip?: boolean
 }
 

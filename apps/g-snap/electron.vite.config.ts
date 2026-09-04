@@ -3,9 +3,9 @@ import react from '@vitejs/plugin-react'
 import { resolve } from 'node:path'
 
 /**
- * @garam/* paketleri derlenmemis TypeScript kaynagi olarak tuketiliyor.
- * Bu yuzden externalize edilmemeleri gerekiyor — aksi halde paketlenmis
- * uygulamada `require('@garam/core')` calisma zamaninda bulunamaz.
+ * The @garam/* packages are consumed as uncompiled TypeScript source, so they
+ * must NOT be externalized — otherwise `require('@garam/core')` cannot be
+ * resolved at runtime in the packaged app.
  */
 const GARAM_PACKAGES = ['@garam/core', '@garam/theme', '@garam/ui']
 
@@ -37,7 +37,7 @@ export default defineConfig({
     plugins: [react()],
     build: {
       rollupOptions: {
-        // Iki ayri pencere: saydam tam ekran overlay ve normal ayarlar penceresi.
+        // Two separate windows: the full-screen overlay and the settings window.
         input: {
           overlay: resolve(__dirname, 'src/renderer/overlay.html'),
           settings: resolve(__dirname, 'src/renderer/settings.html'),

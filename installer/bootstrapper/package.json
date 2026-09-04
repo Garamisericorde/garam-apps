@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Garam uygulamalari icin kucuk indirici kurulum programi",
+  "description": "Small downloader-style installer for the Garam apps",
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build",

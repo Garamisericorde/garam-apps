@@ -1,75 +1,102 @@
-# garam-apps — monorepo kurallari
+# garam-apps — monorepo rules
 
-Uc Electron uygulamasi ortak bir tasarim sistemi ve altyapi uzerinde duruyor.
-Uygulamaya ozel kurallar icin ayrica `apps/<uygulama>/CLAUDE.md` dosyasina bak.
+Three Electron apps sitting on a shared design system and shared infrastructure.
+For app-specific rules see `apps/<app>/CLAUDE.md` as well.
 
-## Degismezler
+## Language
 
-- **Renkler tek yerden gelir:** `packages/theme/src/tokens.css`.
-  Uygulama kaynaklarinda ham hex YAZILMAZ, `var(--...)` kullanilir.
-  Konva/canvas icin JS aynasi `packages/theme/src/index.ts` — ikisi birlikte guncellenir.
-- **Ortak bilesenler `@garam/ui`'dedir.** Bir dugme/alan/panel iki uygulamada
-  gerekiyorsa uygulamaya degil pakete yazilir.
-- **`@garam/*` paketleri derlenmez.** TypeScript kaynagi olarak tuketilir;
-  `dist` uretilmez. Bu yuzden her uygulamanin electron-vite yapilandirmasinda
-  `externalizeDepsPlugin({ exclude: [...] })` ile disarilanmamalari SART.
-- **electron-vite yapilandirma dosyasinin adi `electron.vite.config.ts`**
-  (nokta, tire degil) — aksi halde sessizce yok sayilir.
-- **`@garam/theme` index'i DOM API kullanamaz.** Ana surec onu import ediyor;
-  DOM'a bagli yardimcilar `@garam/theme/dom` altinda durur.
+All code, comments, commit messages and docs are in **English**, with no
+exceptions.
 
-## Guvenlik / IPC
+User-facing strings are written in English too — English is the SOURCE language.
+The single exception is a translation file under `i18n/locales/`, which exists
+to hold other languages and nothing else. Translations never leak outward: no
+identifier, comment, log line or commit message is in anything but English.
 
-- `contextIsolation: true`, `nodeIntegration: false` — istisnasiz.
-- Renderer'in ulastigi her ayricalikli islem preload'daki `window.api` uzerinden.
-- Kanal adi renderer'dan GELMEZ; preload sabit kanallara baglanir.
-- `ipcMain.handle` cagrilari tek dosyada toplanir (`src/main/ipc/`).
+## Invariants
 
-## DPI — bu depoda en cok hata cikan yer
+- **Color lives in one place:** `packages/theme/src/tokens.css`, plus the
+  accent override sheets beside it (`accent-violet.css`, which g-snap imports
+  after `all.css`). An app picks which sheet it loads; it never writes hex.
+  Always `var(--...)` in app source.
+  The JS mirror for Konva/canvas is `packages/theme/src/index.ts` — keep both in step.
+- **The accent is a two-stop ramp.** Anything with an area to fill uses
+  `var(--accent-gradient)`; anything needing one flat colour uses `var(--accent)`,
+  which must stay a point on that ramp. A gradient fill cannot take a flat hover
+  colour — change `filter: brightness()` instead, or the fill visibly collapses.
+- **Shared components go in `@garam/ui`.** If a button/field/panel is needed by
+  two apps, it belongs in the package, not in the app.
+- **The `@garam/*` packages are never compiled.** They are consumed as
+  TypeScript source with no `dist` output, so every app's electron-vite config
+  MUST exclude them from `externalizeDepsPlugin`.
+- **The electron-vite config file must be named `electron.vite.config.ts`**
+  (dot, not dash) or it is silently ignored.
+- **`@garam/theme`'s index must not touch DOM APIs.** The main process imports
+  it; DOM-dependent helpers live under `@garam/theme/dom`.
 
-Windows'ta kesirli olcekleme (or. %110 -> `scaleFactor = 1.1041666`) yaygin.
-`bounds * scaleFactor` TAM SAYI VERMEZ ve gercek piksel sayisindan sapar:
+## Security / IPC
+
+- `contextIsolation: true`, `nodeIntegration: false` — no exceptions.
+- Every privileged operation the renderer reaches goes through `window.api`.
+- Channel names never come from the renderer; the preload binds fixed channels.
+- All `ipcMain.handle` calls live in one file (`src/main/ipc/`).
+
+## DPI — the biggest source of bugs in this repo
+
+Fractional scaling is common on Windows (e.g. 110% -> `scaleFactor = 1.1041666`).
+`bounds * scaleFactor` IS NOT A WHOLE NUMBER and drifts from the real pixel count:
 
 ```
-2319 DIP x 1.1041666 = 2560.56  ->  yuvarlarsan 2561, gercegi 2560
+2319 DIP x 1.1041666 = 2560.56  ->  rounds to 2561, but the truth is 2560
 ```
 
-Bir pikselllik sapma bile goruntunun kesirli oranda yeniden orneklenmesine ve
-gozle gorulur bulaniklasmasina yol aciyor (olculdu: keskinlik 4.03 -> 4.90).
+Even a one-pixel miss makes the image resample at a fractional ratio and blur
+visibly (measured: sharpness 4.03 -> 4.90).
 
-Kurallar:
-- Yakalama boyutu **en yakin cift tam sayiya** yuvarlanir (`roundToEven`).
-  Gercek ekran modlarinin iki boyutu da her zaman cift sayidir.
-- Olcek hesaplari isletim sisteminin `scaleFactor`'undan DEGIL, gercekten
-  alinan piksel sayisindan turetilir: `nativeSize.width / bounds.width`.
-  Buyutec, disa aktarma ve kirpma hep bunu kullanir.
-- Yakalama sonrasi istenen/alinan olcu gunluge yazilir; ayrisirlarsa UYARI.
+Rules:
+- Round capture sizes to the **nearest even integer** (`roundToEven`). Both
+  dimensions of a real display mode are always even.
+- Derive scale from the pixels actually captured, NOT from the OS `scaleFactor`:
+  `nativeSize.width / bounds.width`. The magnifier, the export and every crop
+  use that value.
+- Log the requested vs. returned size after a capture; WARN when they diverge.
 
-## Konva notlari
+## Native Windows APIs
 
-- `getPointerPosition()` son isaretci olayinda guncellenir. Pencere yeni
-  acildiysa ve icinde henuz hareket olmadiysa **(0,0) doner**. Ilk tiklamada
-  konumu native olaydan hesapla (`clientX/clientY` - container rect).
-- Disa aktarmadan once karartma ve secim cercevesi katmanlari gizlenir,
-  sonra tekrar gosterilir.
+g-snap calls user32/gdi32/dwmapi directly through `koffi` (a prebuilt FFI, no
+compiler needed). That is how it gets a ~58 ms screen capture, swallows the
+PrintScreen key, and controls window focus and animations. **Pin koffi to ^3.x**:
+the 2.x API differs enough that the same code silently fails and falls back.
 
-## Windows dosya sistemi
+Details and the measurements behind each choice: `apps/g-snap/CLAUDE.md`.
 
-- JSON okurken **BOM kirpilir**. PowerShell'in `-Encoding utf8`'i ve Not Defteri
-  UTF-8'i BOM ile yazar; `JSON.parse` o karakterde patlar ve ayarlar sessizce
-  varsayilana doner. `@garam/core`'daki `readJson` bunu zaten yapiyor.
-- Ayarlar atomik yazilir (gecici dosya + `rename`), yarim dosya olusmaz.
-- Dosya adlarinda ayrilmis isimler (CON, PRN, COM1...) ve kontrol karakterleri
-  temizlenir — `sanitizeFileName`.
+## Konva notes
 
-## Kaynak hijyeni
+- `getPointerPosition()` is only updated on a pointer event. If the window has
+  just opened and nothing has moved inside it, that value is still **(0,0)**.
+  Compute the first click's position from the native event
+  (`clientX/clientY` minus the container rect).
+- Hide the dim and selection-chrome layers before exporting, then show them again.
+- Konva diffs the `image` prop by identity. Reusing a canvas across frames makes
+  it skip the redraw and keep showing the previous one.
 
-- Kaynak dosyalara **gorunmez karakter yazma** (BOM, U+FEFF, kiril benzeri
-  harfler). Regex'te BOM gerekiyorsa `String.fromCharCode(0xfeff)` kullan.
-- TypeScript strict; `noUnusedLocals` acik.
-- Dosyalar odakli tutulur, tek dosyada devasa bilesen yok.
+## Windows filesystem
 
-## Derleme ve dogrulama
+- **Strip the BOM when reading JSON.** PowerShell's `-Encoding utf8` and Notepad
+  write UTF-8 with a BOM, and `JSON.parse` throws on that character — settings
+  then silently fall back to defaults. `readJson` in `@garam/core` handles it.
+- Settings are written atomically (temp file + `rename`); no half-written file.
+- File names strip reserved names (CON, PRN, COM1...) and control characters —
+  see `sanitizeFileName`.
+
+## Source hygiene
+
+- **Never put invisible characters in source** (BOM, U+FEFF, Cyrillic lookalikes).
+  If a regex needs a BOM, build it with `String.fromCharCode(0xfeff)`.
+- TypeScript strict; `noUnusedLocals` is on.
+- Keep files focused; no giant single-file components.
+
+## Build and verify
 
 ```bash
 npm run typecheck -w g-snap
@@ -79,10 +106,41 @@ npm run typecheck -w g-snap
 npm run build -w g-snap
 ```
 
-Derleme ciktisi `apps/<uygulama>/out/` altina gider; monorepo koku kirlenmemeli.
+Build output goes to `apps/<app>/out/`; the monorepo root must stay clean.
 
-## Simgeler
+## Packaging
 
-`tools/icons/generate.mjs` — bagimliliksiz PNG/ICO ureteci, uc uygulama ayni
-gorsel dili (yuvarlak kose kare + aksan rengi + beyaz sembol) paylasir.
-Simgeler elle duzenlenmez, `npm run icons -w <uygulama>` ile uretilir.
+Three things bite on Windows, all of them invisible in dev mode:
+
+- **Pin the Electron version exactly** in each app's devDependencies. npm
+  workspaces hoist `electron` to the root, and electron-builder cannot resolve a
+  range like `^32.0.0` from there — it fails with "Cannot compute electron
+  version from installed node modules".
+- **A native module must never be required at import time.** The main process
+  evaluates its import graph before any error handler exists, so a throw there
+  is an unlogged crash dialog rather than a caught error. Load it lazily behind
+  a helper that returns null (g-snap: `main/native/ffi.ts`).
+- **Native modules must be listed in `asarUnpack`.** `koffi` ships its binary as
+  `@koromix/koffi-win32-x64/**/koffi.node`, and a `.node` file cannot be loaded
+  from inside `app.asar`. It packs happily and then the app dies on startup.
+  g-snap unpacks `**/*.node` and `**/@koromix/**`.
+- **Whatever the app registers with the OS at runtime, the uninstaller must
+  undo.** g-snap's launch-at-startup is a scheduled task the app creates
+  itself; NSIS knows nothing about it, so without `nsis.include` pointing at a
+  script that deletes it, uninstalling leaves it relaunching a deleted app at
+  every logon. An app that requires elevation also needs `perMachine: true`,
+  or the unelevated uninstaller cannot even stop it.
+- **electron-builder needs symlink privileges** to extract its winCodeSign
+  cache, which contains macOS symlinks it does not even need on Windows. Without
+  them the build fails with "Cannot create symbolic link". Run the packaging
+  from an elevated shell, or turn on Windows Developer Mode. Pre-extracting the
+  cache does not help — it downloads to a fresh random directory each run.
+
+All three apps write to `apps/<app>/release/`, which is what
+`tools/release/build-catalog.mjs` scans.
+
+## Icons
+
+`tools/icons/generate.mjs` is a dependency-free PNG/ICO generator; all three apps
+share one visual language (rounded square + accent color + white glyph).
+Icons are not hand-edited — regenerate with `npm run icons -w <app>`.

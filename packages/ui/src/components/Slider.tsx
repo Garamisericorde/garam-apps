@@ -7,9 +7,9 @@ export interface SliderProps {
   max?: number
   step?: number
   disabled?: boolean
-  /** Sagda anlik degeri goster. */
+  /** Show the current value on the right. */
   showValue?: boolean
-  /** Deger etiketini bicimle (or. (v) => `${v} px`). */
+  /** Format the value label (e.g. (v) => `${v} px`). */
   format?: (value: number) => string
   label?: string
   className?: string

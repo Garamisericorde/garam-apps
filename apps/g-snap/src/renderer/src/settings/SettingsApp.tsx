@@ -15,6 +15,10 @@ import {
 } from '@garam/ui'
 import type { HotkeyStatus, SnapSettings, ToastMessage } from '@shared/types'
 import { HotkeyInput } from './HotkeyInput'
+// The generated icon, not a second drawing of it. Icons are produced by
+// `npm run icons`; anything that renders the mark reads that output.
+import appIcon from '../../../../resources/icons/icon.png'
+import { LOCALES, setLocale, t, type MessageKey } from '@shared/i18n/index.js'
 
 export function SettingsApp() {
   const [values, setValues] = useState<SnapSettings | null>(null)
@@ -24,6 +28,7 @@ export function SettingsApp() {
 
   useEffect(() => {
     void window.api.settings.get().then((snapshot) => {
+      setLocale(snapshot.values.language)
       setValues(snapshot.values)
       setHotkeyStatus(snapshot.hotkeyStatus)
       setVersion(snapshot.version)
@@ -31,8 +36,8 @@ export function SettingsApp() {
   }, [])
 
   useEffect(() => {
-    // Her yeni bildirim onceki gizleme zamanlayicisini iptal eder; aksi halde
-    // eski zamanlayici yeni bildirimi erken kapatir.
+    // Each new toast cancels the previous hide timer; otherwise the old timer
+    // would dismiss the newer toast early.
     let timer: ReturnType<typeof setTimeout> | undefined
 
     const unsubscribe = window.api.app.onToast((message) => {
@@ -48,15 +53,24 @@ export function SettingsApp() {
   }, [])
 
   const patch = useCallback(async (changes: Partial<SnapSettings>) => {
-    // Iyimser guncelleme: arayuz beklemesin.
+    // Ahead of the optimistic update, not only after the round trip: otherwise
+    // the optimistic render still uses the old dictionary and the window shows
+    // one frame of the previous language.
+    if (changes.language) setLocale(changes.language)
+
+    // Optimistic update so the UI does not wait on the round trip.
     setValues((prev) => (prev ? { ...prev, ...changes } : prev))
     const result = await window.api.settings.set(changes)
+    // Ahead of the state update, so the re-render it triggers is already in
+    // the new language — this is what makes the picker feel instant.
+    setLocale(result.values.language)
     setValues(result.values)
     setHotkeyStatus(result.hotkeyStatus)
   }, [])
 
   const reset = useCallback(async () => {
     const result = await window.api.settings.reset()
+    setLocale(result.values.language)
     setValues(result.values)
     setHotkeyStatus(result.hotkeyStatus)
   }, [])
@@ -69,7 +83,7 @@ export function SettingsApp() {
   if (!values) {
     return (
       <div className="snap-settings">
-        <TitleBar title="G-Snap Ayarlari" onClose={() => void window.api.window.close()} hideMaximize />
+        <TitleBar title={t('settings.title')} onClose={() => void window.api.window.close()} hideMaximize />
         <div className="snap-settings__body" />
       </div>
     )
@@ -80,7 +94,7 @@ export function SettingsApp() {
   return (
     <div className="snap-settings">
       <TitleBar
-        title="G-Snap Ayarlari"
+        title={t('settings.title')}
         icon={<Camera size={15} />}
         hideMaximize
         onMinimize={() => void window.api.window.minimize()}
@@ -88,22 +102,30 @@ export function SettingsApp() {
       >
         {hotkeyProblem && (
           <Badge tone="warning">
-            <AlertTriangle size={11} /> Kisayol catismasi
+            <AlertTriangle size={11} /> {t('settings.shortcutConflict')}
           </Badge>
         )}
       </TitleBar>
 
       <div className="snap-settings__body">
-        <Panel
-          title="Kisayollar"
-          description="Kisayol kutusuna tiklayip yeni kombinasyona basin."
-        >
+        <header className="snap-settings__hero">
+          <img className="snap-settings__logo" src={appIcon} alt="" width={56} height={56} />
+          <div>
+            <div className="snap-settings__wordmark">G-Snap</div>
+            <div className="snap-settings__tagline">
+              {t('settings.tagline')} · <b>{version || '—'}</b>
+            </div>
+          </div>
+        </header>
+        <div className="snap-settings__rule" />
+
+        <Panel title={t('settings.shortcuts')} description={t('settings.shortcutsDesc')}>
           <Field
-            label="Bolge sec"
-            hint="Ekranin bir bolgesini secip uzerine cizim yapmanizi saglar."
+            label={t('settings.selectRegion')}
+            hint={t('settings.selectRegionHint')}
             error={
               hotkeyStatus && !hotkeyStatus.hotkeyRegion
-                ? 'Bu kisayol kaydedilemedi — baska bir uygulama kullaniyor olabilir.'
+                ? t('settings.shortcutTaken')
                 : undefined
             }
             inline
@@ -116,11 +138,11 @@ export function SettingsApp() {
           </Field>
 
           <Field
-            label="Tum ekran"
-            hint="Etkin ekrani dogrudan panoya kopyalar. Overlay acmaz, diske yazmaz."
+            label={t('settings.fullScreen')}
+            hint={t('settings.fullScreenHint')}
             error={
               hotkeyStatus && !hotkeyStatus.hotkeyFullscreen
-                ? 'Bu kisayol kaydedilemedi — baska bir uygulama kullaniyor olabilir.'
+                ? t('settings.shortcutTaken')
                 : undefined
             }
             inline
@@ -133,8 +155,8 @@ export function SettingsApp() {
           </Field>
         </Panel>
 
-        <Panel title="Kaydetme">
-          <Field label="Kayit klasoru" inline>
+        <Panel title={t('settings.saving')}>
+          <Field label={t('settings.saveFolder')} inline>
             <div className="snap-settings__path">
               <Input readOnly value={values.saveDirectory} title={values.saveDirectory} />
               <Button
@@ -142,14 +164,14 @@ export function SettingsApp() {
                 icon={<FolderOpen size={14} />}
                 onClick={() => void pickDirectory()}
               >
-                Sec
+                {t('settings.browse')}
               </Button>
             </div>
           </Field>
 
           <Field
-            label="Dosya adi sablonu"
-            hint="Alanlar: {YYYY} {MM} {DD} {HH} {mm} {ss} {n}"
+            label={t('settings.fileNameTemplate')}
+            hint={t('settings.fileNameHint', { fields: '{YYYY} {MM} {DD} {HH} {mm} {ss} {n}' })}
             inline
           >
             <Input
@@ -158,24 +180,24 @@ export function SettingsApp() {
             />
           </Field>
 
-          <Field label="Goruntu bicimi" inline>
+          <Field label={t('settings.imageFormat')} inline>
             <Select
               value={values.imageFormat}
               onChange={(e) => void patch({ imageFormat: e.target.value as 'png' | 'jpg' })}
             >
-              <option value="png">PNG (kayipsiz)</option>
-              <option value="jpg">JPEG (kucuk dosya)</option>
+              <option value="png">{t('settings.formatPng')}</option>
+              <option value="jpg">{t('settings.formatJpg')}</option>
             </Select>
           </Field>
 
           {values.imageFormat === 'jpg' && (
-            <Field label="JPEG kalitesi" inline>
+            <Field label={t('settings.jpegQuality')} inline>
               <Slider
                 value={values.jpegQuality}
                 min={40}
                 max={100}
                 showValue
-                format={(v) => `%${v}`}
+                format={(v) => `${v}%`}
                 onChange={(v) => void patch({ jpegQuality: v })}
                 className="snap-settings__slider"
               />
@@ -183,33 +205,41 @@ export function SettingsApp() {
           )}
         </Panel>
 
-        <Panel title="Davranis">
-          <Field label="Secimi onaylayinca panoya kopyala" inline>
+        <Panel title={t('settings.behaviour')}>
+          <Field label={t('settings.language')} hint={t('settings.languageHint')} inline>
+            <Select
+              value={values.language}
+              onChange={(e) =>
+                void patch({ language: e.target.value as SnapSettings['language'] })
+              }
+            >
+              {LOCALES.map((locale) => (
+                <option key={locale.id} value={locale.id}>
+                  {locale.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          <Field label={t('settings.copyOnConfirm')} inline>
             <Switch
               checked={values.copyToClipboard}
               onChange={(v) => void patch({ copyToClipboard: v })}
             />
           </Field>
 
-          <Field
-            label="Kaydederken konum sor"
-            hint="Kapaliysa dogrudan kayit klasorune yazar."
-            inline
-          >
+          <Field label={t('settings.askWhereToSave')} hint={t('settings.askWhereToSaveHint')} inline>
             <Switch
               checked={values.askWhereToSave}
               onChange={(v) => void patch({ askWhereToSave: v })}
             />
           </Field>
 
-          <Field label="Secim sirasinda buyutec goster" inline>
-            <Switch
-              checked={values.showMagnifier}
-              onChange={(v) => void patch({ showMagnifier: v })}
-            />
-          </Field>
-
-          <Field label="Windows ile birlikte baslat" inline>
+          <Field
+            label={t('settings.launchAtStartup')}
+            hint={t('settings.launchAtStartupHint')}
+            inline
+          >
             <Switch
               checked={values.launchAtStartup}
               onChange={(v) => void patch({ launchAtStartup: v })}
@@ -217,15 +247,15 @@ export function SettingsApp() {
           </Field>
         </Panel>
 
-        <Panel title="Cizim varsayilanlari">
-          <Field label="Kalem rengi" inline>
+        <Panel title={t('settings.annotationDefaults')}>
+          <Field label={t('settings.penColor')} inline>
             <ColorPicker
               value={values.defaultColor}
               onChange={(c) => void patch({ defaultColor: c })}
             />
           </Field>
 
-          <Field label="Kalinlik" inline>
+          <Field label={t('settings.thickness')} inline>
             <Slider
               value={values.defaultThickness}
               min={1}
@@ -237,36 +267,35 @@ export function SettingsApp() {
           </Field>
         </Panel>
 
-        <Panel title="Overlay kisayollari">
+        <Panel
+          title={t('settings.overlayShortcuts')}
+          description={t('settings.overlayShortcutsDesc')}
+        >
           <div className="snap-settings__shortcuts">
             {OVERLAY_SHORTCUTS.map(([keys, description]) => (
               <div key={keys} className="snap-settings__shortcut">
                 <Kbd keys={keys} />
-                <span>{description}</span>
+                <span>{t(description)}</span>
               </div>
             ))}
           </div>
         </Panel>
 
-        <Panel title="Hakkinda">
-          <Field label="Surum" inline>
-            <span className="snap-settings__version">G-Snap {version}</span>
-          </Field>
-
+        <Panel title={t('settings.about')}>
           <div className="snap-settings__about-actions">
             <Button
               size="sm"
               icon={<ScrollText size={14} />}
               onClick={() => void window.api.app.openLogs()}
             >
-              Kayitlari ac
+              {t('settings.openLogs')}
             </Button>
             <Button
               size="sm"
               icon={<FolderOpen size={14} />}
               onClick={() => void window.api.app.openPath(values.saveDirectory)}
             >
-              Kayit klasoru
+              {t('settings.saveFolder')}
             </Button>
             <Button
               size="sm"
@@ -274,7 +303,7 @@ export function SettingsApp() {
               icon={<RotateCcw size={14} />}
               onClick={() => void reset()}
             >
-              Varsayilanlara don
+              {t('settings.restoreDefaults')}
             </Button>
           </div>
         </Panel>
@@ -284,7 +313,7 @@ export function SettingsApp() {
         <div className={`snap-toast snap-toast--${toast.tone}`}>
           <span>{toast.text}</span>
           {toast.path && (
-            <button onClick={() => void window.api.app.openPath(toast.path as string)}>Goster</button>
+            <button onClick={() => void window.api.app.openPath(toast.path as string)}>{t('notice.show')}</button>
           )}
         </div>
       )}
@@ -292,14 +321,21 @@ export function SettingsApp() {
   )
 }
 
-const OVERLAY_SHORTCUTS: Array<[string, string]> = [
-  ['Ctrl + surukle', 'Secimi birakir birakmaz panoya kopyala ve kapat'],
-  ['Esc', 'Secimi temizle / overlay kapat'],
-  ['Enter', 'Panoya kopyala'],
-  ['Ctrl+C', 'Panoya kopyala'],
-  ['Ctrl+S', 'Kaydet'],
-  ['Ctrl+Shift+S', 'Farkli kaydet'],
-  ['Ctrl+A', 'Tum ekrani sec'],
-  ['Ctrl+Z', 'Geri al'],
-  ['V P H L A R E T', 'Arac sec (sirasiyla imlec, kalem, fosforlu, cizgi, ok, dikdortgen, elips, metin)'],
+/**
+ * The key combination is literal; only the description is translated. Key names
+ * are what is printed on the keyboard and do not change with language.
+ */
+const OVERLAY_SHORTCUTS: Array<[string, MessageKey]> = [
+  ['Drag', 'shortcut.drag'],
+  ['Ctrl + drag', 'shortcut.ctrlDrag'],
+  ['Shift + drag', 'shortcut.shiftDrag'],
+  ['Alt + drag', 'shortcut.altDrag'],
+  ['Esc', 'shortcut.esc'],
+  ['Enter', 'shortcut.enter'],
+  ['Ctrl+C', 'shortcut.ctrlC'],
+  ['Ctrl+S', 'shortcut.ctrlS'],
+  ['Ctrl+Shift+S', 'shortcut.ctrlShiftS'],
+  ['Ctrl+A', 'shortcut.ctrlA'],
+  ['Ctrl+Z', 'shortcut.ctrlZ'],
+  ['V P H L A R E T', 'shortcut.tools'],
 ]

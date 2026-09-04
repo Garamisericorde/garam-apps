@@ -4,11 +4,11 @@ import { cx } from '../cx'
 export interface PanelProps extends HTMLAttributes<HTMLElement> {
   title?: string
   description?: string
-  /** Baslik satirinin sagina yerlesen ogeler. */
+  /** Elements placed at the right of the header row. */
   actions?: ReactNode
 }
 
-/** Ayar sayfalarinda kullanilan bolum karti. */
+/** Section card used on settings pages. */
 export function Panel({ title, description, actions, className, children, ...rest }: PanelProps) {
   return (
     <section className={cx('g-panel', className)} {...rest}>

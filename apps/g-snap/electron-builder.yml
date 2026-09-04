@@ -10,7 +10,29 @@ files:
   - out/**/*
   - package.json
 
+# The tray and window icons are read from disk at runtime through
+# resourcePath(), which points at process.resourcesPath in a packaged app.
+# `files` only covers what goes INTO app.asar, so without this the icons
+# never shipped and the tray silently fell back to its embedded placeholder
+# ("Tray icon not found ... using the embedded fallback" in the log).
+extraResources:
+  - from: resources/icons
+    to: icons
+
+# Native modules cannot be loaded from inside app.asar. koffi ships its binary
+# as @koromix/koffi-win32-x64/**/koffi.node, so that has to sit on disk next to
+# the archive or the app dies on startup with a module-load error — something
+# dev mode never shows, because there is no asar there.
+asarUnpack:
+  - '**/*.node'
+  - '**/@koromix/**'
+
 win:
+  # The app must run elevated or Windows' UIPI rule stops it from seeing
+  # keyboard input while an elevated app (a game with anti-cheat) is in front —
+  # the hotkey simply never fires there. Verified: identical build, identical
+  # game, works elevated and does nothing otherwise.
+  requestedExecutionLevel: requireAdministrator
   target:
     - target: nsis
       arch:
@@ -20,16 +42,43 @@ win:
 
 nsis:
   oneClick: false
-  perMachine: false
+  # Elevated on purpose. The app requires administrator to run and registers an
+  # elevated scheduled task for launch-at-startup; a per-user installer runs
+  # unelevated and can neither terminate that app nor delete its files. The
+  # result was an uninstall that removed its own registry entry and nothing
+  # else: gone from Control Panel, still running, still starting at every logon.
+  perMachine: true
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: G-Snap
-  # Bootstrapper sessiz kurulum icin /S bayragini kullanir.
+  # The app ships in nine languages; an installer that only speaks English in
+  # front of them would be the first thing a non-English user sees.
+  multiLanguageInstaller: true
+  installerLanguages:
+    - en_US
+    - tr_TR
+    - de_DE
+    - es_ES
+    - fr_FR
+    - pt_BR
+    - ru_RU
+    - zh_CN
+    - ja_JP
+  # The bootstrapper installs silently with the /S flag. With perMachine it must
+  # itself run elevated, or the silent install has nothing to elevate from.
   deleteAppDataOnUninstall: false
+  # Off on purpose: electron-builder's finish-page launch runs the app as the
+  # UNELEVATED user, and this app is manifested requireAdministrator, so that
+  # path means a UAC prompt the moment setup ends. build/installer.nsh starts it
+  # from the elevated installer instead.
+  runAfterFinish: false
+  # Starts the app after install, kills it and removes the startup task on
+  # uninstall. See the file.
+  include: build/installer.nsh
 
 publish:
   provider: github
-  owner: GARAM_GITHUB_KULLANICI_ADI
+  owner: YOUR_GITHUB_USERNAME
   repo: garam-apps
   releaseType: release

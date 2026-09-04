@@ -1,32 +1,55 @@
 # Garam Setup
 
-Kucuk indirici kurulum programi. Uygulamalari kendi icine gommez; `catalog.json`
-dosyasini okuyup kullanicinin sectiklerini internetten indirir, dogrular ve
-sessizce kurar.
+A small downloader-style installer. It does not embed the apps; it reads
+`catalog.json`, downloads whatever the user selected, verifies it and installs
+it silently.
 
-**Durum: yazildi, HENUZ DERLENMEDI.** Bu makinede Rust toolchain kurulu degil.
+**Status: the UI half is built and verified against the real catalog; the Rust
+half has never been compiled.** Rust is installed, but on Windows rustup alone
+cannot link — see Prerequisites.
 
-## Neden bu tasarim
+## Why this design
 
-| | Tek buyuk setup | Bu yaklasim |
+| | One big setup | This approach |
 |---|---|---|
-| Boyut | ~250 MB (uc uygulama gomulu) | ~3-5 MB |
-| Yeni surum cikarmak | Setup'i yeniden yayinla | Sadece `catalog.json`'u guncelle |
-| Kullanici tek uygulama istiyor | Hepsini indirir | Yalnizca sectigini indirir |
+| Size | ~250 MB (all three apps embedded) | ~3-5 MB |
+| Shipping a new version | Republish the setup | Just update `catalog.json` |
+| User wants one app | Downloads everything | Downloads only what they picked |
 
-Arayuz HTML/CSS oldugu icin `@garam/theme` ile ayni renkleri kullaniyor — setup,
-kurdugu uygulamalarla ayni gorunuyor.
+The UI is HTML/CSS, so it uses the same colors as `@garam/theme` — the setup
+looks like the apps it installs.
 
-## Onkosullar
+## Prerequisites
+
+Two things, and the second is the one everybody misses:
 
 ```bash
 winget install Rustlang.Rustup
 ```
 
-WebView2 runtime Windows 11'de kurulu gelir; Windows 10'da cogunlukla vardir.
-Yoksa Tauri NSIS paketi kurulum sirasinda indirir.
+```bash
+winget install --id Microsoft.VisualStudio.2022.BuildTools --override "--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+```
 
-## Calistirma
+rustup installs a compiler but NOT a linker. The default toolchain is
+`x86_64-pc-windows-msvc`, which needs `link.exe` from the Visual C++ build
+tools; without it even an empty `fn main()` fails with
+"error: linker `link.exe` not found".
+
+The WebView2 runtime ships with Windows 11 and is usually present on Windows 10.
+
+## What it runs as
+
+The setup carries a manifest requesting **administrator**
+(`src-tauri/app.manifest`). That is not decoration: g-snap installs
+per-machine, and a SILENT NSIS installer cannot raise its own privileges — it
+just fails. Elevating the setup means every installer it launches inherits the
+token, and one UAC prompt covers the whole session.
+
+Supplying a manifest replaces the one tauri-build generates, so that file also
+has to restate the DPI and supportedOS blocks.
+
+## Run
 
 ```bash
 npm install
@@ -36,27 +59,38 @@ npm install
 npm run dev
 ```
 
-## Derleme
+## Build
 
-Katalog adresini derleme zamaninda ver:
+Pass the catalog URL at build time:
 
 ```bash
-GARAM_CATALOG_URL=https://KULLANICI.github.io/garam-apps/catalog.json npm run build
+GARAM_CATALOG_URL=https://raw.githubusercontent.com/Garamisericorde/garam-apps/main/catalog.json npm run build
 ```
 
-Cikti: `src-tauri/target/release/bundle/nsis/Garam Setup_0.1.0_x64-setup.exe`
+Without the variable it falls back to that same URL, compiled into
+`src/main.rs`.
 
-Degisken verilmezse `src/main.rs` icindeki varsayilan adres kullanilir.
+**Ship `src-tauri/target/release/Garam Setup.exe`** — the single portable
+executable. The NSIS bundle beside it is an installer FOR the setup, which is
+not what anyone wants; it is a byproduct of the bundle config.
 
-## Guvenlik
+## Theme
 
-- Her indirilen dosyanin **SHA-256'si katalogdakiyle karsilastirilir**.
-  Eslesmezse dosya silinir ve kurulum durur — bozuk/degistirilmis kurulum
-  hicbir kosulda CALISTIRILMAZ.
-- HTTPS `rustls` ile; sistem OpenSSL'ine bagimlilik yok.
-- Tauri allowlist'i kapali; yalnizca `shell.open` acik.
+`src/styles.css` imports `@garam/theme` rather than copying its tokens. An
+earlier version copied them with a note asking whoever changed one to change
+the other, and they drifted within the week — the apps moved to a blue-purple
+accent and rounder corners while the setup stayed crimson and square. Vite
+inlines the import at build time, so the standalone build is still one file.
 
-## catalog.json bicimi
+## Security
+
+- Every download's **SHA-256 is compared against the catalog**. On a mismatch the
+  file is deleted and the install stops — a corrupt or tampered installer is
+  never executed.
+- HTTPS via `rustls`; no dependency on system OpenSSL.
+- The Tauri allowlist is off except for `shell.open`.
+
+## catalog.json format
 
 ```json
 {
@@ -66,14 +100,14 @@ Degisken verilmezse `src/main.rs` icindeki varsayilan adres kullanilir.
     {
       "id": "g-snap",
       "name": "G-Snap",
-      "description": "Ekran alintisi, anotasyon ve hizli paylasim",
+      "description": "Screen capture, annotation and quick sharing",
       "version": "0.1.0",
       "sizeBytes": 74000000,
       "default": true,
       "requires": [],
       "installer": {
         "fileName": "G-Snap-0.1.0-setup.exe",
-        "url": "https://github.com/KULLANICI/garam-apps/releases/download/g-snap-v0.1.0/G-Snap-0.1.0-setup.exe",
+        "url": "https://github.com/USERNAME/garam-apps/releases/download/g-snap-v0.1.0/G-Snap-0.1.0-setup.exe",
         "sha256": "...",
         "silentArgs": ["/S"]
       }
@@ -82,10 +116,10 @@ Degisken verilmezse `src/main.rs` icindeki varsayilan adres kullanilir.
 }
 ```
 
-Depo kokunden `npm run catalog` ile uretilir.
+Generate it from the repo root with `npm run catalog`.
 
-## NSIS notu
+## NSIS note
 
-electron-builder'in urettigi kurulum `/S` ile sessiz calisir. Hedef klasor
-vermek icin `/D=<yol>` **tirnaksiz ve en son argüman** olmalidir — NSIS'in
-kirilgan bir kurali.
+The installer electron-builder produces runs silently with `/S`. To set the
+target folder, `/D=<path>` must be **unquoted and the last argument** — a
+notoriously brittle NSIS rule.

@@ -7,17 +7,17 @@ export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 const LEVEL_ORDER: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 }
 
 export interface LoggerOptions {
-  /** Bu seviyenin altindakiler yazilmaz. Varsayilan: dev'de debug, uretimde info. */
+  /** Entries below this level are dropped. Default: debug in dev, info in production. */
   level?: LogLevel
-  /** Saklanacak gunluk dosyasi sayisi. Varsayilan: 5 */
+  /** How many log files to keep. Default: 5 */
   keepFiles?: number
 }
 
 /**
- * %APPDATA%/<uygulama>/logs/ altina gunluk yazar ve ayni anda konsola basar.
+ * Writes logs under %APPDATA%/<app>/logs/ and mirrors them to the console.
  *
- * Her uygulama acilisinda yeni bir dosya acilir; eski dosyalar `keepFiles`
- * sayisini asinca silinir.
+ * A fresh file is opened on every launch; older files are pruned once they
+ * exceed `keepFiles`.
  */
 export class Logger {
   private readonly dir: string
@@ -35,8 +35,8 @@ export class Logger {
       const stamp = new Date().toISOString().replace(/[:.]/g, '-')
       this.stream = createWriteStream(join(this.dir, `${stamp}.log`), { flags: 'a' })
     } catch (err) {
-      // Gunluk yazamamak uygulamayi durdurmamali.
-      console.error('[logger] gunluk dosyasi acilamadi:', err)
+      // Failing to open a log file must never take the app down.
+      console.error('[logger] could not open log file:', err)
     }
   }
 
@@ -44,7 +44,7 @@ export class Logger {
     return this.dir
   }
 
-  /** Gunluk klasorunu dosya gezgininde acar (Ayarlar > "Kayitlari ac"). */
+  /** Opens the log folder in Explorer (Settings > "Open logs"). */
   openDirectory(): void {
     void shell.openPath(this.dir)
   }
@@ -87,7 +87,7 @@ export class Logger {
         unlinkSync(join(this.dir, old.f))
       }
     } catch {
-      // Temizlik basarisiz olursa onemli degil.
+      // Rotation is best-effort; failing to prune old logs is harmless.
     }
   }
 

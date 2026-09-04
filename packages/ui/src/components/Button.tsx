@@ -7,11 +7,11 @@ export type ButtonSize = 'sm' | 'md' | 'lg'
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant
   size?: ButtonSize
-  /** Metnin solunda gosterilecek ikon. */
+  /** Icon rendered to the left of the label. */
   icon?: ReactNode
-  /** Genisligi kapsayiciya yay. */
+  /** Stretch to the full width of the container. */
   block?: boolean
-  /** Basili/secili gorunum. */
+  /** Pressed / selected appearance. */
   active?: boolean
 }
 

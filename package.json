@@ -2,7 +2,7 @@
   "name": "garam-apps",
   "version": "0.0.0",
   "private": true,
-  "description": "Garam masaustu uygulamalari monorepo'su",
+  "description": "Monorepo for the Garam desktop apps",
   "workspaces": [
     "packages/*",
     "apps/*"
@@ -19,7 +19,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "catalog": "node tools/release/build-catalog.mjs",
-    "clean": "node tools/release/clean.mjs"
+    "clean": "node tools/release/clean.mjs",
+    "package:all": "npm run package:snap && npm run package:recorder && npm run package:note"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",

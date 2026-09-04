@@ -1,9 +1,9 @@
 /*
- * @garam/theme — eski g-note token isimleri icin gecis katmani.
+ * @garam/theme — compatibility shim for the old g-note token names.
  *
- * g-note'un index.css'i --color-* isimlerini kullaniyor. Bu dosya onlari yeni
- * tokenlara baglar, boylece g-note tek seferde degil, parca parca tasinabilir.
- * g-note migrasyonu bitince BU DOSYA SILINMELI.
+ * g-note's index.css uses the --color-* names. This file maps them onto the
+ * new tokens so g-note can be migrated piece by piece rather than all at once.
+ * DELETE THIS FILE once the g-note migration is finished.
  */
 
 :root {

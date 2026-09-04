@@ -1,3 +1,4 @@
+import { t } from '@shared/i18n/index.js'
 import { clipboard, dialog, nativeImage, shell, type BrowserWindow } from 'electron'
 import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
@@ -11,12 +12,12 @@ export class SaveService {
   ) {}
 
   /**
-   * Overlay'den gelen goruntuyu ayarlara gore panoya kopyalar ve/veya kaydeder.
+   * Copies and/or saves the image the overlay produced, per the settings.
    *
    * `action`:
-   *   copy    -> yalnizca panoya
-   *   save    -> ayarlardaki klasore otomatik kaydet (askWhereToSave aciksa sorar)
-   *   save-as -> her zaman konum sor
+   *   copy    -> clipboard only
+   *   save    -> write to the configured folder (prompting if askWhereToSave)
+   *   save-as -> always prompt for a location
    */
   async commit(
     request: CommitRequest,
@@ -25,16 +26,16 @@ export class SaveService {
   ): Promise<CommitResult> {
     const image = nativeImage.createFromDataURL(request.dataUrl)
     if (image.isEmpty()) {
-      this.log.error('Gecersiz goruntu verisi alindi')
-      return { ok: false, error: 'Goruntu olusturulamadi' }
+      this.log.error('Received invalid image data')
+      return { ok: false, error: t('error.buildImage') }
     }
 
     const s = this.settings.all()
 
-    // Kopyalama her zaman once yapilir: kaydetme iptal edilse bile pano dolar.
+    // Copy first: even if the save is cancelled, the clipboard is filled.
     if (request.action === 'copy' || s.copyToClipboard) {
       clipboard.writeImage(image)
-      this.log.info(`Panoya kopyalandi (${request.rect.width}x${request.rect.height})`)
+      this.log.info(`Copied to clipboard (${request.rect.width}x${request.rect.height})`)
     }
 
     if (request.action === 'copy') {
@@ -48,7 +49,7 @@ export class SaveService {
     if (askUser) {
       const chosen = await runModal(() => this.askForPath(parent, s))
       if (!chosen) {
-        this.log.debug('Kaydetme kullanici tarafindan iptal edildi')
+        this.log.debug('Save cancelled by the user')
         return { ok: false }
       }
       targetPath = chosen
@@ -59,33 +60,32 @@ export class SaveService {
     try {
       await fs.mkdir(join(targetPath, '..'), { recursive: true })
       await fs.writeFile(targetPath, buffer)
-      this.log.info(`Kaydedildi: ${targetPath}`)
+      this.log.info(`Saved: ${targetPath}`)
       return { ok: true, filePath: targetPath }
     } catch (err) {
-      this.log.error('Dosya yazilamadi', err)
-      return { ok: false, error: 'Dosya yazilamadi. Klasor izinlerini kontrol edin.' }
+      this.log.error('Could not write the file', err)
+      return { ok: false, error: t('error.writeFile') }
     }
   }
 
   /**
-   * Tam ekran yakalamayi DOGRUDAN PANOYA kopyalar (overlay acmadan, diske
-   * yazmadan). Ctrl+PrintScreen'in tek isi bu; kaydetmek isteyen bolge
-   * secimini kullanip Kaydet'e basar.
+   * Copies a full-screen capture STRAIGHT TO THE CLIPBOARD — no overlay, no
+   * disk write. That is all Ctrl+PrintScreen does; anyone who wants a file uses
+   * the region selection and presses Save.
    */
-  copyToClipboardDirect(dataUrl: string): CommitResult {
-    const image = nativeImage.createFromDataURL(dataUrl)
+  copyToClipboardDirect(image: Electron.NativeImage): CommitResult {
     if (image.isEmpty()) {
-      this.log.error('Tam ekran yakalamada gecersiz goruntu verisi')
-      return { ok: false, error: 'Goruntu olusturulamadi' }
+      this.log.error('Invalid image data in the full-screen capture')
+      return { ok: false, error: t('error.buildImage') }
     }
 
     clipboard.writeImage(image)
     const size = image.getSize()
-    this.log.info(`Tam ekran panoya kopyalandi (${size.width}x${size.height})`)
+    this.log.info(`Full screen copied to clipboard (${size.width}x${size.height})`)
     return { ok: true }
   }
 
-  /** Kaydedilen dosyayi Explorer'da secili halde acar. */
+  /** Reveals the saved file in Explorer. */
   revealInExplorer(filePath: string): void {
     shell.showItemInFolder(filePath)
   }
@@ -97,12 +97,12 @@ export class SaveService {
   private async askForPath(parent: BrowserWindow | null, s: SnapSettings): Promise<string | null> {
     const defaultPath = await this.nextAvailablePath(s)
     const options: Electron.SaveDialogOptions = {
-      title: 'Ekran alintisini kaydet',
+      title: t('dialog.saveScreenshot'),
       defaultPath,
       filters:
         s.imageFormat === 'jpg'
-          ? [{ name: 'JPEG goruntu', extensions: ['jpg', 'jpeg'] }]
-          : [{ name: 'PNG goruntu', extensions: ['png'] }],
+          ? [{ name: 'JPEG image', extensions: ['jpg', 'jpeg'] }]
+          : [{ name: 'PNG image', extensions: ['png'] }],
     }
 
     const result = parent
@@ -113,8 +113,8 @@ export class SaveService {
   }
 
   /**
-   * Sablondan dosya adi uretir; ayni saniyede birden fazla alinti alinirsa
-   * uzerine yazmamak icin sonuna -2, -3 ... ekler.
+   * Builds a name from the template, appending -2, -3 ... so two captures in
+   * the same second do not overwrite each other.
    */
   private async nextAvailablePath(s: SnapSettings): Promise<string> {
     const ext = s.imageFormat === 'jpg' ? 'jpg' : 'png'
@@ -125,13 +125,13 @@ export class SaveService {
       const candidate = join(s.saveDirectory, name)
       try {
         await fs.access(candidate)
-        // Dosya var, sonrakini dene.
+        // File exists, try the next one.
       } catch {
         return candidate
       }
     }
 
-    // 999 cakisma pratikte imkansiz; yine de bir yol dondurelim.
+    // 999 collisions is not reachable in practice; still return something.
     return join(s.saveDirectory, `${base}-${Date.now()}.${ext}`)
   }
 }

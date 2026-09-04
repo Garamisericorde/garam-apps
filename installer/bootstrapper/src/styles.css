@@ -1,37 +1,17 @@
 /*
- * Garam Setup stilleri.
+ * Garam Setup styles.
  *
- * Tokenler @garam/theme ile AYNI degerlerdir; setup kurdugu uygulamalarla ayni
- * gorunsun diye. Paket olarak import etmiyoruz — bootstrapper npm workspace'ine
- * bagli olmadan tek basina derlenebilmeli. Renk degistirirsen ikisini birlikte
- * guncelle: packages/theme/src/tokens.css
+ * The tokens are IMPORTED from @garam/theme rather than copied. An earlier
+ * version copied them, with a comment asking whoever changed one to change the
+ * other — and they drifted anyway: the apps moved to a blue-purple accent and
+ * rounder corners while the setup stayed crimson and square. Vite inlines these
+ * at build time, so the standalone build is still one self-contained file.
+ *
+ * accent-violet is loaded after the base sheet for the same reason g-snap loads
+ * it: the setup is the front door to these apps and should look like them.
  */
-
-:root {
-  --bg: #14142a;
-  --bg-surface: #1a1a2e;
-  --bg-elevated: #1e1e3f;
-  --bg-hover: #16213e;
-  --bg-inset: rgba(0, 0, 0, 0.22);
-
-  --border: #2d3748;
-  --border-strong: #3d4a63;
-
-  --text: #eaeaea;
-  --text-muted: #a0a0a0;
-  --text-on-accent: #ffffff;
-
-  --accent: #e94560;
-  --accent-hover: #ff6b6b;
-  --accent-soft: rgba(233, 69, 96, 0.15);
-  --danger: #ef4444;
-  --success: #4ade80;
-
-  --font: 'Segoe UI', -apple-system, sans-serif;
-  --radius-sm: 4px;
-  --radius: 8px;
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.28);
-}
+@import '../../../packages/theme/src/tokens.css';
+@import '../../../packages/theme/src/accent-violet.css';
 
 *,
 *::before,
@@ -86,7 +66,7 @@ h1 {
   word-break: break-word;
 }
 
-/* ── Uygulama listesi ─────────────────────────────────────────────────── */
+/* ── App list ─────────────────────────────────────────────────────────── */
 
 .list {
   flex: 1;
@@ -162,7 +142,7 @@ h1 {
   font-variant-numeric: tabular-nums;
 }
 
-/* ── Alt bar ──────────────────────────────────────────────────────────── */
+/* ── Footer ───────────────────────────────────────────────────────────── */
 
 .footer {
   display: flex;
@@ -207,7 +187,7 @@ h1 {
   cursor: not-allowed;
 }
 
-/* ── Ilerleme ─────────────────────────────────────────────────────────── */
+/* ── Progress ─────────────────────────────────────────────────────────── */
 
 .bar {
   height: 6px;

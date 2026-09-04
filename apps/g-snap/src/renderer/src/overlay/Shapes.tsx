@@ -1,8 +1,15 @@
 import { Arrow, Ellipse, Line, Rect as KonvaRect, Text } from 'react-konva'
 import type { Shape } from './types'
-import { MARKER_OPACITY, MARKER_THICKNESS_SCALE } from './types'
+import { MARKER_OPACITY } from './types'
 
-/** Tek bir anotasyon seklini Konva dugumune cevirir. */
+/**
+ * Konva draws a Line with tension as a Catmull-Rom spline through every point.
+ * That only helps once the path has been thinned — see smoothStroke() — but
+ * together they are what turn a mouse path into a drawn line.
+ */
+const FREEHAND_TENSION = 0.4
+
+/** Renders one annotation shape as a Konva node. */
 export function renderShape(shape: Shape) {
   switch (shape.type) {
     case 'pen':
@@ -14,7 +21,7 @@ export function renderShape(shape: Shape) {
           strokeWidth={shape.thickness}
           lineCap="round"
           lineJoin="round"
-          tension={0.3}
+          tension={FREEHAND_TENSION}
           listening={false}
         />
       )
@@ -25,12 +32,13 @@ export function renderShape(shape: Shape) {
           key={shape.id}
           points={shape.points}
           stroke={shape.color}
-          strokeWidth={shape.thickness * MARKER_THICKNESS_SCALE}
+          strokeWidth={shape.thickness}
           opacity={MARKER_OPACITY}
           lineCap="round"
           lineJoin="round"
+          tension={FREEHAND_TENSION}
           listening={false}
-          // Fosforlu kalem ust uste gecen vuruslarda koyulasmasin.
+          // Keep overlapping highlighter strokes from compounding.
           globalCompositeOperation="source-over"
         />
       )
@@ -110,7 +118,7 @@ export function renderShape(shape: Shape) {
   }
 }
 
-/** Cizilmeye deger mi? Sifir boyutlu sekilleri kaydetmeyelim. */
+/** Worth keeping? Zero-sized shapes should not be committed. */
 export function isMeaningful(shape: Shape): boolean {
   switch (shape.type) {
     case 'pen':

@@ -1,3 +1,4 @@
+import { t } from '@shared/i18n/index.js'
 import { Menu, Tray, nativeImage, app, shell } from 'electron'
 import { resourcePath } from '@garam/core'
 import type { Logger } from '@garam/core'
@@ -11,8 +12,8 @@ export interface TrayActions {
 }
 
 /**
- * Sistem tepsisi simgesi — uygulamanin birincil kontrol yuzeyi.
- * G-Snap penceresiz calisir; ana pencere yok, yalnizca tepsi + kisayollar.
+ * System tray icon — the app's primary control surface.
+ * G-Snap runs windowless: there is no main window, only the tray and hotkeys.
  */
 export class TrayController {
   private tray: Tray | null = null
@@ -25,34 +26,34 @@ export class TrayController {
   create(hotkeys: { region: string; fullscreen: string }): void {
     const icon = this.loadIcon()
     this.tray = new Tray(icon)
-    this.tray.setToolTip('G-Snap — ekran alintisi')
+    this.tray.setToolTip(t('tray.tooltip'))
     this.update(hotkeys)
 
-    // Tepsi simgesine cift tiklama: bolge secimi baslat.
+    // Double-clicking the tray icon starts a region selection.
     this.tray.on('double-click', () => this.actions.onCaptureRegion())
   }
 
-  /** Kisayol metinleri degistiginde menuyu yeniden kurar. */
+  /** Rebuilds the menu when the shortcut labels change. */
   update(hotkeys: { region: string; fullscreen: string }): void {
     if (!this.tray) return
 
     const menu = Menu.buildFromTemplate([
       {
-        label: 'Bolge sec',
+        label: t('tray.selectRegion'),
         accelerator: hotkeys.region,
         click: () => this.actions.onCaptureRegion(),
       },
       {
-        label: 'Tum ekran -> panoya',
+        label: t('tray.fullScreen'),
         accelerator: hotkeys.fullscreen,
         click: () => this.actions.onCaptureFullscreen(),
       },
       { type: 'separator' },
-      { label: 'Kayit klasorunu ac', click: () => this.actions.onOpenSaveFolder() },
-      { label: 'Ayarlar...', click: () => this.actions.onOpenSettings() },
+      { label: t('tray.openSaveFolder'), click: () => this.actions.onOpenSaveFolder() },
+      { label: t('tray.settings'), click: () => this.actions.onOpenSettings() },
       { type: 'separator' },
-      { label: `Surum ${app.getVersion()}`, enabled: false },
-      { label: 'Cikis', click: () => this.actions.onQuit() },
+      { label: t('tray.version', { version: app.getVersion() }), enabled: false },
+      { label: t('tray.quit'), click: () => this.actions.onQuit() },
     ])
 
     this.tray.setContextMenu(menu)
@@ -64,15 +65,15 @@ export class TrayController {
   }
 
   /**
-   * Tepsi simgesini yukler. Dosya yoksa uygulama coker yerine gomulu bir
-   * yedek simge kullanilir — paketleme sirasinda ikon unutulmus olabilir.
+   * Loads the tray icon. If the file is missing we fall back to an embedded one
+   * rather than crashing — the icon may simply not have been generated yet.
    */
   private loadIcon(): Electron.NativeImage {
     const path = resourcePath('icons', 'tray.png')
     const image = nativeImage.createFromPath(path)
 
     if (image.isEmpty()) {
-      this.log.warn(`Tepsi simgesi bulunamadi: ${path} — yedek simge kullaniliyor`)
+      this.log.warn(`Tray icon not found at ${path} — using the embedded fallback`)
       return nativeImage.createFromDataURL(FALLBACK_ICON)
     }
 
@@ -80,14 +81,14 @@ export class TrayController {
   }
 }
 
-/** Kayit klasorunu acar; yoksa olusturur. */
+/** Opens the save folder, creating it if it does not exist yet. */
 export function openFolder(path: string): Promise<string> {
   return shell.openPath(path)
 }
 
 /**
- * 16x16 kirmizi yuvarlak kare PNG — simge dosyasi eksikse gorunur bir yedek.
- * nativeImage SVG data URL'lerini DESTEKLEMEZ, bu yuzden gomulu PNG kullaniliyor.
+ * 16x16 rounded red square, used when the icon file is missing.
+ * nativeImage does NOT support SVG data URLs, hence an embedded PNG.
  */
 const FALLBACK_ICON =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAJUlEQVR42mN46' +

@@ -6,10 +6,10 @@ export interface ModalProps {
   onClose: () => void
   title: string
   children: ReactNode
-  /** Alt kisimda gosterilen dugmeler. */
+  /** Buttons shown in the footer. */
   footer?: ReactNode
   width?: number
-  /** Arkaplana tiklayinca kapanmasin (or. kaydedilmemis degisiklik uyarisi). */
+  /** Do not close on backdrop click (e.g. unsaved-changes warning). */
   persistent?: boolean
   className?: string
 }
