@@ -534,28 +534,40 @@ input:focus {
 }
 
 .transport {
-  /* Three columns so the play button holds the centre line however wide the
-     actions beside it grow. */
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  /*
+   * The play button sits on the centre line of the picture above it, and
+   * nothing beside it is allowed to move it.
+   *
+   * This was a `1fr auto 1fr` grid, which looks like it centres and does not:
+   * a grid track's floor is its content's min-content width, so once the
+   * actions on the right outgrew their third they widened that track and shoved
+   * the middle one left. Taking both side clusters out of the flow is the only
+   * arrangement where the centre depends on nothing but the row's own width.
+   */
+  position: relative;
+  display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: center;
+  min-height: 38px;
 }
 
 .transport-main {
   display: flex;
   align-items: center;
   gap: 6px;
-  justify-self: center;
 }
 
-
+.transport-clock {
+  position: absolute;
+  left: 0;
+}
 
 .transport-actions {
+  position: absolute;
+  right: 0;
   display: flex;
   align-items: center;
   gap: 8px;
-  justify-self: end;
 }
 
 /* The one control you reach for without looking, so it is round and larger. */
@@ -1093,7 +1105,6 @@ kbd {
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum';
   color: var(--text-muted);
-  justify-self: start;
 }
 
 .pill-accent {
