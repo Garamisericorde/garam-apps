@@ -576,9 +576,13 @@ input:focus {
   margin-left: var(--lane-inset);
 }
 
-.transport-clock {
+/* Pinned to the edge so its width cannot move the buttons in the middle */
+.transport-side {
   position: absolute;
   left: 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 
 .transport-actions {
@@ -1143,8 +1147,52 @@ kbd {
 .timeline-zoom {
   display: flex;
   align-items: center;
-  gap: 4px;
-  align-self: flex-end;
+  gap: 2px;
+}
+
+.zoom-btn {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.zoom-btn svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.zoom-readout {
+  min-width: 38px;
+  padding: 4px 2px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.zoom-btn:hover:not(:disabled),
+.zoom-readout:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg-elevated);
+}
+
+.zoom-btn:disabled,
+.zoom-readout:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .parts {

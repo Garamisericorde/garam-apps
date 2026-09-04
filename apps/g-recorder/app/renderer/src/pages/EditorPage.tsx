@@ -7,6 +7,8 @@ import type { VideoPlayerHandle } from '../components/VideoPlayer'
 import Timeline from '../components/Timeline'
 import type { Lane } from '../components/Timeline'
 import TrimControls from '../components/TrimControls'
+import { FIT_VIEW } from '../components/timelineView'
+import type { TimelineView } from '../components/timelineView'
 import PresetPicker from '../components/PresetPicker'
 import MediaLibrary from '../components/MediaLibrary'
 import type { ExportControl } from '../components/PresetPicker'
@@ -125,6 +127,9 @@ export default function EditorPage(): JSX.Element {
 
   const [busy, setBusy] = useState<'save' | 'record' | 'open' | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /* How much of the clip the strip spans. Held here because the strip's wheel
+     and the transport's buttons both move it. */
+  const [view, setView] = useState<TimelineView>(FIT_VIEW)
   /* Which region is under the cursor, so only that one lights up */
   const [dragOver, setDragOver] = useState<'stage' | 'timeline' | null>(null)
 
@@ -143,6 +148,7 @@ export default function EditorPage(): JSX.Element {
     setWaveform([])
     setCuts([])
     setDiscarded([])
+    setView(FIT_VIEW)
   }, [])
 
   const loadClip = useCallback(async (clipPath: string) => {
@@ -161,6 +167,7 @@ export default function EditorPage(): JSX.Element {
       setAudioIn(0)
       setAudioOut(nextDuration)
       setAudioRemoved(false)
+      setView(FIT_VIEW)
       setCurrentTime(0)
 
       // Both strips are nice-to-haves — never block the preview on them.
@@ -546,6 +553,8 @@ export default function EditorPage(): JSX.Element {
             cuts={visibleCuts}
             onSeek={handleSeek}
             onTrimChange={handleTrimChange}
+            view={view}
+            onViewChange={setView}
           />
         </div>
 
@@ -595,6 +604,8 @@ export default function EditorPage(): JSX.Element {
             setCuts([])
             setDiscarded([])
           }}
+          view={view}
+          onViewChange={setView}
           onNudge={(delta) => playerRef.current?.nudge(delta)}
         onToggleFullscreen={toggleFullscreen}
         />

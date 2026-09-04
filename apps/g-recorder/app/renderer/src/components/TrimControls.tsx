@@ -1,4 +1,6 @@
 import { formatTime } from '../../../shared/time'
+import TimelineZoom from './TimelineZoom'
+import type { TimelineView } from './timelineView'
 
 /** How far the skip buttons jump — the step every player uses */
 const SKIP_SECONDS = 5
@@ -16,6 +18,11 @@ interface TrimControlsProps {
   onReset: () => void
   onNudge: (deltaSeconds: number) => void
   onToggleFullscreen: () => void
+  /* The timeline's zoom rides here rather than in a row of its own: it is
+     three small controls, and a whole row of window height for them costs more
+     of the clip than it is worth. */
+  view: TimelineView
+  onViewChange: (view: TimelineView) => void
 }
 
 /**
@@ -35,6 +42,8 @@ export default function TrimControls({
   onReset,
   onNudge,
   onToggleFullscreen,
+  view,
+  onViewChange,
 }: TrimControlsProps): JSX.Element {
   const selection = Math.max(outPoint - inPoint, 0)
   const trimmed = inPoint > 0.001 || outPoint < duration - 0.001
@@ -49,10 +58,13 @@ export default function TrimControls({
         * also why the clock lives out here rather than next to the buttons,
         * where its width would push the play button off centre.
         */}
-      <span className="transport-clock mono">
-        {formatTime(currentTime)}
-        <span className="faint"> / {formatTime(duration)}</span>
-      </span>
+      <div className="transport-side">
+        <span className="transport-clock mono">
+          {formatTime(currentTime)}
+          <span className="faint"> / {formatTime(duration)}</span>
+        </span>
+        <TimelineZoom view={view} disabled={disabled} onChange={onViewChange} />
+      </div>
 
       <div className="transport-main">
         <button

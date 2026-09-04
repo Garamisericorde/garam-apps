@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { clamp } from '../../../shared/time'
 import ContextMenu from './ContextMenu'
 import type { MenuPosition } from './ContextMenu'
+import { MAX_ZOOM, MIN_ZOOM, TAIL_FACTOR } from './timelineView'
+import type { TimelineView } from './timelineView'
 
 interface TimelineProps {
   duration: number
@@ -25,6 +27,10 @@ interface TimelineProps {
   onResetLane: (lane: Lane) => void
   onSeek: (seconds: number) => void
   onTrimChange: (inPoint: number, outPoint: number) => void
+  /* The view is held above this: the transport bar's zoom controls change the
+     same window the wheel does, so neither can own it. */
+  view: TimelineView
+  onViewChange: (view: TimelineView) => void
 }
 
 type DragTarget = 'in' | 'out' | 'audio-in' | 'audio-out' | 'playhead'
@@ -32,21 +38,6 @@ export type Lane = 'video' | 'audio'
 
 /** Smallest selection the user can drag down to */
 const MIN_SELECTION_SECONDS = 0.1
-
-/**
- * Zoom bounds. 1 fits the clip with its tail; below that the view keeps opening
- * past the end, which is how room is made for material that is not there yet.
- */
-const MIN_ZOOM = 0.2
-const MAX_ZOOM = 60
-
-/**
- * How much empty track to leave past the end of the clip at Fit.
- *
- * A clip ending flush with the right edge looks like it continues off screen,
- * and leaves nowhere to put anything after it.
- */
-const TAIL_FACTOR = 1.12
 
 /**
  * Scrubbing strip with draggable IN/OUT handles and a zoom.
@@ -75,14 +66,14 @@ export default function Timeline({
   onResetLane,
   onSeek,
   onTrimChange,
+  view,
+  onViewChange,
 }: TimelineProps): JSX.Element {
   const trackRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<DragTarget | null>(null)
 
   const [menu, setMenu] = useState<{ at: MenuPosition; lane: Lane } | null>(null)
-  const [zoom, setZoom] = useState(1)
-  /** Seconds at the left edge of the strip */
-  const [offset, setOffset] = useState(0)
+  const { zoom, offset } = view
 
   /*
    * Track, view and clip are three different lengths. Keeping them apart is
@@ -95,15 +86,16 @@ export default function Timeline({
 
   // A shorter clip, or a zoom-out, can leave the window hanging past the end.
   useEffect(() => {
-    setOffset((previous) => clamp(previous, 0, maxOffset))
-  }, [maxOffset])
+    const clamped = clamp(offset, 0, maxOffset)
+    if (clamped !== offset) onViewChange({ zoom, offset: clamped })
+  }, [maxOffset, offset, zoom, onViewChange])
 
   /** Keep the playhead in view while it plays past the right edge */
   useEffect(() => {
     if (zoom === 1 || duration <= 0) return
     if (currentTime >= offset && currentTime <= offset + visible) return
-    setOffset(clamp(currentTime - visible / 2, 0, maxOffset))
-  }, [currentTime, zoom, duration, offset, visible, maxOffset])
+    onViewChange({ zoom, offset: clamp(currentTime - visible / 2, 0, maxOffset) })
+  }, [currentTime, zoom, duration, offset, visible, maxOffset, onViewChange])
 
   const timeFromEvent = useCallback(
     (clientX: number): number => {
@@ -190,17 +182,18 @@ export default function Timeline({
       const next = clamp(zoom * (event.deltaY < 0 ? 1.25 : 0.8), MIN_ZOOM, MAX_ZOOM)
       const nextVisible = span / next
 
-      setZoom(next)
-      setOffset(clamp(anchor - fraction * nextVisible, 0, Math.max(span - nextVisible, 0)))
+      onViewChange({
+        zoom: next,
+        offset: clamp(anchor - fraction * nextVisible, 0, Math.max(span - nextVisible, 0)),
+      })
     },
-    [duration, offset, span, visible, zoom],
+    [duration, offset, span, visible, zoom, onViewChange],
   )
 
   /** Fraction of the visible window a time sits at, or null when off-screen */
   const position = (seconds: number): number => ((seconds - offset) / visible) * 100
 
   const hasClip = duration > 0
-  const zoomed = zoom > 1
 
   /** One lane's shading, selection, handles and cuts — the two differ only in
    *  which window they draw and which lane a drag edits. */
@@ -360,39 +353,6 @@ export default function Timeline({
             <div className="lane-playhead" style={{ left: `${position(currentTime)}%` }} />
           )}
         </div>
-      </div>
-
-      <div className="timeline-zoom">
-        <button
-          className="btn btn-icon btn-ghost"
-          disabled={!hasClip || zoom <= MIN_ZOOM}
-          onClick={() => setZoom((z) => clamp(z / 1.6, MIN_ZOOM, MAX_ZOOM))}
-          title="Zoom out (scroll down on the strip)"
-        >
-          −
-        </button>
-        <span className="small muted mono" style={{ minWidth: 46, textAlign: 'center' }}>
-          {zoomed ? `${zoom.toFixed(1)}×` : 'Fit'}
-        </span>
-        <button
-          className="btn btn-icon btn-ghost"
-          disabled={!hasClip || zoom >= MAX_ZOOM}
-          onClick={() => setZoom((z) => clamp(z * 1.6, MIN_ZOOM, MAX_ZOOM))}
-          title="Zoom in (scroll up on the strip)"
-        >
-          +
-        </button>
-        {zoomed && (
-          <button
-            className="btn btn-ghost small"
-            onClick={() => {
-              setZoom(1)
-              setOffset(0)
-            }}
-          >
-            Fit
-          </button>
-        )}
       </div>
     </div>
   )
