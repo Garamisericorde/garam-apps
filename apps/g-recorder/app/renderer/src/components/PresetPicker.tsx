@@ -9,6 +9,7 @@ import {
 } from '../../../shared/presets'
 import type {
   AspectId,
+  EncodeEffort,
   ExportFormat,
   ExportOptions,
   ExportProgress,
@@ -65,6 +66,7 @@ export default function PresetPicker({
   const [speed, setSpeed] = useState(1)
   const [volume, setVolume] = useState(1)
   const [targetSizeMb, setTargetSizeMb] = useState<number | null>(null)
+  const [effort, setEffort] = useState<EncodeEffort>('balanced')
   /*
    * Where this export goes and what it is called. Seeded from the settings when
    * the dialog opens, then the user's for as long as it is open.
@@ -122,6 +124,7 @@ export default function PresetPicker({
 
     const options: ExportOptions = {
       presetId,
+      effort,
       timeline,
       directory,
       // Empty means "the next name in the pattern", settled against the folder
@@ -150,7 +153,19 @@ export default function PresetPicker({
       unsubscribeRef.current?.()
       unsubscribeRef.current = null
     }
-  }, [aspect, directory, fileName, format, hasAudio, presetId, speed, targetSizeMb, timeline, volume])
+  }, [
+    aspect,
+    directory,
+    effort,
+    fileName,
+    format,
+    hasAudio,
+    presetId,
+    speed,
+    targetSizeMb,
+    timeline,
+    volume,
+  ])
 
   /*
    * Reported only when something the caller can see actually changed.
@@ -253,6 +268,31 @@ export default function PresetPicker({
                   title={option.description}
                 >
                   {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {format === 'mp4' && (
+          <div className="field">
+            <span className="field-label">Encoding</span>
+            <div className="segmented">
+              {(
+                [
+                  ['fast', 'Faster', 'Quickest export, largest file for the quality'],
+                  ['balanced', 'Balanced', 'What almost every export wants'],
+                  ['small', 'Smallest', 'Same picture, smaller file, a slower export'],
+                ] as [EncodeEffort, string, string][]
+              ).map(([id, label, hint]) => (
+                <button
+                  key={id}
+                  className={effort === id ? 'active' : ''}
+                  onClick={() => setEffort(id)}
+                  disabled={isExporting}
+                  title={hint}
+                >
+                  {label}
                 </button>
               ))}
             </div>

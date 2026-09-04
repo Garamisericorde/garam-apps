@@ -53,8 +53,16 @@ export const EXPORT_PRESETS: ExportPreset[] = [
     description: 'Source resolution and frame rate, largest file',
     resolution: 'source',
     fps: 0,
-    quality: 19,
-    maxBitrateKbps: 0,
+    /*
+     * 23, not the 19 this used to be.
+     *
+     * That number was chosen against an encoder running without B-frames,
+     * lookahead or adaptive quantisation, where it took a very low CQ to look
+     * clean. With those on, 23 is the same picture at roughly a third of the
+     * size, and a ceiling stops one violent scene from spiking the whole file.
+     */
+    quality: 23,
+    maxBitrateKbps: 25000,
     audioBitrateKbps: 192,
   },
 ]

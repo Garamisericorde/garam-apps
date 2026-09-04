@@ -1,7 +1,7 @@
 import { spawn } from 'child_process'
 import type { ChildProcess } from 'child_process'
 import { join } from 'path'
-import { createWriteStream, mkdirSync, readdirSync } from 'fs'
+import { createWriteStream, mkdirSync, readdirSync, rmSync } from 'fs'
 import type { AspectId, EncoderType, ExportOptions, ExportProgress, MediaInfo } from '../../shared/types'
 import { getAspectRatio, getPreset, resolutionHeight } from '../../shared/presets'
 import { logsDir } from '../../shared/paths'
@@ -190,6 +190,7 @@ export class ExportService {
       quality: preset.quality,
       maxBitrateKbps: preset.maxBitrateKbps,
       audioBitrateKbps: preset.audioBitrateKbps,
+      effort: options.effort,
       speed: options.speed,
       volume: includeAudio ? options.volume : 0,
       hasAudio: includeAudio,
@@ -262,6 +263,17 @@ export class ExportService {
 
         if (this._cancelled) {
           this._cancelled = false
+          /*
+           * A cancelled export leaves a file with no moov atom, which no player
+           * and no probe can open. Leaving it behind put a clip in the library
+           * that could only ever fail, so it goes with the run that made it.
+           */
+          try {
+            rmSync(outputPath, { force: true })
+          } catch (err) {
+            logger.warn('Could not remove the cancelled export', String(err))
+          }
+
           this._emit({ percent: 0, eta: null, isComplete: false, error: 'Cancelled' })
           rejectPromise(new Error('Export cancelled'))
           return

@@ -66,10 +66,10 @@ describe('buildVideoEncodeArgs', () => {
     expect(buildVideoEncodeArgs({ encoder: 'nvenc', quality: 23 })).toContain('h264_nvenc')
   })
 
-  it('spends quality on picture by default — exports run once', () => {
+  it('spends quality on picture by default, since exports run once', () => {
     expect(valueAfter(buildVideoEncodeArgs({ encoder: 'nvenc', quality: 23 }), '-tune')).toBe('hq')
     expect(valueAfter(buildVideoEncodeArgs({ encoder: 'x264', quality: 23 }), '-preset')).toBe(
-      'veryfast',
+      'medium',
     )
     expect(valueAfter(buildVideoEncodeArgs({ encoder: 'qsv', quality: 23 }), '-preset')).toBe(
       'medium',
@@ -589,5 +589,59 @@ describe('buildTimelineExportArgs across several sources', () => {
     const args = buildTimelineExportArgs({ ...twoClips, audio: [] })
     expect(args).toContain('-an')
     expect(args[args.indexOf('-filter_complex') + 1]).not.toContain('atrim')
+  })
+})
+
+
+describe('export encoding is not capture encoding', () => {
+  it('gives an export the tools that make a file small', () => {
+    // B-frames, lookahead and adaptive quantisation are the whole difference
+    // between a file worth its bitrate and one at three times it.
+    const args = buildVideoEncodeArgs({ encoder: 'nvenc', quality: 23 })
+
+    expect(valueAfter(args, '-bf')).toBe('3')
+    expect(valueAfter(args, '-rc-lookahead')).toBe('20')
+    expect(valueAfter(args, '-spatial-aq')).toBe('1')
+    expect(valueAfter(args, '-preset')).toBe('p6')
+  })
+
+  it('keeps every one of them away from the capture', () => {
+    // They all hold frames on the GPU the game is trying to use.
+    const args = buildVideoEncodeArgs({ encoder: 'nvenc', quality: 23, lowLatency: true })
+
+    expect(valueAfter(args, '-bf')).toBe('0')
+    expect(valueAfter(args, '-rc-lookahead')).toBe('0')
+    expect(args).not.toContain('-spatial-aq')
+    expect(valueAfter(args, '-tune')).toBe('ll')
+  })
+
+  it('trades export time for size when asked', () => {
+    expect(
+      valueAfter(buildVideoEncodeArgs({ encoder: 'nvenc', quality: 23, effort: 'fast' }), '-preset'),
+    ).toBe('p4')
+    expect(
+      valueAfter(
+        buildVideoEncodeArgs({ encoder: 'nvenc', quality: 23, effort: 'small' }),
+        '-preset',
+      ),
+    ).toBe('p7')
+    expect(
+      valueAfter(buildVideoEncodeArgs({ encoder: 'x264', quality: 23, effort: 'small' }), '-preset'),
+    ).toBe('slow')
+  })
+
+  it('adds a second pass only when it has a size to hit', () => {
+    const targeted = buildVideoEncodeArgs({
+      encoder: 'nvenc',
+      quality: 23,
+      targetBitrateKbps: 4000,
+    })
+    expect(valueAfter(targeted, '-multipass')).toBe('qres')
+    expect(buildVideoEncodeArgs({ encoder: 'nvenc', quality: 23 })).not.toContain('-multipass')
+  })
+
+  it('never leaves a B-frame in a capture that asked for none', () => {
+    const capture = buildVideoEncodeArgs({ encoder: 'nvenc', quality: 23, lowLatency: true })
+    expect(capture).not.toContain('-multipass')
   })
 })

@@ -1,4 +1,4 @@
-import type { AppSettings, EncoderType } from '../../shared/types'
+import type { AppSettings, EncodeEffort, EncoderType } from '../../shared/types'
 import { resolutionHeight } from '../../shared/presets'
 import { KEYFRAME_INTERVAL_SECONDS } from '../settings/defaults'
 
@@ -25,6 +25,8 @@ export interface VideoEncodeOptions {
    * on, so capture asks for the low-latency variant of each encoder instead.
    */
   lowLatency?: boolean
+  /** How hard the encoder works on an export; ignored while capturing */
+  effort?: EncodeEffort
   /**
    * Cap on encoder worker threads (software encoding only).
    *
@@ -43,8 +45,32 @@ export interface VideoEncodeOptions {
  * Note the NVENC mode is plain `vbr`: modern FFmpeg only offers constqp, vbr,
  * and cbr, so the old `vbr_hq` alias fails outright.
  */
+/**
+ * How hard the encoder works, which is the only real trade an export has.
+ *
+ * Every step slower is the same picture in a smaller file, paid for in export
+ * time. Nothing about it changes what comes out looking like.
+ */
+function speedPreset(effort: EncodeEffort): string {
+  if (effort === 'fast') return 'p4'
+  return effort === 'small' ? 'p7' : 'p6'
+}
+
+function x264Preset(effort: EncodeEffort): string {
+  if (effort === 'fast') return 'veryfast'
+  return effort === 'small' ? 'slow' : 'medium'
+}
+
 export function buildVideoEncodeArgs(options: VideoEncodeOptions): string[] {
-  const { encoder, quality, targetBitrateKbps, maxBitrateKbps, gopSize, lowLatency } = options
+  const {
+    encoder,
+    quality,
+    targetBitrateKbps,
+    maxBitrateKbps,
+    gopSize,
+    lowLatency,
+    effort = 'balanced',
+  } = options
   const args: string[] = []
 
   const capKbps = targetBitrateKbps ?? (maxBitrateKbps && maxBitrateKbps > 0 ? maxBitrateKbps : 0)
@@ -53,12 +79,36 @@ export function buildVideoEncodeArgs(options: VideoEncodeOptions): string[] {
 
   switch (encoder) {
     case 'nvenc':
-      // 'll' drops the lookahead and B-frame reordering that 'hq' turns on —
-      // both hold frames on the GPU while the game is trying to use it.
-      args.push('-c:v', 'h264_nvenc', '-preset', 'p4', '-tune', lowLatency ? 'll' : 'hq')
-      if (lowLatency) args.push('-rc-lookahead', '0', '-bf', '0')
+      if (lowLatency) {
+        /*
+         * Capture. 'll' drops the lookahead and the B-frame reordering that
+         * 'hq' turns on, because both hold frames on the GPU while the game is
+         * trying to use it.
+         */
+        args.push('-c:v', 'h264_nvenc', '-preset', 'p4', '-tune', 'll')
+        args.push('-rc-lookahead', '0', '-bf', '0')
+      } else {
+        /*
+         * Export, which is not racing anything.
+         *
+         * The capture settings were being used here too, and they are exactly
+         * wrong for a file: no B-frames, no lookahead, no adaptive
+         * quantisation, on a middling preset. That is why an export came out at
+         * roughly three times the bitrate its picture was worth.
+         *
+         * B-frames are the single biggest saving H.264 has. b_ref_mode is
+         * deliberately left alone: it needs Turing or newer, and NVENC errors
+         * out rather than ignoring it on the older cards this app supports.
+         */
+        args.push('-c:v', 'h264_nvenc', '-preset', speedPreset(effort), '-tune', 'hq')
+        args.push('-bf', '3', '-rc-lookahead', '20', '-spatial-aq', '1', '-aq-strength', '8')
+      }
+
       if (targetBitrateKbps) {
         args.push('-rc', 'vbr', '-b:v', `${targetBitrateKbps}k`)
+        // Two passes over a quarter-size frame. It costs little and it is the
+        // difference between hitting a size target and missing it.
+        if (!lowLatency) args.push('-multipass', 'qres')
       } else {
         args.push('-rc', 'vbr', '-cq', String(quality), '-b:v', '0')
       }
@@ -86,10 +136,17 @@ export function buildVideoEncodeArgs(options: VideoEncodeOptions): string[] {
       break
 
     default:
-      // 'veryfast' still costs several cores at 1080p60. 'ultrafast' with
-      // zerolatency is the difference between a playable game and a slideshow;
-      // the buffer trades picture quality for it, exports do not.
-      args.push('-c:v', 'libx264', '-preset', lowLatency ? 'ultrafast' : 'veryfast')
+      /*
+       * 'ultrafast' with zerolatency is the difference between a playable game
+       * and a slideshow, so the buffer takes it. An export is not racing
+       * anything, and every step slower is a smaller file for the same picture.
+       */
+      args.push(
+        '-c:v',
+        'libx264',
+        '-preset',
+        lowLatency ? 'ultrafast' : x264Preset(effort),
+      )
       if (lowLatency) args.push('-tune', 'zerolatency')
       if (targetBitrateKbps) {
         args.push('-b:v', `${targetBitrateKbps}k`)
@@ -371,6 +428,8 @@ export interface CropRect {
 }
 
 export interface ClipExportOptions {
+  /** How hard the encoder works; the same picture, a smaller file, more time */
+  effort?: EncodeEffort
   clipPath: string
   outputPath: string
   inPoint: number
@@ -533,6 +592,7 @@ export function buildTimelineExportArgs(options: TimelineExportOptions): string[
       quality: options.quality,
       maxBitrateKbps: options.maxBitrateKbps,
       targetBitrateKbps: options.targetBitrateKbps,
+      effort: options.effort,
     }),
     '-pix_fmt', 'yuv420p',
     '-movflags', '+faststart',
@@ -588,6 +648,7 @@ export function buildClipExportArgs(options: ClipExportOptions): string[] {
       quality: options.quality,
       maxBitrateKbps: options.maxBitrateKbps,
       targetBitrateKbps: options.targetBitrateKbps,
+      effort: options.effort,
     }),
   )
 
@@ -661,6 +722,7 @@ function buildStitchedExportArgs(
       quality: options.quality,
       maxBitrateKbps: options.maxBitrateKbps,
       targetBitrateKbps: options.targetBitrateKbps,
+      effort: options.effort,
     }),
     '-pix_fmt', 'yuv420p',
     '-movflags', '+faststart',

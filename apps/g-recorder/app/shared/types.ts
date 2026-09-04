@@ -130,8 +130,18 @@ export interface ExportTimeline {
   duration: number
 }
 
+/**
+ * How hard the encoder works.
+ *
+ * The one trade an export really has: every step slower is the same picture in
+ * a smaller file, paid for in the time the export takes. It changes nothing
+ * about what the result looks like.
+ */
+export type EncodeEffort = 'fast' | 'balanced' | 'small'
+
 export interface ExportOptions {
   presetId: string
+  effort: EncodeEffort
   timeline: ExportTimeline
   /** Folder to write into; empty string = the configured export folder */
   directory: string
