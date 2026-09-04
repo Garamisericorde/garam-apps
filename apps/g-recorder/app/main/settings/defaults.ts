@@ -1,6 +1,11 @@
 import { app } from 'electron'
 import { join } from 'path'
 import type { AppSettings } from '../../shared/types'
+import {
+  DEFAULT_EDITOR_KEYS,
+  DEFAULT_HOTKEYS,
+  DEFAULT_PAD_BINDINGS,
+} from '../../shared/hotkeyDefaults'
 
 export const DEFAULT_SETTINGS: AppSettings = {
   // Capture
@@ -26,22 +31,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // Output
   outputPath: join(app.getPath('videos'), 'G-Recorder'),
 
-  /*
-   * Hotkeys, following NVIDIA ShadowPlay — the scheme most people recording
-   * games already have in their fingers. Alt+F9 records, Alt+F10 saves the
-   * replay, and the buffer toggle takes the shifted form of the save key
-   * because the two belong to the same feature.
-   */
-  hotkeySaveReplay: 'Alt+F10',
-  hotkeyToggleRecording: 'Alt+Shift+F10',
-  hotkeyRecordToFile: 'Alt+F9',
-
-  // Editor keys, following what video tools have used for decades.
-  editorKeyPlayPause: 'Space',
-  editorKeyCutStart: 'I',
-  editorKeyCutEnd: 'O',
-  editorKeySplit: 'S',
-  editorKeyFullscreen: 'F',
+  ...DEFAULT_HOTKEYS,
+  ...DEFAULT_PAD_BINDINGS,
+  ...DEFAULT_EDITOR_KEYS,
 }
 
 // ── Recording constants ──────────────────────────────────────────────────────

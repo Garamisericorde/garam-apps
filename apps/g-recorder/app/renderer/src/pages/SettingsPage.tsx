@@ -5,7 +5,14 @@ import type {
   DisplayInfo,
   EncoderCapabilities,
   FfmpegStatus,
+  PadStatus,
 } from '../../../shared/types'
+import { isSafeBinding, parseBinding } from '../../../shared/gamepad'
+import {
+  DEFAULT_EDITOR_KEYS,
+  DEFAULT_HOTKEYS,
+  DEFAULT_PAD_BINDINGS,
+} from '../../../shared/hotkeyDefaults'
 import { formatBytes } from '../../../shared/time'
 import { resolutionHeight } from '../../../shared/presets'
 
@@ -314,7 +321,18 @@ export default function SettingsPage(): JSX.Element {
       </Section>
 
       {/* ── Hotkeys ── */}
-      <Section title="Hotkeys">
+      <Section
+        title="Hotkeys"
+        action={
+          <button
+            className="btn btn-ghost small"
+            onClick={() => void save(DEFAULT_HOTKEYS)}
+            title="Put all three back to the ShadowPlay defaults"
+          >
+            Reset to defaults
+          </button>
+        }
+      >
         <HotkeyField
           label="Save clip from buffer"
           value={settings.hotkeySaveReplay}
@@ -332,7 +350,17 @@ export default function SettingsPage(): JSX.Element {
         />
       </Section>
 
-      <Section title="Editor keys">
+      {/* ── Controller ── */}
+      <GamepadSection settings={settings} save={save} />
+
+      <Section
+        title="Editor keys"
+        action={
+          <button className="btn btn-ghost small" onClick={() => void save(DEFAULT_EDITOR_KEYS)}>
+            Reset to defaults
+          </button>
+        }
+      >
         <HotkeyField
           label="Play / pause"
           value={settings.editorKeyPlayPause}
@@ -421,10 +449,189 @@ export default function SettingsPage(): JSX.Element {
 
 // ── Sub-components ───────────────────────────────────────────────────────────
 
-function Section({ title, children }: { title: string; children: React.ReactNode }): JSX.Element {
+/**
+ * Controller shortcuts.
+ *
+ * Its own section rather than a fourth column on the keyboard rows: these do
+ * not go through Windows at all — the app reads the pad itself — and the two
+ * fail in completely different ways. A keyboard shortcut can be taken by
+ * another app; a controller one can only be missing a controller.
+ */
+function GamepadSection({
+  settings,
+  save,
+}: {
+  settings: AppSettings
+  save: (partial: Partial<AppSettings>) => Promise<void>
+}): JSX.Element {
+  const [status, setStatus] = useState<PadStatus | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const poll = (): void => {
+      void window.api.gamepad.status().then((next) => {
+        if (!cancelled) setStatus(next)
+      })
+    }
+
+    poll()
+    // A pad plugged in while this page is open should appear on its own.
+    const timer = setInterval(poll, 2000)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [])
+
   return (
     <div className="settings-section">
-      <p className="section-title">{title}</p>
+      <div className="section-head">
+        <p className="section-title">Controller</p>
+        <button
+          className="btn btn-ghost small"
+          onClick={() => void save(DEFAULT_PAD_BINDINGS)}
+          title="Clear all three controller bindings"
+        >
+          Clear all
+        </button>
+      </div>
+      <div className="card stack">
+        <p className="small faint" style={{ margin: 0 }}>
+          {status && !status.available
+            ? `Controller support is unavailable on this install${
+                status.reason ? ` — ${status.reason}` : ''
+              }`
+            : status?.connected
+              ? 'Controller connected. These work while a game is in the foreground.'
+              : 'No controller detected. Xbox pads work as they are; a DualSense needs Steam Input or DS4Windows.'}
+        </p>
+
+        <PadField
+          label="Save clip from buffer"
+          value={settings.padSaveReplay}
+          disabled={!status?.available}
+          onChange={(binding) => void save({ padSaveReplay: binding })}
+        />
+        <PadField
+          label="Turn buffer on / off"
+          value={settings.padToggleRecording}
+          disabled={!status?.available}
+          onChange={(binding) => void save({ padToggleRecording: binding })}
+        />
+        <PadField
+          label="Start / stop recording"
+          value={settings.padRecordToFile}
+          disabled={!status?.available}
+          onChange={(binding) => void save({ padRecordToFile: binding })}
+        />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * One controller binding.
+ *
+ * Capture resolves on RELEASE, with everything held during the press — the
+ * only way a chord can be bound at all, since a field that took the first
+ * button down could never capture more than one.
+ */
+function PadField({
+  label,
+  value,
+  disabled,
+  onChange,
+}: {
+  label: string
+  value: string | null
+  disabled: boolean
+  onChange: (binding: string | null) => void
+}): JSX.Element {
+  const [capturing, setCapturing] = useState(false)
+  const [held, setHeld] = useState('')
+  const [rejected, setRejected] = useState(false)
+
+  useEffect(() => {
+    if (!capturing) return
+    return window.api.gamepad.onHeld(setHeld)
+  }, [capturing])
+
+  useEffect(() => {
+    if (!capturing) return
+
+    const cancel = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      window.api.gamepad.cancelCapture()
+    }
+    window.addEventListener('keydown', cancel, true)
+    return () => window.removeEventListener('keydown', cancel, true)
+  }, [capturing])
+
+  const start = (): void => {
+    setCapturing(true)
+    setHeld('')
+
+    void window.api.gamepad.capture().then((binding) => {
+      setCapturing(false)
+      setHeld('')
+      if (binding === null) return
+
+      if (!isSafePadBinding(binding)) {
+        // A single button, or two face buttons, would fire mid-game on its own.
+        setRejected(true)
+        setTimeout(() => setRejected(false), 420)
+        return
+      }
+      onChange(binding)
+    })
+  }
+
+  return (
+    <div className="row-between">
+      <div className="stack">
+        <span>{label}</span>
+        {capturing && (
+          <span className="small faint">
+            Hold the buttons together, then let go · Esc to cancel
+          </span>
+        )}
+      </div>
+      <div className="row">
+        <button
+          className={`btn hotkey-field${capturing ? ' is-capturing' : ''}${
+            rejected ? ' is-rejected' : ''
+          }`}
+          disabled={disabled}
+          onClick={() => (capturing ? window.api.gamepad.cancelCapture() : start())}
+        >
+          {capturing ? held || 'Press some buttons…' : (value ?? 'Not bound')}
+        </button>
+        {value && !capturing && (
+          <button className="btn btn-ghost" onClick={() => onChange(null)} title="Clear">
+            Clear
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Section({
+  title,
+  action,
+  children,
+}: {
+  title: string
+  /** A control belonging to the whole section, shown beside its title */
+  action?: React.ReactNode
+  children: React.ReactNode
+}): JSX.Element {
+  return (
+    <div className="settings-section">
+      <div className="section-head">
+        <p className="section-title">{title}</p>
+        {action}
+      </div>
       <div className="card stack">{children}</div>
     </div>
   )
@@ -517,8 +724,8 @@ function HotkeyField({
   allowBareKey = false,
 }: {
   label: string
-  value: string
-  onChange: (accelerator: string) => void
+  value: string | null
+  onChange: (accelerator: string | null) => void
   /**
    * Accept a key with no modifiers.
    *
@@ -619,14 +826,29 @@ function HotkeyField({
           </span>
         )}
       </div>
-      <button
-        className={`btn hotkey-field${capturing ? ' is-capturing' : ''}${
-          rejected ? ' is-rejected' : ''
-        }`}
-        onClick={() => setCapturing((previous) => !previous)}
-      >
-        {capturing ? (preview.length > 0 ? preview.join('+') : 'Press a combination…') : value}
-      </button>
+      <div className="row">
+        <button
+          className={`btn hotkey-field${capturing ? ' is-capturing' : ''}${
+            rejected ? ' is-rejected' : ''
+          }`}
+          onClick={() => setCapturing((previous) => !previous)}
+        >
+          {capturing
+            ? preview.length > 0
+              ? preview.join('+')
+              : 'Press a combination…'
+            : (value ?? 'Not bound')}
+        </button>
+        {value !== null && !capturing && (
+          <button
+            className="btn btn-ghost"
+            onClick={() => onChange(null)}
+            title="Unbind this action — it keeps working from the tray and the buttons"
+          >
+            Clear
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -636,6 +858,12 @@ function modifierName(key: string): string {
   if (key === 'Control') return 'Ctrl'
   if (key === 'Meta') return 'Super'
   return key
+}
+
+/** Whether a captured binding is one a game will not fire by accident */
+function isSafePadBinding(binding: string): boolean {
+  const mask = parseBinding(binding)
+  return mask !== null && isSafeBinding(mask)
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

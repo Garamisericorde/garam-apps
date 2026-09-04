@@ -8,6 +8,13 @@ directories:
 files:
   - out/**/*
 
+# koffi ships its binary as @koromix/koffi-win32-x64/**/koffi.node, and a .node
+# file cannot be loaded from inside app.asar — it packs happily and then the
+# controller shortcuts are dead on every installed copy.
+asarUnpack:
+  - "**/*.node"
+  - "**/@koromix/**"
+
 extraResources:
   # FFmpeg is optional at package time — the app downloads it on first run when
   # this folder is empty, which keeps the installer small.

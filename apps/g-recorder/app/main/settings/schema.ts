@@ -1,4 +1,5 @@
 import type { AppSettings } from '../../shared/types'
+import { parseBinding } from '../../shared/gamepad'
 import {
   ALLOWED_FPS,
   DEFAULT_SETTINGS,
@@ -67,16 +68,13 @@ const VALIDATORS: {
   outputPath: (v) =>
     typeof v === 'string' && v.trim() !== '' ? null : 'outputPath must be a non-empty string',
 
-  hotkeySaveReplay: (v) =>
-    typeof v === 'string' && v.trim() !== '' ? null : 'hotkeySaveReplay must be a non-empty string',
-  hotkeyToggleRecording: (v) =>
-    typeof v === 'string' && v.trim() !== ''
-      ? null
-      : 'hotkeyToggleRecording must be a non-empty string',
-  hotkeyRecordToFile: (v) =>
-    typeof v === 'string' && v.trim() !== ''
-      ? null
-      : 'hotkeyRecordToFile must be a non-empty string',
+  hotkeySaveReplay: accelerator('hotkeySaveReplay'),
+  hotkeyToggleRecording: accelerator('hotkeyToggleRecording'),
+  hotkeyRecordToFile: accelerator('hotkeyRecordToFile'),
+
+  padSaveReplay: padBinding('padSaveReplay'),
+  padToggleRecording: padBinding('padToggleRecording'),
+  padRecordToFile: padBinding('padRecordToFile'),
 
   editorKeyPlayPause: editorKey('editorKeyPlayPause'),
   editorKeyCutStart: editorKey('editorKeyCutStart'),
@@ -85,10 +83,28 @@ const VALIDATORS: {
   editorKeyFullscreen: editorKey('editorKeyFullscreen'),
 }
 
-/** Editor keys are plain key names, so the same check does for all of them */
-function editorKey(name: string) {
-  return (v: unknown): string | null =>
-    typeof v === 'string' && v.trim() !== '' ? null : `${name} must be a non-empty string`
+/**
+ * A binding that can be absent.
+ *
+ * null is the unbound state and is always allowed; a string has to say
+ * something. An empty string is neither, and accepting it would give two
+ * spellings of "not bound" for every later check to remember.
+ */
+function optionalBinding(name: string) {
+  return (v: unknown): string | null => {
+    if (v === null) return null
+    if (typeof v !== 'string') return `${name} must be a string or null`
+    return v.trim() === '' ? `${name} must not be empty — use null to unbind` : null
+  }
+}
+
+/** Global accelerators and editor keys differ in use, not in what is legal */
+function accelerator(name: string): (value: unknown) => string | null {
+  return optionalBinding(name)
+}
+
+function editorKey(name: string): (value: unknown) => string | null {
+  return optionalBinding(name)
 }
 
 const SETTING_KEYS = Object.keys(VALIDATORS) as (keyof AppSettings)[]
@@ -169,4 +185,17 @@ function isNumberInRange(value: unknown, min: number, max: number): boolean {
 
 function isNullableString(value: unknown): boolean {
   return value === null || typeof value === 'string'
+}
+
+/**
+ * A controller binding: null when unbound, otherwise button names joined by
+ * "+". Validated by parsing it, so a hand-edited typo is rejected here rather
+ * than becoming a binding that silently never fires.
+ */
+function padBinding(field: string): (value: unknown) => string | null {
+  return (value) => {
+    if (value === null) return null
+    if (typeof value !== 'string') return `${field} must be a string or null`
+    return parseBinding(value) === null ? `${field} names no controller buttons` : null
+  }
 }

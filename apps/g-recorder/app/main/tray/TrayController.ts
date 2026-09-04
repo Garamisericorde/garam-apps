@@ -73,7 +73,7 @@ export class TrayController {
       },
       {
         label: 'Save replay',
-        accelerator: hotkeys.hotkeySaveReplay,
+        accelerator: hotkeys.hotkeySaveReplay ?? undefined,
         enabled: bufferRunning,
         click: () => this.actions.saveReplay(),
       },

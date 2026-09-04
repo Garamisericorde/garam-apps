@@ -37,13 +37,29 @@ export interface AppSettings {
   // ── Output ──
   outputPath: string
 
-  // ── Hotkeys ──
+  /*
+   * ── Hotkeys ──
+   *
+   * null means unbound. An action nobody uses should cost nothing: a shortcut
+   * left registered holds that combination away from every other application
+   * on the machine, whether or not this app ever acts on it.
+   */
   /** Write what the buffer holds to a file */
-  hotkeySaveReplay: string
+  hotkeySaveReplay: string | null
   /** Turn the rolling buffer on and off */
-  hotkeyToggleRecording: string
+  hotkeyToggleRecording: string | null
   /** Start and stop recording straight to a file */
-  hotkeyRecordToFile: string
+  hotkeyRecordToFile: string | null
+
+  /*
+   * The same three actions on a controller, as a set of buttons held at once
+   * ("LB+RB+A"), or null when unbound. Kept apart from the accelerators above
+   * because they are a different mechanism, not a different spelling: Windows
+   * never sees these, and the app reads the pad itself.
+   */
+  padSaveReplay: string | null
+  padToggleRecording: string | null
+  padRecordToFile: string | null
 
   /*
    * Editor keys. Separate from the three above because they are nothing like
@@ -51,11 +67,11 @@ export interface AppSettings {
    * exactly right, where a global bare letter would swallow that key
    * everywhere in Windows.
    */
-  editorKeyPlayPause: string
-  editorKeyCutStart: string
-  editorKeyCutEnd: string
-  editorKeySplit: string
-  editorKeyFullscreen: string
+  editorKeyPlayPause: string | null
+  editorKeyCutStart: string | null
+  editorKeyCutEnd: string | null
+  editorKeySplit: string | null
+  editorKeyFullscreen: string | null
 }
 
 export interface RecorderStatus {
@@ -253,4 +269,14 @@ export interface HotkeyFailure {
   accelerator: string
   /** 'taken' = another app owns it, 'invalid' = not a legal accelerator string. */
   reason: 'taken' | 'invalid'
+}
+
+/** What the controller layer can currently do, for Settings to report */
+export interface PadStatus {
+  /** XInput loaded — false means no FFI, so no controller support at all */
+  available: boolean
+  /** A pad has actually answered on one of the four slots */
+  connected: boolean
+  /** Why the native layer is unavailable, when it is */
+  reason: string | null
 }

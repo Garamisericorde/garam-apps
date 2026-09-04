@@ -25,7 +25,8 @@
     "react-router-dom": "^6.26.0",
     "@garam/theme": "0.1.0",
     "@garam/ui": "0.1.0",
-    "@garam/core": "0.1.0"
+    "@garam/core": "0.1.0",
+    "koffi": "^3.1.6"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",

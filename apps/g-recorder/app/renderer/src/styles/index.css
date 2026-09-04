@@ -1670,3 +1670,15 @@ kbd {
   outline-color: var(--accent);
   background: var(--accent-soft);
 }
+
+/* A section title with a control of its own beside it */
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.section-head .section-title {
+  margin: 0;
+}

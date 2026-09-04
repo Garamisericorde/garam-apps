@@ -15,15 +15,18 @@ import { announceReplaySaved, registerRecorderIpc } from './ipc/recorderIpc'
 import { registerExportIpc } from './ipc/exportIpc'
 import { registerSettingsIpc } from './ipc/settingsIpc'
 import { registerMediaIpc } from './ipc/mediaIpc'
+import { registerGamepadIpc } from './ipc/gamepadIpc'
 import { broadcast } from './ipc/broadcast'
 import { registerClipProtocolHandler, registerClipScheme } from './protocol/clipProtocol'
 import { TrayController } from './tray/TrayController'
 import { HotkeyManager } from './hotkeys/HotkeyManager'
+import { GamepadHotkeys } from './hotkeys/GamepadHotkeys'
 import { OverlayWindow } from './overlay/OverlayWindow'
 
 let mainWindow: BrowserWindow | null = null
 let tray: TrayController | null = null
 let hotkeys: HotkeyManager | null = null
+let padHotkeys: GamepadHotkeys | null = null
 let overlay: OverlayWindow | null = null
 let isQuitting = false
 
@@ -61,6 +64,7 @@ async function start(): Promise<void> {
   registerExportIpc()
   registerSettingsIpc()
   registerMediaIpc(() => mainWindow)
+  registerGamepadIpc(() => padHotkeys)
 
   createMainWindow()
   createTray()
@@ -69,7 +73,9 @@ async function start(): Promise<void> {
   watchRecorderStatus()
 
   settings.onChange((updated, changedKeys) => {
-    if (changedKeys.some((key) => key.startsWith('hotkey'))) registerHotkeys()
+    if (changedKeys.some((key) => key.startsWith('hotkey') || key.startsWith('pad'))) {
+      registerHotkeys()
+    }
     if (changedKeys.includes('showOverlay')) overlay?.setVisible(updated.showOverlay)
   })
 
@@ -263,17 +269,21 @@ function watchRecorderStatus(): void {
 // ── Hotkeys ──────────────────────────────────────────────────────────────────
 
 function registerHotkeys(): void {
-  if (!hotkeys) {
-    hotkeys = new HotkeyManager({
-      saveReplay: () => void handleSaveReplay(),
-      recordToFile: () => void handleToggleManualRecording(),
-      toggleRecording: () => {
-        const recorder = RecorderService.getInstance()
-        const status = recorder.getStatus()
-        void runGuarded(status.isRecording ? recorder.stop() : recorder.start())
-      },
-    })
+  const actions = {
+    saveReplay: () => void handleSaveReplay(),
+    recordToFile: () => void handleToggleManualRecording(),
+    toggleRecording: () => {
+      const recorder = RecorderService.getInstance()
+      const status = recorder.getStatus()
+      void runGuarded(status.isRecording ? recorder.stop() : recorder.start())
+    },
   }
+
+  hotkeys ??= new HotkeyManager(actions)
+  // Same three actions, reached from the pad. Registering both every time is
+  // what keeps a changed binding live without a restart.
+  padHotkeys ??= new GamepadHotkeys(actions)
+  padHotkeys.register()
 
   const result = hotkeys.register()
   if (result.failed.length > 0) {
@@ -362,6 +372,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   isQuitting = true
   hotkeys?.unregister()
+  padHotkeys?.stop()
   tray?.destroy()
   overlay?.destroy()
 })

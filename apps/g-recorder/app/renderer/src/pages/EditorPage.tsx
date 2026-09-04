@@ -12,23 +12,17 @@ import type { TimelineView } from '../components/timelineView'
 import PresetPicker from '../components/PresetPicker'
 import MediaLibrary from '../components/MediaLibrary'
 import type { ExportControl } from '../components/PresetPicker'
+import { DEFAULT_EDITOR_KEYS } from '../../../shared/hotkeyDefaults'
 
+/** null is a key the user has cleared, which is not the same as unset */
 interface EditorKeys {
-  editorKeyPlayPause: string
-  editorKeyCutStart: string
-  editorKeyCutEnd: string
-  editorKeySplit: string
-  editorKeyFullscreen: string
+  editorKeyPlayPause: string | null
+  editorKeyCutStart: string | null
+  editorKeyCutEnd: string | null
+  editorKeySplit: string | null
+  editorKeyFullscreen: string | null
 }
 
-/** Used until settings arrive, and if a key is somehow blank */
-const DEFAULT_EDITOR_KEYS: EditorKeys = {
-  editorKeyPlayPause: 'Space',
-  editorKeyCutStart: 'I',
-  editorKeyCutEnd: 'O',
-  editorKeySplit: 'S',
-  editorKeyFullscreen: 'F',
-}
 
 /**
  * Whether a keypress is the configured key.
@@ -36,8 +30,8 @@ const DEFAULT_EDITOR_KEYS: EditorKeys = {
  * Case-insensitive, and "Space" names the key the spacebar sends — which is a
  * single space, and would be invisible in a settings field.
  */
-function matches(event: KeyboardEvent, configured: string): boolean {
-  const key = configured.trim().toLowerCase()
+function matches(event: KeyboardEvent, configured: string | null): boolean {
+  const key = configured?.trim().toLowerCase() ?? ''
   if (key === '') return false
   if (key === 'space') return event.key === ' '
   return event.key.toLowerCase() === key

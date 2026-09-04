@@ -60,7 +60,11 @@ All capture/encoding/export is done via FFmpeg spawned from the main process.
     tray/
       TrayController.ts
     hotkeys/
-      HotkeyManager.ts
+      HotkeyManager.ts      # global accelerators, via Electron
+      GamepadHotkeys.ts     # the same actions on a controller, via XInput
+    native/
+      ffi.ts                # koffi, loaded lazily and never fatally
+      xinput.ts             # XInputGetState bindings
     settings/
       SettingsStore.ts
       defaults.ts
@@ -124,6 +128,35 @@ All capture/encoding/export is done via FFmpeg spawned from the main process.
   keep recording rather than failing.
 - Two sources (system + mic) are mixed with `amix` inside `-filter_complex`;
   `-vf` and `-filter_complex` cannot both drive the same stream.
+
+## Controller shortcuts
+
+The keyboard is not where your hands are: saving a replay mid-fight means
+reaching for Alt+F10 with a pad in both hands. So the three recording actions
+can also be bound to a set of controller buttons held at once.
+
+- **The Web Gamepad API cannot do this.** Chromium only reports pads to a
+  FOCUSED document, so the moment the game takes the foreground — the only
+  moment the feature is for — the renderer sees nothing. `XInputGetState`
+  through koffi reads the driver directly and ignores focus.
+- Reading does not take the pad from the game. XInput is a polling API over
+  shared state; both processes read it and neither notices the other.
+- **Never poll an empty slot at frame rate.** `XInputGetState` on a slot with
+  no pad goes looking for hardware and costs about a millisecond; four of those
+  at 60 Hz is a background app burning a core. Connected slots are polled at
+  60 Hz, empty ones re-scanned every 2 s.
+- Nothing polls at all unless a binding is set.
+- Bindings default to unbound and a single button is refused: every button
+  already means something in every game, and the failure mode is a replay saved
+  on somebody's dodge roll. Two buttons are accepted only with a shoulder or
+  trigger among them.
+- Capture resolves on RELEASE with the union of what was held. A field that
+  took the first button down could never capture a chord.
+- Xbox pads and anything presenting as one (Steam Input, DS4Windows) work. A
+  DualSense on its own speaks plain HID and is invisible to XInput.
+- koffi is pinned to ^3.x, loaded lazily behind `native/ffi.ts`, and unpacked
+  from the asar — see the monorepo CLAUDE.md for why each of those is fatal to
+  get wrong.
 
 ## Capability detection (hard requirement)
 `ffmpeg -encoders` reports what the binary was *compiled* with, not what will run.

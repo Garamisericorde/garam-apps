@@ -45,24 +45,29 @@ export class HotkeyManager {
     const { hotkeySaveReplay, hotkeyToggleRecording, hotkeyRecordToFile } =
       SettingsStore.getInstance().get()
 
-    const saveReplay = this.tryRegister(hotkeySaveReplay, this.actions.saveReplay)
-    const toggleRecording = this.tryRegister(hotkeyToggleRecording, this.actions.toggleRecording)
-    const recordToFile = this.tryRegister(hotkeyRecordToFile, this.actions.recordToFile)
-
     const failed: HotkeyFailure[] = []
-    if (!saveReplay) failed.push({ accelerator: hotkeySaveReplay, reason: this.lastReason })
-    if (!toggleRecording) {
-      failed.push({ accelerator: hotkeyToggleRecording, reason: this.lastReason })
+
+    /*
+     * An unbound action registers nothing and fails nothing. Reporting null as
+     * a conflict would put "could not register" in front of a user who had
+     * just deliberately cleared the shortcut.
+     */
+    const bind = (accelerator: string | null, handler: () => void): boolean => {
+      if (accelerator === null) return true
+      const ok = this.tryRegister(accelerator, handler)
+      if (!ok) failed.push({ accelerator, reason: this.lastReason })
+      return ok
     }
-    if (!recordToFile) {
-      failed.push({ accelerator: hotkeyRecordToFile, reason: this.lastReason })
-    }
+
+    const saveReplay = bind(hotkeySaveReplay, this.actions.saveReplay)
+    const toggleRecording = bind(hotkeyToggleRecording, this.actions.toggleRecording)
+    const recordToFile = bind(hotkeyRecordToFile, this.actions.recordToFile)
 
     this.lastResult = { saveReplay, toggleRecording, recordToFile, failed }
     logger.info('Hotkeys registered', {
-      saveReplay: `${hotkeySaveReplay} ok=${saveReplay}`,
-      toggleRecording: `${hotkeyToggleRecording} ok=${toggleRecording}`,
-      recordToFile: `${hotkeyRecordToFile} ok=${recordToFile}`,
+      saveReplay: `${hotkeySaveReplay ?? 'unbound'} ok=${saveReplay}`,
+      toggleRecording: `${hotkeyToggleRecording ?? 'unbound'} ok=${toggleRecording}`,
+      recordToFile: `${hotkeyRecordToFile ?? 'unbound'} ok=${recordToFile}`,
     })
 
     return this.lastResult

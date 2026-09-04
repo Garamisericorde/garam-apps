@@ -9,6 +9,7 @@ import type {
   FfmpegStatus,
   LibraryItem,
   MediaInfo,
+  PadStatus,
   RecorderStatus,
   HotkeyFailure,
   UserExportPreset,
@@ -82,6 +83,28 @@ export const api = {
       ipcRenderer.invoke('presets:save', preset),
     deletePreset: (name: string): Promise<UserExportPreset[]> =>
       ipcRenderer.invoke('presets:delete', name),
+  },
+
+  /**
+   * Controller shortcuts. Reading the pad happens in the main process — a
+   * focused document is the one thing the renderer cannot count on here.
+   */
+  gamepad: {
+    status: (): Promise<PadStatus> => ipcRenderer.invoke('gamepad:status'),
+
+    /**
+     * Listen for a combination. Resolves with it once every button is
+     * released, or null if `cancelCapture` gets there first.
+     */
+    capture: (): Promise<string | null> => ipcRenderer.invoke('gamepad:capture'),
+    cancelCapture: (): void => ipcRenderer.send('gamepad:cancelCapture'),
+
+    /** Buttons held right now, for the preview while binding */
+    onHeld: (handler: (binding: string) => void): (() => void) => {
+      const listener = (_event: unknown, binding: string): void => handler(binding)
+      ipcRenderer.on('gamepad:held', listener)
+      return () => ipcRenderer.removeListener('gamepad:held', listener)
+    },
   },
 
   media: {
