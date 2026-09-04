@@ -623,6 +623,35 @@ input:focus {
   display: flex;
 }
 
+/*
+ * The audio lane, under the frames and inside the same track.
+ *
+ * A fixed slice of the height rather than its own box: the two describe the
+ * same seconds, so a shared edge and a shared time axis keep them read as one
+ * clip with two parts instead of two unrelated strips.
+ */
+.timeline-audio {
+  position: absolute;
+  bottom: 0;
+  height: 34%;
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  padding: 0 1px;
+  background: rgb(0 0 0 / 0.45);
+  border-top: 1px solid var(--border-subtle);
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.timeline-audio span {
+  flex: 1 1 0;
+  min-width: 0;
+  border-radius: 1px 1px 0 0;
+  background: var(--accent);
+  opacity: 0.85;
+}
+
 .timeline-thumbs img {
   flex: 1 1 0;
   height: 100%;

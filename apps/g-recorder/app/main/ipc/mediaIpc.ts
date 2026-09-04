@@ -2,7 +2,12 @@ import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { existsSync, readdirSync, statSync } from 'fs'
 import { basename, extname, join } from 'path'
 import type { LibraryItem, MediaInfo, ThumbnailStrip } from '../../shared/types'
-import { buildPosterFrame, buildThumbnailStrip, probeMedia } from '../ffmpeg/MediaProbe'
+import {
+  buildPosterFrame,
+  buildThumbnailStrip,
+  buildWaveform,
+  probeMedia,
+} from '../ffmpeg/MediaProbe'
 import { SettingsStore } from '../settings/SettingsStore'
 import { registerClipFile } from '../protocol/clipProtocol'
 import { logger } from '../logging/logger'
@@ -132,6 +137,19 @@ export function registerMediaIpc(getMainWindow: () => BrowserWindow | null): voi
 
     return [...items.values()].sort((a, b) => b.modifiedAt - a.modifiedAt)
   })
+
+  ipcMain.handle(
+    'media:waveform',
+    async (_event, clipPath: string, buckets: number): Promise<number[]> => {
+      try {
+        return await buildWaveform(clipPath, buckets)
+      } catch (err) {
+        // A clip with no audio track is the common case, not a failure.
+        logger.debug('No waveform for this clip', { clipPath, error: String(err) })
+        return []
+      }
+    },
+  )
 
   ipcMain.handle('media:poster', async (_event, clipPath: string): Promise<string | null> => {
     if (!existsSync(clipPath)) return null

@@ -44,6 +44,18 @@ export interface AppSettings {
   hotkeyToggleRecording: string
   /** Start and stop recording straight to a file */
   hotkeyRecordToFile: string
+
+  /*
+   * Editor keys. Separate from the three above because they are nothing like
+   * them: these only fire while the editor has focus, so a bare letter is
+   * exactly right, where a global bare letter would swallow that key
+   * everywhere in Windows.
+   */
+  editorKeyPlayPause: string
+  editorKeyCutStart: string
+  editorKeyCutEnd: string
+  editorKeySplit: string
+  editorKeyFullscreen: string
 }
 
 export interface RecorderStatus {

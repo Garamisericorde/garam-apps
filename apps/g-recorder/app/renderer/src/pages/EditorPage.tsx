@@ -10,6 +10,45 @@ import PresetPicker from '../components/PresetPicker'
 import MediaLibrary from '../components/MediaLibrary'
 import type { ExportControl } from '../components/PresetPicker'
 
+interface EditorKeys {
+  editorKeyPlayPause: string
+  editorKeyCutStart: string
+  editorKeyCutEnd: string
+  editorKeySplit: string
+  editorKeyFullscreen: string
+}
+
+/** Used until settings arrive, and if a key is somehow blank */
+const DEFAULT_EDITOR_KEYS: EditorKeys = {
+  editorKeyPlayPause: 'Space',
+  editorKeyCutStart: 'I',
+  editorKeyCutEnd: 'O',
+  editorKeySplit: 'S',
+  editorKeyFullscreen: 'F',
+}
+
+/**
+ * Whether a keypress is the configured key.
+ *
+ * Case-insensitive, and "Space" names the key the spacebar sends — which is a
+ * single space, and would be invisible in a settings field.
+ */
+function matches(event: KeyboardEvent, configured: string): boolean {
+  const key = configured.trim().toLowerCase()
+  if (key === '') return false
+  if (key === 'space') return event.key === ' '
+  return event.key.toLowerCase() === key
+}
+
+/**
+ * Bars in the waveform lane.
+ *
+ * Roughly one per two pixels at a typical window width: fine enough that a
+ * transient is visible, coarse enough that zooming in does not turn it into a
+ * solid block.
+ */
+const WAVEFORM_BUCKETS = 600
+
 /** Shortest part a cut may create — below this it cannot be aimed at or seen */
 const MIN_PART_SECONDS = 0.25
 
@@ -60,6 +99,13 @@ export default function EditorPage(): JSX.Element {
   const [isPlaying, setIsPlaying] = useState(false)
 
   const [thumbnails, setThumbnails] = useState<string[]>([])
+  const [waveform, setWaveform] = useState<number[]>([])
+  const [keys, setKeys] = useState<EditorKeys>(DEFAULT_EDITOR_KEYS)
+
+  useEffect(() => {
+    window.api.settings.get().then(setKeys).catch(() => undefined)
+    return window.api.settings.onChange(setKeys)
+  }, [])
   const [loadingThumbnails, setLoadingThumbnails] = useState(false)
 
   const [busy, setBusy] = useState<'save' | 'record' | 'open' | null>(null)
@@ -71,6 +117,7 @@ export default function EditorPage(): JSX.Element {
   const loadClip = useCallback(async (clipPath: string) => {
     setError(null)
     setThumbnails([])
+    setWaveform([])
 
     try {
       const opened = await window.api.media.loadPath(clipPath)
@@ -82,13 +129,20 @@ export default function EditorPage(): JSX.Element {
       setOutPoint(nextDuration)
       setCurrentTime(0)
 
-      // The strip is a nice-to-have — never block the preview on it
+      // Both strips are nice-to-haves — never block the preview on them.
       setLoadingThumbnails(true)
       window.api.media
         .thumbnails(opened.clipPath, nextDuration)
         .then((strip) => setThumbnails(strip.frames))
         .catch(() => setThumbnails([]))
         .finally(() => setLoadingThumbnails(false))
+
+      if (opened.info.hasAudio) {
+        window.api.media
+          .waveform(opened.clipPath, WAVEFORM_BUCKETS)
+          .then(setWaveform)
+          .catch(() => setWaveform([]))
+      }
     } catch (err) {
       setError(cleanError(err))
     }
@@ -186,27 +240,31 @@ export default function EditorPage(): JSX.Element {
     const handleKey = (event: KeyboardEvent): void => {
       if (isTypingTarget(event.target)) return
 
+      // Matched against the configured keys rather than hard-coded letters:
+      // S for split is a convention, not everyone's convention.
+      if (matches(event, keys.editorKeyPlayPause)) {
+        event.preventDefault()
+        playerRef.current?.togglePlay()
+        return
+      }
+      if (matches(event, keys.editorKeyCutStart)) {
+        setInPoint(clamp(currentTime, 0, outPoint - 0.1))
+        return
+      }
+      if (matches(event, keys.editorKeyCutEnd)) {
+        setOutPoint(clamp(currentTime, inPoint + 0.1, duration))
+        return
+      }
+      if (matches(event, keys.editorKeySplit)) {
+        splitAtPlayhead()
+        return
+      }
+      if (matches(event, keys.editorKeyFullscreen)) {
+        toggleFullscreen()
+        return
+      }
+
       switch (event.key) {
-        case ' ':
-          event.preventDefault()
-          playerRef.current?.togglePlay()
-          break
-        case 'i':
-        case 'I':
-          setInPoint(clamp(currentTime, 0, outPoint - 0.1))
-          break
-        case 'o':
-        case 'O':
-          setOutPoint(clamp(currentTime, inPoint + 0.1, duration))
-          break
-        case 's':
-        case 'S':
-          splitAtPlayhead()
-          break
-        case 'f':
-        case 'F':
-          toggleFullscreen()
-          break
         case 'ArrowLeft':
           event.preventDefault()
           playerRef.current?.nudge(event.shiftKey ? -1 : -frameStep)
@@ -228,7 +286,7 @@ export default function EditorPage(): JSX.Element {
 
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [clip, cuts, currentTime, duration, inPoint, outPoint, toggleFullscreen])
+  }, [clip, cuts, currentTime, duration, inPoint, keys, outPoint, toggleFullscreen])
 
   // ── Drag and drop ──────────────────────────────────────────────────────────
 
@@ -405,6 +463,7 @@ export default function EditorPage(): JSX.Element {
           outPoint={outPoint}
           currentTime={currentTime}
           thumbnails={thumbnails}
+        waveform={waveform}
           loadingThumbnails={loadingThumbnails}
           cuts={visibleCuts}
           onSeek={handleSeek}

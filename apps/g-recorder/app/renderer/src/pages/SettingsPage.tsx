@@ -332,6 +332,39 @@ export default function SettingsPage(): JSX.Element {
         />
       </Section>
 
+      <Section title="Editor keys">
+        <HotkeyField
+          label="Play / pause"
+          value={settings.editorKeyPlayPause}
+          allowBareKey
+          onChange={(key) => void save({ editorKeyPlayPause: key })}
+        />
+        <HotkeyField
+          label="Cut the start here"
+          value={settings.editorKeyCutStart}
+          allowBareKey
+          onChange={(key) => void save({ editorKeyCutStart: key })}
+        />
+        <HotkeyField
+          label="Cut the end here"
+          value={settings.editorKeyCutEnd}
+          allowBareKey
+          onChange={(key) => void save({ editorKeyCutEnd: key })}
+        />
+        <HotkeyField
+          label="Split at the playhead"
+          value={settings.editorKeySplit}
+          allowBareKey
+          onChange={(key) => void save({ editorKeySplit: key })}
+        />
+        <HotkeyField
+          label="Fullscreen"
+          value={settings.editorKeyFullscreen}
+          allowBareKey
+          onChange={(key) => void save({ editorKeyFullscreen: key })}
+        />
+      </Section>
+
       {/* ── Diagnostics ── */}
       <Section title="Diagnostics">
         <Field label="FFmpeg" hint={ffmpeg?.path ?? undefined}>
@@ -481,10 +514,19 @@ function HotkeyField({
   label,
   value,
   onChange,
+  allowBareKey = false,
 }: {
   label: string
   value: string
   onChange: (accelerator: string) => void
+  /**
+   * Accept a key with no modifiers.
+   *
+   * Right for editor keys, which only fire while the editor has focus, and
+   * wrong for global ones: a bare letter registered system-wide swallows that
+   * key in every other application.
+   */
+  allowBareKey?: boolean
 }): JSX.Element {
   const [capturing, setCapturing] = useState(false)
   /** What is held down right now, shown while it is being pressed */
@@ -530,7 +572,7 @@ function HotkeyField({
         return
       }
 
-      if (held.length === 0) {
+      if (held.length === 0 && !allowBareKey) {
         // A bare letter would swallow that key everywhere in Windows.
         setPreview([key])
         reject()
@@ -563,7 +605,7 @@ function HotkeyField({
       window.removeEventListener('keyup', handleUp, true)
       window.removeEventListener('mousedown', handleMouse, true)
     }
-  }, [capturing, onChange, reject])
+  }, [allowBareKey, capturing, onChange, reject])
 
   return (
     <div className="row-between">
@@ -571,7 +613,9 @@ function HotkeyField({
         <span>{label}</span>
         {capturing && (
           <span className="small faint">
-            Hold the modifiers, then press one key · Esc to cancel
+            {allowBareKey
+              ? 'Press any key · Esc to cancel'
+              : 'Hold the modifiers, then press one key · Esc to cancel'}
           </span>
         )}
       </div>

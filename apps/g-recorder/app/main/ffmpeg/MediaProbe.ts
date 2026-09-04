@@ -14,6 +14,10 @@ import { logger } from '../logging/logger'
 const PROBE_TIMEOUT_MS = 15_000
 const THUMBNAIL_TIMEOUT_MS = 15_000
 
+/** Enough to see a shape, far less than enough to hear anything */
+const WAVEFORM_SAMPLE_RATE = 8000
+const WAVEFORM_TIMEOUT_MS = 30_000
+
 interface ProbeStream {
   codec_type?: string
   width?: number
@@ -135,6 +139,58 @@ export async function buildPosterFrame(
   }
 }
 
+/**
+ * Peak levels across a clip's audio, for the waveform under the video strip.
+ *
+ * Decoded to 8 kHz mono, which is far below anything audible but plenty for a
+ * shape: the strip is a couple of hundred pixels wide, so the only thing being
+ * asked of the samples is where the loud parts are.
+ *
+ * Peak rather than average per bucket. An average flattens a gunshot in a quiet
+ * room into nothing, and the whole point of looking at a waveform is finding
+ * exactly that kind of moment.
+ */
+export async function buildWaveform(clipPath: string, buckets: number): Promise<number[]> {
+  const ffmpeg = FfmpegManager.getInstance()
+
+  const pcm = await runBinary(
+    ffmpeg.path,
+    [
+      '-v', 'error',
+      '-nostdin',
+      '-i', clipPath,
+      '-map', '0:a:0?',
+      '-ac', '1',
+      '-ar', String(WAVEFORM_SAMPLE_RATE),
+      '-f', 's16le',
+      '-',
+    ],
+    WAVEFORM_TIMEOUT_MS,
+  )
+
+  const samples = new Int16Array(pcm.buffer, pcm.byteOffset, Math.floor(pcm.length / 2))
+  if (samples.length === 0) return []
+
+  const perBucket = Math.max(1, Math.floor(samples.length / buckets))
+  const peaks: number[] = []
+
+  for (let bucket = 0; bucket < buckets; bucket++) {
+    let peak = 0
+    const from = bucket * perBucket
+    const to = Math.min(from + perBucket, samples.length)
+    for (let i = from; i < to; i++) {
+      const value = Math.abs(samples[i] ?? 0)
+      if (value > peak) peak = value
+    }
+    peaks.push(peak / 32768)
+  }
+
+  // Normalised against the clip's own loudest moment: quiet recordings would
+  // otherwise draw as a flat line, saying nothing about their own shape.
+  const loudest = Math.max(...peaks, 0.0001)
+  return peaks.map((peak) => Math.min(peak / loudest, 1))
+}
+
 /** Remove any thumbnail directories left behind by an earlier crash */
 export function cleanThumbnailCache(): void {
   rmSync(thumbsDir(), { recursive: true, force: true })
@@ -154,6 +210,25 @@ function run(binary: string, args: string[], timeout: number): Promise<string> {
           return
         }
         resolvePromise(stdout.toString())
+      },
+    )
+  })
+}
+
+/** Like `run`, but keeps the output as bytes — PCM is not text */
+function runBinary(binary: string, args: string[], timeout: number): Promise<Buffer> {
+  return new Promise((resolvePromise, rejectPromise) => {
+    execFile(
+      binary,
+      args,
+      // A minute of 8 kHz mono is under a megabyte; this covers a long replay.
+      { windowsHide: true, timeout, maxBuffer: 256 * 1024 * 1024, encoding: 'buffer' },
+      (err, stdout, stderr) => {
+        if (err) {
+          rejectPromise(new Error(stderr?.toString().trim() || err.message))
+          return
+        }
+        resolvePromise(stdout)
       },
     )
   })

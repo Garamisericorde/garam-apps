@@ -35,6 +35,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
   hotkeySaveReplay: 'Alt+F10',
   hotkeyToggleRecording: 'Alt+Shift+F10',
   hotkeyRecordToFile: 'Alt+F9',
+
+  // Editor keys, following what video tools have used for decades.
+  editorKeyPlayPause: 'Space',
+  editorKeyCutStart: 'I',
+  editorKeyCutEnd: 'O',
+  editorKeySplit: 'S',
+  editorKeyFullscreen: 'F',
 }
 
 // ── Recording constants ──────────────────────────────────────────────────────

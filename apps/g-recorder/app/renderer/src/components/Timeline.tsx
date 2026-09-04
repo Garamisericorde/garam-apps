@@ -10,6 +10,8 @@ interface TimelineProps {
   cuts: number[]
   thumbnails: string[]
   loadingThumbnails: boolean
+  /** Peak levels across the clip's audio; empty when it has none */
+  waveform: number[]
   onSeek: (seconds: number) => void
   onTrimChange: (inPoint: number, outPoint: number) => void
 }
@@ -51,6 +53,7 @@ export default function Timeline({
   cuts,
   thumbnails,
   loadingThumbnails,
+  waveform,
   onSeek,
   onTrimChange,
 }: TimelineProps): JSX.Element {
@@ -187,6 +190,22 @@ export default function Timeline({
           >
             {thumbnails.map((frame, index) => (
               <img key={index} src={frame} alt="" draggable={false} />
+            ))}
+          </div>
+        )}
+
+        {/*
+          * Audio sits in its own lane rather than being folded into the frames.
+          * Seeing where the loud parts are is most of how a cut gets placed,
+          * and a strip of pictures says nothing about that.
+          */}
+        {waveform.length > 0 && (
+          <div
+            className="timeline-audio"
+            style={{ width: `${(duration / visible) * 100}%`, left: `${position(0)}%` }}
+          >
+            {waveform.map((peak, index) => (
+              <span key={index} style={{ height: `${Math.max(peak * 100, 2)}%` }} />
             ))}
           </div>
         )}

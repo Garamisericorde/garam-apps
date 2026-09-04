@@ -90,6 +90,10 @@ export const api = {
       ipcRenderer.invoke('media:loadPath', clipPath),
     probe: (clipPath: string): Promise<MediaInfo> => ipcRenderer.invoke('media:probe', clipPath),
 
+    /** Peak levels across the clip's audio, for the waveform lane */
+    waveform: (clipPath: string, buckets: number): Promise<number[]> =>
+      ipcRenderer.invoke('media:waveform', clipPath, buckets),
+
     /** Clips this app has saved, newest first — metadata only */
     library: (): Promise<LibraryItem[]> => ipcRenderer.invoke('media:library'),
     /** One poster frame for a library item, rendered on demand */

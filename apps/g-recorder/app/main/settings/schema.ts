@@ -77,6 +77,18 @@ const VALIDATORS: {
     typeof v === 'string' && v.trim() !== ''
       ? null
       : 'hotkeyRecordToFile must be a non-empty string',
+
+  editorKeyPlayPause: editorKey('editorKeyPlayPause'),
+  editorKeyCutStart: editorKey('editorKeyCutStart'),
+  editorKeyCutEnd: editorKey('editorKeyCutEnd'),
+  editorKeySplit: editorKey('editorKeySplit'),
+  editorKeyFullscreen: editorKey('editorKeyFullscreen'),
+}
+
+/** Editor keys are plain key names, so the same check does for all of them */
+function editorKey(name: string) {
+  return (v: unknown): string | null =>
+    typeof v === 'string' && v.trim() !== '' ? null : `${name} must be a non-empty string`
 }
 
 const SETTING_KEYS = Object.keys(VALIDATORS) as (keyof AppSettings)[]
