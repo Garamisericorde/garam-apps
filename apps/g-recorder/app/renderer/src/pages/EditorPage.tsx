@@ -41,6 +41,7 @@ export default function EditorPage(): JSX.Element {
    * pressed while scrubbing without destroying anything.
    */
   const [exportControl, setExportControl] = useState<ExportControl | null>(null)
+  const [exportOpen, setExportOpen] = useState(false)
   const [cuts, setCuts] = useState<number[]>([])
   /** Parts the export should leave out, keyed by their start time */
   const [discarded, setDiscarded] = useState<number[]>([])
@@ -281,8 +282,8 @@ export default function EditorPage(): JSX.Element {
               settings that shape it. */}
             <button
               className="btn btn-primary"
-              onClick={() => exportControl?.run()}
-              disabled={!exportControl?.canExport}
+              onClick={() => setExportOpen(true)}
+              disabled={!clip || exportControl?.isExporting}
             >
               {exportControl?.isExporting
                 ? `Exporting ${exportControl.percent.toFixed(0)}%`
@@ -415,6 +416,8 @@ export default function EditorPage(): JSX.Element {
           hasAudio={clip?.info.hasAudio ?? false}
           disabled={!clip}
           onControlChange={setExportControl}
+          open={exportOpen}
+          onClose={() => setExportOpen(false)}
         />
 
         {clip && (

@@ -89,6 +89,23 @@ export interface ExportOptions {
   targetSizeMb: number | null
 }
 
+/**
+ * An export setup the user named and kept.
+ *
+ * Stores the choices, not the resulting numbers: a preset saying "High Quality"
+ * follows that preset if its definition ever improves, where a saved bitrate
+ * would pin the export to whatever was true the day it was saved.
+ */
+export interface UserExportPreset {
+  name: string
+  presetId: string
+  format: ExportFormat
+  aspect: AspectId
+  speed: number
+  volume: number
+  targetSizeMb: number | null
+}
+
 export interface ExportProgress {
   percent: number
   eta: number | null

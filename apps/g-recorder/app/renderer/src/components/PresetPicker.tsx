@@ -7,7 +7,13 @@ import {
   TARGET_SIZE_OPTIONS,
   getPreset,
 } from '../../../shared/presets'
-import type { AspectId, ExportFormat, ExportOptions, ExportProgress } from '../../../shared/types'
+import type {
+  AspectId,
+  ExportFormat,
+  ExportOptions,
+  ExportProgress,
+  UserExportPreset,
+} from '../../../shared/types'
 import { formatBytes, formatDuration } from '../../../shared/time'
 
 interface PresetPickerProps {
@@ -26,6 +32,9 @@ interface PresetPickerProps {
    * what the action needs, so the state stays here and only the handle travels.
    */
   onControlChange?: (control: ExportControl) => void
+  /** Whether the settings dialog is open */
+  open: boolean
+  onClose: () => void
 }
 
 export interface ExportControl {
@@ -52,7 +61,9 @@ export default function PresetPicker({
   hasAudio,
   disabled = false,
   onControlChange,
-}: PresetPickerProps): JSX.Element {
+  open,
+  onClose,
+}: PresetPickerProps): JSX.Element | null {
   const [presetId, setPresetId] = useState(DEFAULT_PRESET_ID)
   const [format, setFormat] = useState<ExportFormat>('mp4')
   const [aspect, setAspect] = useState<AspectId>('source')
@@ -146,8 +157,15 @@ export default function PresetPicker({
     })
   }, [canExport, handleExport, isExporting, onControlChange, percent])
 
+  if (!open) return null
+
   return (
-    <div className="card stack" style={{ gap: 14 }}>
+    <div className="modal-scrim" onClick={onClose}>
+      <div
+        className="modal stack"
+        style={{ gap: 14 }}
+        onClick={(event) => event.stopPropagation()}
+      >
       <div className="row-between">
         <p className="section-title" style={{ margin: 0 }}>
           Export
@@ -306,6 +324,102 @@ export default function PresetPicker({
       {state === 'error' && progress?.error && (
         <div className="banner banner-error">{progress.error}</div>
       )}
+
+      <PresetShelf
+        current={{ name: '', presetId, format, aspect, speed, volume, targetSizeMb }}
+        onApply={(saved) => {
+          setPresetId(saved.presetId)
+          setFormat(saved.format)
+          setAspect(saved.aspect)
+          setSpeed(saved.speed)
+          setVolume(saved.volume)
+          setTargetSizeMb(saved.targetSizeMb)
+        }}
+      />
+
+      <div className="row" style={{ justifyContent: 'flex-end', gap: 8 }}>
+        <button className="btn" onClick={onClose}>
+          Done
+        </button>
+        <button className="btn btn-primary" onClick={() => void handleExport()} disabled={!canExport}>
+          {isExporting ? `Exporting ${(progress?.percent ?? 0).toFixed(0)}%` : 'Export'}
+        </button>
+      </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Named export setups, so the settings above are chosen once rather than every
+ * time. Kept beside the controls they capture: a preset list somewhere else
+ * would be a second place to look for the same three decisions.
+ */
+function PresetShelf({
+  current,
+  onApply,
+}: {
+  current: UserExportPreset
+  onApply: (preset: UserExportPreset) => void
+}): JSX.Element {
+  const [presets, setPresets] = useState<UserExportPreset[]>([])
+  const [name, setName] = useState('')
+
+  useEffect(() => {
+    window.api.export.listPresets().then(setPresets).catch(() => undefined)
+  }, [])
+
+  return (
+    <div className="stack" style={{ gap: 8 }}>
+      <span className="section-title" style={{ margin: 0 }}>
+        Saved setups
+      </span>
+
+      <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
+        {presets.map((preset) => (
+          <span key={preset.name} className="saved-preset">
+            <button className="saved-preset-apply" onClick={() => onApply(preset)}>
+              {preset.name}
+            </button>
+            <button
+              className="saved-preset-remove"
+              title={`Delete ${preset.name}`}
+              onClick={() => {
+                void window.api.export.deletePreset(preset.name).then(setPresets)
+              }}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+        {presets.length === 0 && (
+          <span className="small faint">Nothing saved yet — name the current settings below.</span>
+        )}
+      </div>
+
+      <div className="row" style={{ gap: 8 }}>
+        <input
+          type="text"
+          placeholder="Name these settings"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          style={{ flex: 1, minWidth: 0 }}
+        />
+        <button
+          className="btn"
+          disabled={name.trim() === ''}
+          onClick={() => {
+            void window.api.export
+              .savePreset({ ...current, name: name.trim() })
+              .then((saved) => {
+                setPresets(saved)
+                setName('')
+              })
+          }}
+        >
+          Save
+        </button>
+      </div>
     </div>
   )
 }

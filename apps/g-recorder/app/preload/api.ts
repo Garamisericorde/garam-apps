@@ -11,6 +11,7 @@ import type {
   MediaInfo,
   RecorderStatus,
   HotkeyFailure,
+  UserExportPreset,
   ThumbnailStrip,
 } from '../shared/types'
 
@@ -74,6 +75,13 @@ export const api = {
 
     onProgress: (callback: (progress: ExportProgress) => void): (() => void) =>
       subscribe('export:progress', callback),
+
+    /** Export setups the user has named and kept */
+    listPresets: (): Promise<UserExportPreset[]> => ipcRenderer.invoke('presets:list'),
+    savePreset: (preset: UserExportPreset): Promise<UserExportPreset[]> =>
+      ipcRenderer.invoke('presets:save', preset),
+    deletePreset: (name: string): Promise<UserExportPreset[]> =>
+      ipcRenderer.invoke('presets:delete', name),
   },
 
   media: {
