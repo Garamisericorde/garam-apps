@@ -8,7 +8,7 @@ import { logsDir } from '../../shared/paths'
 import { localTimestamp } from '../../shared/time'
 import { GIF_FPS, GIF_MAX_WIDTH } from '../settings/defaults'
 import type { CropRect } from './commands'
-import { buildClipExportArgs, buildGifExportArgs } from './commands'
+import { buildClipExportArgs, buildGifExportArgs, buildTimelineExportArgs } from './commands'
 import { detectEncoders, resolveEncoder } from './EncoderDetect'
 import { FfmpegManager } from './FfmpegManager'
 import { probeMedia } from './MediaProbe'
@@ -133,6 +133,54 @@ export class ExportService {
           includeAudio ? preset.audioBitrateKbps : 0,
         )
       : undefined
+
+    /*
+     * Audio trimmed away from the video needs the two placed independently, so
+     * it goes through the timeline builder. Everything else keeps the single
+     * -ss path, which seeks by keyframe and never decodes the discarded head.
+     */
+    const audio = options.audio
+    const audioApart =
+      includeAudio &&
+      audio !== undefined &&
+      (Math.abs(audio.inPoint - options.inPoint) > 0.01 ||
+        Math.abs(audio.outPoint - options.outPoint) > 0.01)
+
+    if (audioApart && audio) {
+      return buildTimelineExportArgs({
+        clipPath: options.clipPath,
+        outputPath,
+        inPoint: options.inPoint,
+        outPoint: options.outPoint,
+        sources: [options.clipPath],
+        video: [
+          { input: 0, start: 0, sourceIn: options.inPoint, sourceOut: options.outPoint },
+        ],
+        audio: [
+          {
+            input: 0,
+            // Trimming the audio's head leaves it starting later against the
+            // picture, rather than sliding the whole track forward.
+            start: Math.max(0, audio.inPoint - options.inPoint),
+            sourceIn: audio.inPoint,
+            sourceOut: audio.outPoint,
+          },
+        ],
+        duration: options.outPoint - options.inPoint,
+        encoder,
+        outWidth: framing.outWidth,
+        outHeight: framing.outHeight,
+        crop: framing.crop,
+        fps: preset.fps > 0 ? Math.min(preset.fps, info.fps || preset.fps) : 0,
+        quality: preset.quality,
+        maxBitrateKbps: preset.maxBitrateKbps,
+        audioBitrateKbps: preset.audioBitrateKbps,
+        speed: options.speed,
+        volume: options.volume,
+        hasAudio: info.hasAudio,
+        targetBitrateKbps,
+      })
+    }
 
     return buildClipExportArgs({
       clipPath: options.clipPath,

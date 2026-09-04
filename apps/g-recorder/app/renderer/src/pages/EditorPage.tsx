@@ -5,6 +5,7 @@ import { clamp, formatBytes, formatTime } from '../../../shared/time'
 import VideoPlayer from '../components/VideoPlayer'
 import type { VideoPlayerHandle } from '../components/VideoPlayer'
 import Timeline from '../components/Timeline'
+import type { Lane } from '../components/Timeline'
 import TrimControls from '../components/TrimControls'
 import PresetPicker from '../components/PresetPicker'
 import MediaLibrary from '../components/MediaLibrary'
@@ -100,6 +101,14 @@ export default function EditorPage(): JSX.Element {
 
   const [thumbnails, setThumbnails] = useState<string[]>([])
   const [waveform, setWaveform] = useState<number[]>([])
+  /*
+   * The audio lane's own window. It starts matching the video, and only parts
+   * company when the audio's handles are dragged — so the ordinary case still
+   * exports through the fast single-pass path.
+   */
+  const [audioIn, setAudioIn] = useState(0)
+  const [audioOut, setAudioOut] = useState(0)
+  const [selectedLane, setSelectedLane] = useState<Lane>('video')
   const [keys, setKeys] = useState<EditorKeys>(DEFAULT_EDITOR_KEYS)
 
   useEffect(() => {
@@ -127,6 +136,8 @@ export default function EditorPage(): JSX.Element {
       setDuration(nextDuration)
       setInPoint(0)
       setOutPoint(nextDuration)
+      setAudioIn(0)
+      setAudioOut(nextDuration)
       setCurrentTime(0)
 
       // Both strips are nice-to-haves — never block the preview on them.
@@ -464,6 +475,14 @@ export default function EditorPage(): JSX.Element {
           currentTime={currentTime}
           thumbnails={thumbnails}
         waveform={waveform}
+        audioIn={audioIn}
+        audioOut={audioOut}
+        selectedLane={selectedLane}
+        onSelectLane={setSelectedLane}
+        onAudioTrimChange={(nextIn, nextOut) => {
+          setAudioIn(nextIn)
+          setAudioOut(nextOut)
+        }}
           loadingThumbnails={loadingThumbnails}
           cuts={visibleCuts}
           onSeek={handleSeek}
@@ -525,6 +544,7 @@ export default function EditorPage(): JSX.Element {
           inPoint={inPoint}
           outPoint={outPoint}
           ranges={keptRanges}
+          audio={{ inPoint: audioIn, outPoint: audioOut }}
           hasAudio={clip?.info.hasAudio ?? false}
           disabled={!clip}
           onControlChange={setExportControl}

@@ -22,6 +22,8 @@ interface PresetPickerProps {
   outPoint: number
   /** Kept pieces when the clip has been cut; undefined for a plain trim */
   ranges?: { start: number; end: number }[]
+  /** The audio lane's window, when it has been trimmed away from the video */
+  audio?: { inPoint: number; outPoint: number }
   hasAudio: boolean
   disabled?: boolean
   /**
@@ -58,6 +60,7 @@ export default function PresetPicker({
   inPoint,
   outPoint,
   ranges,
+  audio,
   hasAudio,
   disabled = false,
   onControlChange,
@@ -109,6 +112,7 @@ export default function PresetPicker({
       inPoint,
       outPoint,
       ranges,
+      audio,
       outputPath: '', // the main process names the file
       speed,
       volume: hasAudio ? volume : 0,
@@ -133,7 +137,20 @@ export default function PresetPicker({
       unsubscribeRef.current?.()
       unsubscribeRef.current = null
     }
-  }, [aspect, clipPath, format, hasAudio, inPoint, outPoint, presetId, ranges, speed, targetSizeMb, volume])
+  }, [
+    aspect,
+    audio,
+    clipPath,
+    format,
+    hasAudio,
+    inPoint,
+    outPoint,
+    presetId,
+    ranges,
+    speed,
+    targetSizeMb,
+    volume,
+  ])
 
   /*
    * Reported only when something the caller can see actually changed.

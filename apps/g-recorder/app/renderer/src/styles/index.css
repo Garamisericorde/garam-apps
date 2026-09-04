@@ -1401,3 +1401,95 @@ kbd {
   background: var(--danger-soft);
   color: var(--danger);
 }
+
+/* ── Timeline lanes ──────────────────────────────────────────────────────── */
+
+.lanes {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+/*
+ * A column of badges, not a layer panel. All it has to answer is which lane is
+ * which and which one is selected — anything more would be a second interface
+ * for a clip that only has two parts.
+ */
+.lane-gutter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.lane-badge {
+  width: 30px;
+  height: 52px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+}
+
+.lane-badge:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.lane-badge.is-selected {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.lane-stack {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+  user-select: none;
+}
+
+.lane {
+  position: relative;
+  height: 52px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+/* The selected lane is the one the cut buttons and the keys act on, so it is
+   outlined rather than merely tinted — the difference decides what gets cut. */
+.lane.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-ring);
+}
+
+.lane-audio .timeline-audio {
+  top: 0;
+  height: 100%;
+  background: transparent;
+  border-top: none;
+}
+
+/* One playhead over both lanes: there is one moment in time, not two. */
+.lane-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--text-on-accent);
+  box-shadow: 0 0 5px rgb(0 0 0 / 0.8);
+  pointer-events: none;
+}

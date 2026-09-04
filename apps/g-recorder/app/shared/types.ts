@@ -89,6 +89,14 @@ export interface ExportOptions {
    * working without knowing about parts.
    */
   ranges?: { start: number; end: number }[]
+  /**
+   * The audio lane's own window, when it has been trimmed away from the video.
+   *
+   * Absent means the audio follows the video, which is the ordinary case and
+   * takes the fast single-pass path. Present and different means the two lanes
+   * are edited apart, and the export has to place them independently.
+   */
+  audio?: { inPoint: number; outPoint: number }
   /** Absolute output path; empty string = auto-generate in settings.outputPath */
   outputPath: string
   /** Playback speed multiplier (1 = normal) */

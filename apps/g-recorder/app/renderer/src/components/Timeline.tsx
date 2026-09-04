@@ -12,11 +12,18 @@ interface TimelineProps {
   loadingThumbnails: boolean
   /** Peak levels across the clip's audio; empty when it has none */
   waveform: number[]
+  /** The audio lane's own window, which can be trimmed away from the video */
+  audioIn: number
+  audioOut: number
+  selectedLane: Lane
+  onSelectLane: (lane: Lane) => void
+  onAudioTrimChange: (inPoint: number, outPoint: number) => void
   onSeek: (seconds: number) => void
   onTrimChange: (inPoint: number, outPoint: number) => void
 }
 
-type DragTarget = 'in' | 'out' | 'playhead'
+type DragTarget = 'in' | 'out' | 'audio-in' | 'audio-out' | 'playhead'
+export type Lane = 'video' | 'audio'
 
 /** Smallest selection the user can drag down to */
 const MIN_SELECTION_SECONDS = 0.1
@@ -54,6 +61,11 @@ export default function Timeline({
   thumbnails,
   loadingThumbnails,
   waveform,
+  audioIn,
+  audioOut,
+  selectedLane,
+  onSelectLane,
+  onAudioTrimChange,
   onSeek,
   onTrimChange,
 }: TimelineProps): JSX.Element {
@@ -109,9 +121,19 @@ export default function Timeline({
         return
       }
 
-      onTrimChange(inPoint, clamp(time, inPoint + MIN_SELECTION_SECONDS, duration))
+      if (target === 'out') {
+        onTrimChange(inPoint, clamp(time, inPoint + MIN_SELECTION_SECONDS, duration))
+        return
+      }
+
+      if (target === 'audio-in') {
+        onAudioTrimChange(clamp(time, 0, audioOut - MIN_SELECTION_SECONDS), audioOut)
+        return
+      }
+
+      onAudioTrimChange(audioIn, clamp(time, audioIn + MIN_SELECTION_SECONDS, duration))
     },
-    [duration, inPoint, outPoint, onSeek, onTrimChange],
+    [audioIn, audioOut, duration, inPoint, outPoint, onAudioTrimChange, onSeek, onTrimChange],
   )
 
   const beginDrag = useCallback(
@@ -172,99 +194,139 @@ export default function Timeline({
   const hasClip = duration > 0
   const zoomed = zoom > 1
 
+  /** One lane's shading, selection, handles and cuts — the two differ only in
+   *  which window they draw and which lane a drag edits. */
+  const laneOverlay = (lane: Lane, from: number, to: number): JSX.Element => (
+    <>
+      <div
+        className="timeline-shade"
+        style={{ left: 0, width: `${clamp(position(from), 0, 100)}%` }}
+      />
+      <div
+        className="timeline-shade"
+        style={{
+          left: `${clamp(position(to), 0, 100)}%`,
+          // Stops at the end of the clip: past that there is nothing to
+          // discard, and shading it would read as trimmed-away footage.
+          width: `${clamp(position(duration) - position(to), 0, 100)}%`,
+        }}
+      />
+
+      <div
+        className="timeline-selection"
+        style={{
+          left: `${clamp(position(from), 0, 100)}%`,
+          width: `${clamp(position(to) - position(from), 0, 100)}%`,
+        }}
+      />
+
+      {cuts.map((cut) => (
+        <div key={cut} className="timeline-cut" style={{ left: `${position(cut)}%` }} />
+      ))}
+
+      <div
+        className="timeline-handle"
+        style={{ left: `calc(${clamp(position(from), 0, 100)}% - 7px)` }}
+        onPointerDown={(event) => beginDrag(lane === 'video' ? 'in' : 'audio-in', event)}
+        title="Drag to set the start"
+      />
+      <div
+        className="timeline-handle"
+        style={{ left: `calc(${clamp(position(to), 0, 100)}% - 7px)` }}
+        onPointerDown={(event) => beginDrag(lane === 'video' ? 'out' : 'audio-out', event)}
+        title="Drag to set the end"
+      />
+    </>
+  )
+
   return (
     <div className="timeline-wrap">
-      <div
-        ref={trackRef}
-        className="timeline"
-        onPointerDown={(event) => beginDrag('playhead', event)}
-        onWheel={handleWheel}
-      >
-        {thumbnails.length > 0 && (
-          <div
-            className="timeline-thumbs"
-            /* The strip covers the clip, not the whole track: zooming scales
-               and slides it rather than re-rendering thumbnails, and the space
-               past the end stays deliberately empty. */
-            style={{ width: `${(duration / visible) * 100}%`, left: `${position(0)}%` }}
+      {/*
+        * Two lanes, not one strip with a waveform painted into it. They carry
+        * the same seconds but are edited apart, and a lane you can select is
+        * the only way that difference is visible before it is exported.
+        */}
+      <div className="lanes" onWheel={handleWheel}>
+        <div className="lane-gutter">
+          <button
+            className={`lane-badge${selectedLane === 'video' ? ' is-selected' : ''}`}
+            onClick={() => onSelectLane('video')}
+            title="Video lane"
           >
-            {thumbnails.map((frame, index) => (
-              <img key={index} src={frame} alt="" draggable={false} />
-            ))}
-          </div>
-        )}
+            🎞
+          </button>
+          {waveform.length > 0 && (
+            <button
+              className={`lane-badge${selectedLane === 'audio' ? ' is-selected' : ''}`}
+              onClick={() => onSelectLane('audio')}
+              title="Audio lane"
+            >
+              🔊
+            </button>
+          )}
+        </div>
 
-        {/*
-          * Audio sits in its own lane rather than being folded into the frames.
-          * Seeing where the loud parts are is most of how a cut gets placed,
-          * and a strip of pictures says nothing about that.
-          */}
-        {waveform.length > 0 && (
+        <div className="lane-stack" ref={trackRef}>
           <div
-            className="timeline-audio"
-            style={{ width: `${(duration / visible) * 100}%`, left: `${position(0)}%` }}
+            className={`lane lane-video${selectedLane === 'video' ? ' is-selected' : ''}`}
+            onPointerDown={(event) => {
+              onSelectLane('video')
+              beginDrag('playhead', event)
+            }}
           >
-            {waveform.map((peak, index) => (
-              <span key={index} style={{ height: `${Math.max(peak * 100, 2)}%` }} />
-            ))}
+            {thumbnails.length > 0 && (
+              <div
+                className="timeline-thumbs"
+                /* The strip covers the clip, not the whole track: zooming scales
+                   and slides it rather than re-rendering thumbnails, and the
+                   space past the end stays deliberately empty. */
+                style={{ width: `${(duration / visible) * 100}%`, left: `${position(0)}%` }}
+              >
+                {thumbnails.map((frame, index) => (
+                  <img key={index} src={frame} alt="" draggable={false} />
+                ))}
+              </div>
+            )}
+
+            {thumbnails.length === 0 && (
+              <div className="timeline-empty">
+                {!hasClip
+                  ? 'No clip loaded'
+                  : loadingThumbnails
+                    ? 'Building preview…'
+                    : 'Drag the handles to trim'}
+              </div>
+            )}
+
+            {hasClip && laneOverlay('video', inPoint, outPoint)}
           </div>
-        )}
 
-        {thumbnails.length === 0 && (
-          <div className="timeline-empty">
-            {!hasClip
-              ? 'No clip loaded'
-              : loadingThumbnails
-                ? 'Building preview…'
-                : 'Drag the handles to trim'}
-          </div>
-        )}
-
-        {hasClip && (
-          <>
-            {/* What the export will leave out */}
+          {waveform.length > 0 && (
             <div
-              className="timeline-shade"
-              style={{ left: 0, width: `${clamp(position(inPoint), 0, 100)}%` }}
-            />
-            <div
-              className="timeline-shade"
-              style={{
-                left: `${clamp(position(outPoint), 0, 100)}%`,
-                // Stops at the end of the clip: past that there is nothing to
-                // discard, and shading it would read as trimmed-away footage.
-                width: `${clamp(position(duration) - position(outPoint), 0, 100)}%`,
+              className={`lane lane-audio${selectedLane === 'audio' ? ' is-selected' : ''}`}
+              onPointerDown={(event) => {
+                onSelectLane('audio')
+                beginDrag('playhead', event)
               }}
-            />
+            >
+              <div
+                className="timeline-audio"
+                style={{ width: `${(duration / visible) * 100}%`, left: `${position(0)}%` }}
+              >
+                {waveform.map((peak, index) => (
+                  <span key={index} style={{ height: `${Math.max(peak * 100, 2)}%` }} />
+                ))}
+              </div>
 
-            <div
-              className="timeline-selection"
-              style={{
-                left: `${clamp(position(inPoint), 0, 100)}%`,
-                width: `${clamp(position(outPoint) - position(inPoint), 0, 100)}%`,
-              }}
-            />
+              {hasClip && laneOverlay('audio', audioIn, audioOut)}
+            </div>
+          )}
 
-            {cuts.map((cut) => (
-              <div key={cut} className="timeline-cut" style={{ left: `${position(cut)}%` }} />
-            ))}
-
-            <div
-              className="timeline-handle"
-              style={{ left: `calc(${clamp(position(inPoint), 0, 100)}% - 7px)` }}
-              onPointerDown={(event) => beginDrag('in', event)}
-              title="Drag to set the start"
-            />
-            <div
-              className="timeline-handle"
-              style={{ left: `calc(${clamp(position(outPoint), 0, 100)}% - 7px)` }}
-              onPointerDown={(event) => beginDrag('out', event)}
-              title="Drag to set the end"
-            />
-
-            <div className="timeline-playhead" style={{ left: `${position(currentTime)}%` }} />
-          </>
-        )}
+          {/* One playhead across both, because there is one moment in time. */}
+          {hasClip && (
+            <div className="lane-playhead" style={{ left: `${position(currentTime)}%` }} />
+          )}
+        </div>
       </div>
 
       <div className="timeline-zoom">
