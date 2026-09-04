@@ -34,6 +34,14 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
 ) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const frameRef = useRef<number | null>(null)
+  /*
+   * A seek asked for before the file has any metadata.
+   *
+   * Setting currentTime on an unloaded element is silently dropped, so clicking
+   * into the middle of a clip whose source had not been shown yet landed at its
+   * start instead. Held here and applied the moment the duration is known.
+   */
+  const pendingSeek = useRef<number | null>(null)
 
   // Keep the latest bounds available to the rAF loop without restarting it
   const boundsRef = useRef({ inPoint, outPoint })
@@ -81,6 +89,8 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
       return
     }
 
+    // A seek meant for the file being replaced does not belong to the new one.
+    if (video.currentSrc !== src) pendingSeek.current = null
     video.src = src
     video.load()
   }, [src])
@@ -116,6 +126,12 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
       seek: (seconds: number) => {
         const video = videoRef.current
         if (!video) return
+
+        if (video.readyState === 0) {
+          pendingSeek.current = seconds
+          return
+        }
+
         video.currentTime = seconds
         onTimeUpdate(seconds)
       },
@@ -140,7 +156,10 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
       onLoadedMetadata={(event) => {
         const video = event.currentTarget
         if (Number.isFinite(video.duration)) onDurationChange(video.duration)
-        video.currentTime = boundsRef.current.inPoint
+
+        const pending = pendingSeek.current
+        pendingSeek.current = null
+        video.currentTime = pending ?? boundsRef.current.inPoint
       }}
       onPlay={() => {
         onPlayingChange(true)

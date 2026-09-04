@@ -7,6 +7,7 @@ import {
   EMPTY_TIMELINE,
   itemAt,
   itemDuration,
+  itemEnd,
   moveItem,
   removeItem,
   sortLane,
@@ -102,6 +103,17 @@ export default function EditorPage(): JSX.Element {
 
   /** Playhead, in timeline seconds */
   const [playhead, setPlayhead] = useState(0)
+  /*
+   * The item the preview is showing, by id.
+   *
+   * Explicit rather than "whatever is under the playhead", because the player
+   * reports a position in its SOURCE and that has to be mapped back — and with
+   * the same file on the timeline more than once, a source position does not
+   * say which clip it belongs to. Deriving the item from the playhead and the
+   * playhead from the item made each answer depend on the other: clicking one
+   * clip moved the playhead into whichever clip happened to be mounted.
+   */
+  const [activeId, setActiveId] = useState<string | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [loadingThumbnails, setLoadingThumbnails] = useState(false)
 
@@ -131,6 +143,21 @@ export default function EditorPage(): JSX.Element {
   const [pendingDrop, setPendingDrop] = useState<PendingDrop | null>(null)
 
   const duration = timelineDuration(timeline)
+
+  /*
+   * Keep the preview pointing at something real. Removing the clip it was
+   * showing, or loading the first one, has to move it — and the item under the
+   * playhead is the right guess in both cases.
+   */
+  useEffect(() => {
+    setActiveId((current) => {
+      if (current && timeline.video.some((item) => item.id === current)) return current
+      const under = timeline.video.find(
+        (item) => playhead >= item.start && playhead < itemEnd(item),
+      )
+      return under?.id ?? timeline.video[0]?.id ?? null
+    })
+  }, [playhead, timeline.video])
 
   // ── Editing, with history ──────────────────────────────────────────────────
 
@@ -268,22 +295,53 @@ export default function EditorPage(): JSX.Element {
   // ── Playback ───────────────────────────────────────────────────────────────
 
   /*
-   * The clip under the playhead. The preview plays one item at a time and hands
-   * over at its edge, which is what lets a timeline of several files play as
-   * one piece without stitching anything first.
+   * The clip the preview is showing. It plays one item at a time and hands over
+   * at its edge, which is what lets a timeline of several files play as one
+   * piece without stitching anything first.
    */
-  const activeItem = useMemo(() => itemAt(timeline, 'video', playhead), [timeline, playhead])
+  const activeItem = useMemo(
+    () => timeline.video.find((item) => item.id === activeId) ?? null,
+    [activeId, timeline.video],
+  )
   const activeSource = activeItem ? sources[activeItem.path] : undefined
+
+  /*
+   * A seek waiting for the player to be told which clip it is showing.
+   *
+   * It cannot be done inline: the player clamps to the bounds it was last
+   * rendered with, so seeking into a different clip before those props reach it
+   * lands on the old clip's edge instead. The effect below runs after the
+   * render that carries them.
+   */
+  const pendingSeek = useRef<number | null>(null)
+  const [seekTick, setSeekTick] = useState(0)
+
+  const requestSeek = useCallback((sourceSeconds: number) => {
+    pendingSeek.current = sourceSeconds
+    setSeekTick((tick) => tick + 1)
+  }, [])
+
+  useEffect(() => {
+    const target = pendingSeek.current
+    if (target === null) return
+    pendingSeek.current = null
+    playerRef.current?.seek(target)
+  }, [seekTick])
 
   const handleSeek = useCallback(
     (seconds: number) => {
       const time = Math.max(0, seconds)
       setPlayhead(time)
 
+      // Landing in a gap leaves the last frame up rather than blanking the
+      // stage — there is nothing there to show instead.
       const item = itemAt(timeline, 'video', time)
-      if (item) playerRef.current?.seek(sourceTimeAt(item, time))
+      if (!item) return
+
+      setActiveId(item.id)
+      requestSeek(sourceTimeAt(item, time))
     },
-    [timeline],
+    [requestSeek, timeline],
   )
 
   /** Player time is a position in one source; the timeline wants where that is */
@@ -297,12 +355,13 @@ export default function EditorPage(): JSX.Element {
       if (isPlaying && sourceSeconds >= activeItem.sourceOut - 0.02) {
         const next = sortLane(timeline.video).find((item) => item.start > activeItem.start)
         if (next) {
+          setActiveId(next.id)
           setPlayhead(next.start)
-          playerRef.current?.seek(next.sourceIn)
+          requestSeek(next.sourceIn)
         }
       }
     },
-    [activeItem, isPlaying, timeline.video],
+    [activeItem, isPlaying, requestSeek, timeline.video],
   )
 
   /**
