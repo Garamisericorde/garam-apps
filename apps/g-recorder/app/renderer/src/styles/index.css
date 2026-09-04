@@ -1290,6 +1290,7 @@ kbd {
 }
 
 .library-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1305,16 +1306,27 @@ kbd {
   background: var(--bg-elevated);
 }
 
-/* On the timeline and being previewed: the strongest state a row has. */
-.library-item.is-active {
+/*
+ * Two different facts, and only one of them is a selection.
+ *
+ * The row you clicked is highlighted, the way a selected row is anywhere. The
+ * clip the preview happens to be showing gets a dot instead: drawing both as a
+ * highlight meant clicking one row left another looking just as chosen.
+ */
+.library-item.is-picked {
   background: var(--accent-soft);
   border-color: var(--accent);
 }
 
-/* Picked out of the list by a click, which on its own does nothing else. */
-.library-item.is-picked:not(.is-active) {
-  border-color: var(--border-strong);
-  background: var(--bg-elevated);
+.library-item.is-active::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
 }
 
 /* Fixed 16:9 box: posters arrive one by one, and a box that grows as each

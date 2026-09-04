@@ -140,9 +140,11 @@ export default function MediaLibrary({
               event.dataTransfer.setData('application/x-grecorder-clip', item.path)
               event.dataTransfer.effectAllowed = 'copy'
             }}
-            title={`${item.path}
-
-Double click to add it to the timeline`}
+            title={
+              item.path === activePath
+                ? `${item.path} (showing in the preview)`
+                : `${item.path} - double click to add it to the timeline`
+            }
             onContextMenu={(event) => {
               event.preventDefault()
               setMenu({ at: { x: event.clientX, y: event.clientY }, item })
