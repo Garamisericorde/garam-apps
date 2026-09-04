@@ -26,10 +26,15 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // Output
   outputPath: join(app.getPath('videos'), 'G-Recorder'),
 
-  // Hotkeys
-  hotkeySaveReplay: 'Ctrl+Shift+F10',
-  hotkeyToggleRecording: 'Ctrl+Shift+F9',
-  hotkeyRecordToFile: 'Ctrl+Shift+F8',
+  /*
+   * Hotkeys, following NVIDIA ShadowPlay — the scheme most people recording
+   * games already have in their fingers. Alt+F9 records, Alt+F10 saves the
+   * replay, and the buffer toggle takes the shifted form of the save key
+   * because the two belong to the same feature.
+   */
+  hotkeySaveReplay: 'Alt+F10',
+  hotkeyToggleRecording: 'Alt+Shift+F10',
+  hotkeyRecordToFile: 'Alt+F9',
 }
 
 // ── Recording constants ──────────────────────────────────────────────────────

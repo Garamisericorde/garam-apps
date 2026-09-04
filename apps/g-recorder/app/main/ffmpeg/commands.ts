@@ -404,6 +404,141 @@ export interface ClipExportOptions {
   targetBitrateKbps?: number
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Timeline export
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface TimelineExportItem {
+  /** Index into the `-i` inputs, one per distinct source file */
+  input: number
+  start: number
+  sourceIn: number
+  sourceOut: number
+}
+
+export interface TimelineExportOptions extends Omit<ClipExportOptions, 'ranges'> {
+  /** Distinct source files, in the order they are passed as inputs */
+  sources: string[]
+  video: TimelineExportItem[]
+  audio: TimelineExportItem[]
+  /** Length of the output, which is the furthest edge on either lane */
+  duration: number
+}
+
+/**
+ * Render a two-lane timeline in one pass.
+ *
+ * Each lane is built as a strict sequence: every item is trimmed onto its own
+ * branch, gaps are filled with generated black or silence, and the branches are
+ * concatenated in order. Building it as a sequence rather than compositing onto
+ * a background keeps the graph linear — the alternative, overlaying every item
+ * onto a full-length canvas, decodes and blends the whole timeline once per
+ * item.
+ *
+ * Two details are load-bearing:
+ *
+ * - `setpts=PTS-STARTPTS` on every branch. Without it a trimmed piece keeps its
+ *   original timestamps and concat writes a clip with a hole where the source
+ *   offset used to be.
+ * - The filler is generated at the output's own size and rate. A black frame of
+ *   a different size stops concat outright, which reads as a corrupt export.
+ */
+export function buildTimelineExportArgs(options: TimelineExportOptions): string[] {
+  const includeAudio = options.audio.length > 0 && options.volume > 0
+  const size = `${options.outWidth}x${options.outHeight}`
+  const rate = options.fps > 0 ? options.fps : 30
+
+  const parts: string[] = []
+  const videoLabels: string[] = []
+  const audioLabels: string[] = []
+
+  let filler = 0
+  let cursor = 0
+
+  for (const item of [...options.video].sort((a, b) => a.start - b.start)) {
+    if (item.start - cursor > 0.001) {
+      const label = `bg${filler++}`
+      parts.push(
+        `color=c=black:s=${size}:r=${rate}:d=${(item.start - cursor).toFixed(3)}[${label}]`,
+      )
+      videoLabels.push(`[${label}]`)
+    }
+
+    const label = `v${videoLabels.length}`
+    parts.push(
+      `[${item.input}:v]trim=start=${item.sourceIn.toFixed(3)}:end=${item.sourceOut.toFixed(3)},` +
+        `setpts=PTS-STARTPTS,scale=${options.outWidth}:${options.outHeight}:flags=lanczos,` +
+        `fps=${rate},setsar=1[${label}]`,
+    )
+    videoLabels.push(`[${label}]`)
+    cursor = item.start + (item.sourceOut - item.sourceIn)
+  }
+
+  if (includeAudio) {
+    let silence = 0
+    let audioCursor = 0
+
+    for (const item of [...options.audio].sort((a, b) => a.start - b.start)) {
+      if (item.start - audioCursor > 0.001) {
+        const label = `sil${silence++}`
+        parts.push(
+          `anullsrc=r=48000:cl=stereo:d=${(item.start - audioCursor).toFixed(3)}[${label}]`,
+        )
+        audioLabels.push(`[${label}]`)
+      }
+
+      const label = `a${audioLabels.length}`
+      parts.push(
+        `[${item.input}:a]atrim=start=${item.sourceIn.toFixed(3)}:end=${item.sourceOut.toFixed(3)},` +
+          `asetpts=PTS-STARTPTS,aresample=48000[${label}]`,
+      )
+      audioLabels.push(`[${label}]`)
+      audioCursor = item.start + (item.sourceOut - item.sourceIn)
+    }
+  }
+
+  if (videoLabels.length === 0) return []
+
+  parts.push(`${videoLabels.join('')}concat=n=${videoLabels.length}:v=1:a=0[vcat]`)
+  const speedFilter =
+    options.speed !== 1 ? `,setpts=${(1 / options.speed).toFixed(6)}*PTS` : ''
+  parts.push(`[vcat]null${speedFilter}[vout]`)
+
+  if (includeAudio) {
+    parts.push(`${audioLabels.join('')}concat=n=${audioLabels.length}:v=0:a=1[acat]`)
+    parts.push(`[acat]${buildExportAudioFilter(options)}[aout]`)
+  }
+
+  const args: string[] = ['-hide_banner', '-nostdin']
+  for (const source of options.sources) args.push('-i', source)
+
+  args.push('-filter_complex', parts.join(';'), '-map', '[vout]')
+
+  if (includeAudio) {
+    args.push('-map', '[aout]', '-c:a', 'aac', '-b:a', `${options.audioBitrateKbps}k`)
+  } else {
+    args.push('-an')
+  }
+
+  args.push(
+    ...buildVideoEncodeArgs({
+      encoder: options.encoder,
+      quality: options.quality,
+      maxBitrateKbps: options.maxBitrateKbps,
+      targetBitrateKbps: options.targetBitrateKbps,
+    }),
+    '-pix_fmt', 'yuv420p',
+    '-movflags', '+faststart',
+    '-progress', 'pipe:1',
+    '-stats_period', '0.5',
+    '-nostats',
+    '-y',
+    options.outputPath,
+  )
+
+  return args
+}
+
 /**
  * Trim + transcode a clip.
  *

@@ -637,19 +637,18 @@ function resolutionHint(
 }
 
 /**
- * Say what the chosen rate costs, in the terms the user notices.
+ * Only worth saying when the choice loses something.
  *
- * Capture samples the screen at this rate, so it is also the ceiling on the
- * number the on-screen counter can ever show — someone on a 144 Hz display
- * capturing at 60 sees 60 and reasonably concludes the counter is broken.
+ * Recording below the display's refresh rate is a real trade — smoothness for
+ * file size — and one people make by accident on a high-refresh monitor.
+ * Matching it needs no explanation, so it gets none.
  */
-function frameRateHint(settings: AppSettings, displays: DisplayInfo[]): string {
+function frameRateHint(settings: AppSettings, displays: DisplayInfo[]): string | undefined {
   const display = displays[settings.monitorIndex] ?? displays.find((d) => d.isPrimary)
   const refresh = display?.refreshRate
 
-  if (!refresh || refresh <= settings.fps) return 'Also the ceiling for the on-screen frame counter'
-
-  return `Your display runs at ${refresh} Hz — capturing at ${settings.fps} caps both the recording and the on-screen counter at ${settings.fps}`
+  if (!refresh || refresh <= settings.fps) return undefined
+  return `Your display runs at ${refresh} Hz — recording at ${settings.fps} captures fewer frames than it shows`
 }
 
 /**
