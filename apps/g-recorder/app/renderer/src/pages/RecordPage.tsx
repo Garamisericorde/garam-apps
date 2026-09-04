@@ -21,6 +21,8 @@ export default function RecordPage(): JSX.Element {
   const [busy, setBusy] = useState<'toggle' | 'save' | 'record' | 'clear' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
+  /** Whether a pad has answered, which is what decides if its keys are shown */
+  const [padConnected, setPadConnected] = useState(false)
 
   useEffect(() => {
     void window.api.recorder.getStatus().then(setStatus)
@@ -30,6 +32,27 @@ export default function RecordPage(): JSX.Element {
 
   useEffect(() => {
     return window.api.settings.onChange(setSettings)
+  }, [])
+
+  /*
+   * A pad plugged in while this page is open should appear on its own. Polled
+   * rather than pushed because XInput has no arrival event to listen for: the
+   * only way to know a controller is there is to ask.
+   */
+  useEffect(() => {
+    let cancelled = false
+    const read = (): void => {
+      void window.api.gamepad.status().then((status) => {
+        if (!cancelled) setPadConnected(status.connected)
+      })
+    }
+
+    read()
+    const timer = setInterval(read, 2_000)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
   }, [])
 
   // The cache only changes as segments are written, so polling it with the
@@ -164,9 +187,27 @@ export default function RecordPage(): JSX.Element {
       </section>
 
       <section className="capture-facts">
-        <Fact label="Save clip from buffer" value={settings?.hotkeySaveReplay ?? 'Not bound'} mono />
-        <Fact label="Turn buffer on / off" value={settings?.hotkeyToggleRecording ?? 'Not bound'} mono />
-        <Fact label="Start / stop recording" value={settings?.hotkeyRecordToFile ?? 'Not bound'} mono />
+        {/* The controller bindings sit with the keys rather than in a row of
+            their own: they are the same three actions, and which button does
+            what is only worth knowing next to the key it stands in for. */}
+        <Fact
+          label="Save clip from buffer"
+          value={settings?.hotkeySaveReplay ?? 'Not bound'}
+          pad={padConnected ? settings?.padSaveReplay : null}
+          mono
+        />
+        <Fact
+          label="Turn buffer on / off"
+          value={settings?.hotkeyToggleRecording ?? 'Not bound'}
+          pad={padConnected ? settings?.padToggleRecording : null}
+          mono
+        />
+        <Fact
+          label="Start / stop recording"
+          value={settings?.hotkeyRecordToFile ?? 'Not bound'}
+          pad={padConnected ? settings?.padRecordToFile : null}
+          mono
+        />
         <Fact
           label="Replay length"
           value={settings ? `${settings.replayLengthMinutes} min` : '...'}
@@ -207,16 +248,20 @@ export default function RecordPage(): JSX.Element {
 function Fact({
   label,
   value,
+  pad,
   mono,
 }: {
   label: string
   value: string
+  /** The same action on a controller, shown only when one is plugged in */
+  pad?: string | null
   mono?: boolean
 }): JSX.Element {
   return (
     <div className="fact">
       <span className="fact-label">{label}</span>
       <span className={`fact-value${mono ? ' mono' : ''}`}>{value}</span>
+      {pad && <span className="fact-pad mono">{pad}</span>}
     </div>
   )
 }

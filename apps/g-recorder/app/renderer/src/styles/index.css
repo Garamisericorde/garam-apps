@@ -1775,3 +1775,15 @@ kbd {
   background: var(--accent);
   box-shadow: 0 0 6px var(--accent);
 }
+
+/* The controller binding under the key it stands in for */
+.fact-pad {
+  display: inline-flex;
+  align-self: flex-start;
+  margin-top: 3px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+  font-size: 11px;
+}
