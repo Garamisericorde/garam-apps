@@ -41,6 +41,16 @@ const REQUESTED_FORMAT: SystemAudioFormat = {
 /** How long to wait for the renderer's first chunk before giving up on it */
 const FIRST_CHUNK_TIMEOUT_MS = 4_000
 
+/**
+ * How long to wait for the renderer to publish its capture entry point.
+ *
+ * The buffer can auto-start before the window has finished loading — how the
+ * race lands depends on nothing more than whether the encoder probes hit their
+ * cache. Losing it used to mean the recording silently had no system sound,
+ * with only "script failed to execute" in the log to say why.
+ */
+const RENDERER_READY_TIMEOUT_MS = 8_000
+
 type ChunkSink = (chunk: Buffer) => void
 
 let _window: BrowserWindow | null = null
@@ -120,6 +130,11 @@ export async function startSystemAudio(): Promise<SystemAudioFormat | null> {
     return null
   }
 
+  if (!(await waitForRendererEntry())) {
+    logger.warn('SystemAudio: the renderer never became ready, continuing without system sound')
+    return null
+  }
+
   const flowing = new Promise<boolean>((resolvePromise) => {
     const timer = setTimeout(() => {
       _firstChunk = null
@@ -159,6 +174,36 @@ export async function startSystemAudio(): Promise<SystemAudioFormat | null> {
   }
 
   return (await flowing) ? _format : null
+}
+
+/**
+ * Wait until the renderer has published `__gRecorderStartSystemAudio`.
+ *
+ * Polled rather than hung off 'did-finish-load', because that event has already
+ * passed by the time a later recording starts, and the entry point is what
+ * actually has to exist — a loaded page whose React tree has not mounted yet
+ * would still fail.
+ */
+async function waitForRendererEntry(): Promise<boolean> {
+  const deadline = Date.now() + RENDERER_READY_TIMEOUT_MS
+
+  while (Date.now() < deadline) {
+    if (!canCaptureSystemAudio()) return false
+
+    try {
+      const ready = await _window?.webContents.executeJavaScript(
+        `typeof window.__gRecorderStartSystemAudio === 'function'`,
+      )
+      if (ready === true) return true
+    } catch {
+      // Executing against a page that is still loading throws; that is the
+      // case being waited out, not a failure.
+    }
+
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 100))
+  }
+
+  return false
 }
 
 /** Attach the destination for PCM, flushing anything captured while waiting */
