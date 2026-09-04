@@ -113,6 +113,8 @@ export default function SettingsPage(): JSX.Element {
 
       {error && <div className="banner banner-error">{error}</div>}
 
+      <SettingsNav />
+
       {/* ── Recording ── */}
       <Section title="Recording">
         <Field label="Replay length" hint="How much footage the buffer keeps">
@@ -479,6 +481,76 @@ export default function SettingsPage(): JSX.Element {
 
 // ── Sub-components ───────────────────────────────────────────────────────────
 
+/** The sections, in the order the page lays them out */
+const SECTIONS = [
+  'Recording',
+  'Audio',
+  'Behaviour',
+  'Output',
+  'Hotkeys',
+  'Controller',
+  'Editor keys',
+  'Diagnostics',
+]
+
+/** A heading turned into something a URL fragment and a query can both use */
+function sectionId(title: string): string {
+  return `settings-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+}
+
+/**
+ * Jump to a section, and say which one you are in.
+ *
+ * The page is long enough that finding a section means scrolling and reading
+ * headings, which is the work this removes. Which one is current is read from
+ * where the sections actually are rather than from the last button pressed:
+ * scrolling by hand has to move it too, or the bar starts lying.
+ */
+function SettingsNav(): JSX.Element {
+  const [current, setCurrent] = useState(SECTIONS[0])
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        // The topmost heading that is on screen, not merely the last one to
+        // cross the line: scrolling up must move the marker back.
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0]
+
+        const title = SECTIONS.find((section) => sectionId(section) === visible?.target.id)
+        if (title) setCurrent(title)
+      },
+      { rootMargin: '-52px 0px -60% 0px' },
+    )
+
+    for (const section of SECTIONS) {
+      const element = document.getElementById(sectionId(section))
+      if (element) observer.observe(element)
+    }
+
+    return () => observer.disconnect()
+  }, [])
+
+  return (
+    <nav className="settings-nav">
+      {SECTIONS.map((section) => (
+        <button
+          key={section}
+          className={current === section ? 'is-current' : ''}
+          onClick={() =>
+            document
+              .getElementById(sectionId(section))
+              ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }
+        >
+          {section}
+        </button>
+      ))}
+    </nav>
+  )
+}
+
 /**
  * The name every export is built from.
  *
@@ -552,7 +624,7 @@ function GamepadSection({
   }, [])
 
   return (
-    <div className="settings-section">
+    <div className="settings-section" id={sectionId('Controller')}>
       <div className="section-head">
         <p className="section-title">Controller</p>
         <button
@@ -708,7 +780,7 @@ function Section({
   children: React.ReactNode
 }): JSX.Element {
   return (
-    <div className="settings-section">
+    <div className="settings-section" id={sectionId(title)}>
       <div className="section-head">
         <p className="section-title">{title}</p>
         {action}
