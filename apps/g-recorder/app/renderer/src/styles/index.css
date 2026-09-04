@@ -1291,6 +1291,8 @@ kbd {
 
 .library-item {
   position: relative;
+  /* Shift-clicking a list otherwise selects the text between the two rows. */
+  user-select: none;
   display: flex;
   align-items: center;
   gap: 10px;
