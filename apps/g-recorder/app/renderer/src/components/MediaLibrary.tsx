@@ -5,6 +5,8 @@ import { formatBytes } from '../../../shared/time'
 interface MediaLibraryProps {
   /** Path of the clip currently open, so the list can mark it */
   activePath: string | null
+  /** True while a clip is being opened — probing and thumbnails take a moment */
+  busy?: boolean
   onOpen: (clipPath: string) => void
   onImport: () => void
 }
@@ -22,6 +24,7 @@ interface MediaLibraryProps {
  */
 export default function MediaLibrary({
   activePath,
+  busy = false,
   onOpen,
   onImport,
 }: MediaLibraryProps): JSX.Element {
@@ -77,8 +80,8 @@ export default function MediaLibrary({
         </span>
       </div>
 
-      <button className="btn btn-primary" onClick={onImport}>
-        Import video…
+      <button className="btn btn-primary" onClick={onImport} disabled={busy}>
+        {busy ? 'Opening…' : 'Import video…'}
       </button>
 
       <div className="library-list">

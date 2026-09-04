@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import type { MediaInfo } from '../../../shared/types'
 import { clamp, formatBytes, formatTime } from '../../../shared/time'
 import VideoPlayer from '../components/VideoPlayer'
@@ -25,7 +25,6 @@ interface EditorLocationState {
 
 export default function EditorPage(): JSX.Element {
   const location = useLocation()
-  const navigate = useNavigate()
   const requestedPath = (location.state as EditorLocationState | null)?.clipPath
 
   const playerRef = useRef<VideoPlayerHandle>(null)
@@ -257,6 +256,7 @@ export default function EditorPage(): JSX.Element {
   return (
     <div className="editor-layout">
       <MediaLibrary
+        busy={busy === 'open'}
         activePath={clip?.path ?? null}
         onOpen={(clipPath) => void loadClip(clipPath)}
         onImport={() => void handleOpenFile()}
@@ -274,10 +274,6 @@ export default function EditorPage(): JSX.Element {
           </div>
 
           <div className="row">
-            <button className="btn" onClick={() => void handleOpenFile()} disabled={busy !== null}>
-              Open video…
-            </button>
-
             {/* Export sits with the other things you do to a clip, not under the
               settings that shape it. */}
             <button
@@ -334,15 +330,10 @@ export default function EditorPage(): JSX.Element {
             />
           ) : (
             <div className="stage-empty">
-              <p>Drop a video here, or open one, to start editing.</p>
-              <div className="row">
-                <button className="btn btn-primary" onClick={() => void handleOpenFile()}>
-                  Open video…
-                </button>
-                <button className="btn" onClick={() => navigate('/record')}>
-                  Save a replay
-                </button>
-              </div>
+              {/* The library beside this holds the clips and the way to add
+                  more, so the empty state points at it rather than repeating
+                  its buttons. */}
+              <p>Pick a clip from the left, or drop a video here.</p>
             </div>
           )}
         </div>
