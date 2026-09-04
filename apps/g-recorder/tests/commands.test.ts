@@ -585,6 +585,19 @@ describe('buildTimelineExportArgs across several sources', () => {
     expect(graph).toContain('concat=n=3:v=0:a=1')
   })
 
+  it('builds every branch at the rate it was given', () => {
+    // 0 would mean "leave the source alone", which a filter graph cannot do:
+    // concat needs one rate for all branches. The caller resolves it, and a
+    // default of 30 here quietly halved a 60 fps export.
+    const graph = (() => {
+      const args = buildTimelineExportArgs({ ...twoClips, fps: 60 })
+      return args[args.indexOf('-filter_complex') + 1]
+    })()
+
+    expect(graph.match(/fps=60/g)).toHaveLength(2)
+    expect(graph).not.toContain('fps=30')
+  })
+
   it('drops the audio graph entirely when the lane is empty', () => {
     const args = buildTimelineExportArgs({ ...twoClips, audio: [] })
     expect(args).toContain('-an')

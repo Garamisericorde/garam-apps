@@ -160,6 +160,15 @@ export class ExportService {
         )
       : undefined
 
+    /*
+     * 0 means "leave the source rate alone", which the single-clip path can do
+     * by adding no fps filter at all. The timeline path cannot: every branch
+     * has to agree on a rate before concat will join them, so it needs a real
+     * number, and defaulting that to 30 quietly halved a 60 fps export.
+     */
+    const sourceFps = info.fps > 0 ? info.fps : 30
+    const outputFps = preset.fps > 0 ? Math.min(preset.fps, sourceFps) : 0
+
     const timeline = options.timeline
 
     /*
@@ -186,7 +195,7 @@ export class ExportService {
       outWidth: framing.outWidth,
       outHeight: framing.outHeight,
       crop: framing.crop,
-      fps: preset.fps > 0 ? Math.min(preset.fps, info.fps || preset.fps) : 0,
+      fps: outputFps,
       quality: preset.quality,
       maxBitrateKbps: preset.maxBitrateKbps,
       audioBitrateKbps: preset.audioBitrateKbps,
@@ -208,6 +217,7 @@ export class ExportService {
 
     return buildTimelineExportArgs({
       ...shared,
+      fps: outputFps > 0 ? outputFps : sourceFps,
       clipPath: timeline.sources[0],
       inPoint: 0,
       outPoint: timeline.duration,
