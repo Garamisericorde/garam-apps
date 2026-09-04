@@ -1480,6 +1480,12 @@ kbd {
   align-items: stretch;
 }
 
+/* Middle-drag pans; the cursor is the only thing that says so mid-gesture. */
+.lanes.is-panning,
+.lanes.is-panning * {
+  cursor: grabbing !important;
+}
+
 /*
  * A column of badges, not a layer panel. All it has to answer is which lane is
  * which and which one is selected — anything more would be a second interface

@@ -109,6 +109,7 @@ export default function Timeline({
   const [menu, setMenu] = useState<{ at: MenuPosition; target: Selection } | null>(null)
   /** The edge a moving clip has locked onto, drawn while it holds */
   const [snapAt, setSnapAt] = useState<number | null>(null)
+  const [panning, setPanning] = useState(false)
 
   const { offset } = view
   const duration = timelineDuration(timeline)
@@ -256,6 +257,7 @@ export default function Timeline({
    */
   const pressItem = useCallback(
     (lane: LaneId, item: TimelineItem, event: React.PointerEvent): void => {
+      if (event.button !== 0) return
       event.preventDefault()
       event.stopPropagation()
       onSelect({ lane, id: item.id })
@@ -287,11 +289,44 @@ export default function Timeline({
   /** Scrubbing on empty track, which is also how you seek past the last clip */
   const pressTrack = useCallback(
     (event: React.PointerEvent): void => {
+      if (event.button !== 0) return
       onSelect(null)
       onSeek(Math.max(0, timeFromEvent(event.clientX)))
       follow((moveEvent) => onSeek(Math.max(0, timeFromEvent(moveEvent.clientX))))
     },
     [follow, onSeek, onSelect, timeFromEvent],
+  )
+
+  /**
+   * Middle-drag pans the view.
+   *
+   * The content follows the hand: pulling left drags the timeline left, which
+   * means looking further right. It is the gesture every map and canvas uses,
+   * and the only one that leaves both the wheel and the left button free for
+   * what they already do here.
+   */
+  const pressPan = useCallback(
+    (event: React.PointerEvent): void => {
+      if (event.button !== 1) return
+      event.preventDefault()
+
+      const downX = event.clientX
+      const startOffset = offset
+      const perPixel = secondsPerPixel()
+      const limit = Math.max(span - visible, 0)
+      setPanning(true)
+
+      follow(
+        (moveEvent) => {
+          onViewChange({
+            visible: view.visible,
+            offset: clamp(startOffset + (downX - moveEvent.clientX) * perPixel, 0, limit),
+          })
+        },
+        () => setPanning(false),
+      )
+    },
+    [follow, offset, onViewChange, secondsPerPixel, span, view.visible, visible],
   )
 
   /**
@@ -412,7 +447,14 @@ export default function Timeline({
     <div className="timeline-wrap">
       <ContextMenu position={menu?.at ?? null} items={menuItems} onClose={() => setMenu(null)} />
 
-      <div className="lanes" onWheel={handleWheel}>
+      <div
+        className={`lanes${panning ? ' is-panning' : ''}`}
+        onWheel={handleWheel}
+        onPointerDown={pressPan}
+        // Middle-click otherwise opens Chromium's autoscroll, which then eats
+        // the very pointer moves this is trying to read.
+        onAuxClick={(event) => event.preventDefault()}
+      >
         <div className="lane-gutter">
           <span className="lane-badge" title="Video">
             🎞
