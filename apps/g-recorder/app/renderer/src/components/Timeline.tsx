@@ -47,8 +47,11 @@ interface TimelineProps {
   onSelect: (selection: Selection | null) => void
   onSeek: (seconds: number) => void
   onMove: (lane: LaneId, id: string, start: number) => void
+  /** A gesture is about to start changing things, so it can be undone as one */
+  onEditBegin: () => void
   onRemove: (lane: LaneId, id: string) => void
-  onSplit: (lane: LaneId, id: string, seconds: number) => void
+  /** Cut at the playhead; `bothLanes` false cuts only the lane clicked */
+  onSplit: (lane: LaneId, bothLanes: boolean) => void
   onViewChange: (view: TimelineView) => void
 }
 
@@ -95,6 +98,7 @@ export default function Timeline({
   onSelect,
   onSeek,
   onMove,
+  onEditBegin,
   onRemove,
   onSplit,
   onViewChange,
@@ -267,6 +271,8 @@ export default function Timeline({
             if (Math.abs(moveEvent.clientX - downX) < DRAG_THRESHOLD_PX) return
             moved = true
             dragRef.current = drag
+            // One entry for the whole drag, not one per pointer move.
+            onEditBegin()
           }
           applyDrag(drag, timeFromEvent(moveEvent.clientX))
         },
@@ -275,7 +281,7 @@ export default function Timeline({
         },
       )
     },
-    [applyDrag, follow, onSeek, onSelect, timeFromEvent],
+    [applyDrag, follow, onEditBegin, onSeek, onSelect, timeFromEvent],
   )
 
   /** Scrubbing on empty track, which is also how you seek past the last clip */
@@ -322,7 +328,11 @@ export default function Timeline({
     ? [
         {
           label: 'Split at the playhead',
-          onSelect: () => onSplit(menu.target.lane, menu.target.id, currentTime),
+          onSelect: () => onSplit(menu.target.lane, true),
+        },
+        {
+          label: menu.target.lane === 'audio' ? 'Split audio only' : 'Split video only',
+          onSelect: () => onSplit(menu.target.lane, false),
         },
         {
           label: menu.target.lane === 'audio' ? 'Remove audio clip' : 'Remove clip',

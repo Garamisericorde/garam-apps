@@ -29,6 +29,8 @@ import PresetPicker from '../components/PresetPicker'
 import MediaLibrary from '../components/MediaLibrary'
 import type { ExportControl } from '../components/PresetPicker'
 import { DEFAULT_EDITOR_KEYS } from '../../../shared/hotkeyDefaults'
+import { emptyHistory, record, redo, undo } from '../state/history'
+import type { History } from '../state/history'
 
 /** null is a key the user has cleared, which is not the same as unset */
 interface EditorKeys {
@@ -85,6 +87,16 @@ export default function EditorPage(): JSX.Element {
    * to disagree about.
    */
   const [timeline, setTimeline] = useState<TimelineModel>(EMPTY_TIMELINE)
+  const [, setHistory] = useState<History<TimelineModel>>(emptyHistory)
+  /*
+   * The timeline as it is right now, for the edit helpers.
+   *
+   * They have to read the current value and write a history entry in the same
+   * breath, and a state updater is not the place for that: React may call one
+   * twice, which would push the same step onto the stack twice.
+   */
+  const latestTimeline = useRef(timeline)
+  latestTimeline.current = timeline
   const [sources, setSources] = useState<Record<string, Source>>({})
   const [selected, setSelected] = useState<Selection | null>(null)
 
@@ -120,6 +132,34 @@ export default function EditorPage(): JSX.Element {
 
   const duration = timelineDuration(timeline)
 
+  // ── Editing, with history ──────────────────────────────────────────────────
+
+  /** Make a change that can be undone */
+  const edit = useCallback((change: (timeline: TimelineModel) => TimelineModel) => {
+    const previous = latestTimeline.current
+    const next = change(previous)
+    if (next === previous) return
+
+    setHistory((current) => record(current, previous))
+    setTimeline(next)
+  }, [])
+
+  /**
+   * Make a change that is part of one already recorded.
+   *
+   * A drag reports every pointer move, and each one is the same edit still
+   * happening — recording them all would mean pressing undo two hundred times
+   * to put one clip back.
+   */
+  const apply = useCallback((change: (timeline: TimelineModel) => TimelineModel) => {
+    setTimeline((previous) => change(previous))
+  }, [])
+
+  /** A gesture is about to start changing things */
+  const beginEdit = useCallback(() => {
+    setHistory((current) => record(current, latestTimeline.current))
+  }, [])
+
   // ── Sources ────────────────────────────────────────────────────────────────
 
   /**
@@ -146,7 +186,7 @@ export default function EditorPage(): JSX.Element {
         },
       }))
 
-      setTimeline((previous) => {
+      edit((previous) => {
         const appended = appendClip(previous, {
           path: opened.clipPath,
           durationSeconds: info.durationSeconds,
@@ -180,7 +220,7 @@ export default function EditorPage(): JSX.Element {
     } catch (err) {
       setError(cleanError(err))
     }
-  }, [])
+  }, [edit])
 
   const handleImport = useCallback(async () => {
     setBusy('open')
@@ -197,11 +237,11 @@ export default function EditorPage(): JSX.Element {
 
   /** Empty the timeline, leaving the editor as it opens */
   const clearTimeline = useCallback(() => {
-    setTimeline(EMPTY_TIMELINE)
+    edit(() => EMPTY_TIMELINE)
     setSelected(null)
     setPlayhead(0)
     setView(FIT_VIEW)
-  }, [])
+  }, [edit])
 
   // A replay saved from the tray or a hotkey lands here
   useEffect(() => {
@@ -282,36 +322,67 @@ export default function EditorPage(): JSX.Element {
 
   // ── Editing ────────────────────────────────────────────────────────────────
 
-  const handleMove = useCallback((lane: LaneId, id: string, start: number) => {
-    setTimeline((previous) => moveItem(previous, lane, id, start))
-  }, [])
+  const handleMove = useCallback(
+    (lane: LaneId, id: string, start: number) => {
+      apply((previous) => moveItem(previous, lane, id, start))
+    },
+    [apply],
+  )
 
   const handleTrim = useCallback(
     (lane: LaneId, id: string, edge: 'start' | 'end', seconds: number) => {
-      setTimeline((previous) => {
+      edit((previous) => {
         const item = previous[lane].find((candidate) => candidate.id === id)
         const sourceDuration = item ? (sources[item.path]?.durationSeconds ?? 0) : 0
         return trimItem(previous, lane, id, edge, seconds, sourceDuration)
       })
     },
-    [sources],
+    [edit, sources],
   )
 
-  const handleRemove = useCallback((lane: LaneId, id: string) => {
-    setTimeline((previous) => removeItem(previous, lane, id))
-    setSelected((previous) => (previous?.id === id ? null : previous))
-  }, [])
+  const handleRemove = useCallback(
+    (lane: LaneId, id: string) => {
+      edit((previous) => removeItem(previous, lane, id))
+      setSelected((previous) => (previous?.id === id ? null : previous))
+    },
+    [edit],
+  )
 
   /**
-   * Cut one lane at a moment.
+   * Cut at a moment.
    *
-   * One lane, not both: the lanes are independent everywhere else, and a split
-   * that always took the audio with it would be a decision made on the user's
-   * behalf every single time.
+   * Both lanes by default: the sound under a clip belongs to it, and a cut that
+   * left the audio whole is a cut you have to make twice. Cutting one lane on
+   * its own is still there, in the clip's own menu, for when the two are meant
+   * to come apart.
    */
-  const handleSplit = useCallback((lane: LaneId, time: number) => {
-    setTimeline((previous) => splitAt(previous, time, [lane]))
-  }, [])
+  const handleSplit = useCallback(
+    (time: number, lanes?: LaneId[]) => {
+      edit((previous) => splitAt(previous, time, lanes))
+    },
+    [edit],
+  )
+
+  /** Walk the history one step and put the timeline back to what it held */
+  const stepHistory = useCallback(
+    (step: typeof undo<TimelineModel>) => {
+      setHistory((current) => {
+        const stepped = step(current, latestTimeline.current)
+        if (!stepped) return current
+
+        setTimeline(stepped.present)
+        // A clip that is no longer there cannot stay selected.
+        setSelected((selection) =>
+          selection &&
+          stepped.present[selection.lane].some((item) => item.id === selection.id)
+            ? selection
+            : null,
+        )
+        return stepped.history
+      })
+    },
+    [],
+  )
 
   // ── Keyboard ───────────────────────────────────────────────────────────────
 
@@ -320,6 +391,27 @@ export default function EditorPage(): JSX.Element {
 
     const handleKey = (event: KeyboardEvent): void => {
       if (isTypingTarget(event.target)) return
+
+      if (event.ctrlKey || event.metaKey) {
+        const key = event.key.toLowerCase()
+        // Both spellings of redo, because both are muscle memory somewhere.
+        if (key === 'z' && event.shiftKey) {
+          event.preventDefault()
+          stepHistory(redo)
+          return
+        }
+        if (key === 'z') {
+          event.preventDefault()
+          stepHistory(undo)
+          return
+        }
+        if (key === 'y') {
+          event.preventDefault()
+          stepHistory(redo)
+          return
+        }
+        return
+      }
 
       if (matches(event, keys.editorKeyPlayPause)) {
         event.preventDefault()
@@ -335,9 +427,7 @@ export default function EditorPage(): JSX.Element {
         return
       }
       if (matches(event, keys.editorKeySplit)) {
-        // The selected lane, or the picture when nothing is selected — the lane
-        // you are working on is the one you meant.
-        handleSplit(selected?.lane ?? 'video', playhead)
+        handleSplit(playhead)
         return
       }
       if (event.key === 'Delete' || event.key === 'Backspace') {
@@ -375,6 +465,7 @@ export default function EditorPage(): JSX.Element {
   }, [
     activeSource,
     duration,
+    stepHistory,
     handleRemove,
     handleSeek,
     handleSplit,
@@ -505,7 +596,7 @@ export default function EditorPage(): JSX.Element {
         onRemoved={(removed) => {
           // A file that is gone cannot stay on the timeline — the editor would
           // be holding a picture of something that no longer exists.
-          setTimeline((previous) => ({
+          edit((previous) => ({
             video: previous.video.filter((item) => item.path !== removed),
             audio: previous.audio.filter((item) => item.path !== removed),
           }))
@@ -626,8 +717,9 @@ export default function EditorPage(): JSX.Element {
             onSelect={setSelected}
             onSeek={handleSeek}
             onMove={handleMove}
+            onEditBegin={beginEdit}
             onRemove={handleRemove}
-            onSplit={(lane) => handleSplit(lane, playhead)}
+            onSplit={(lane, both) => handleSplit(playhead, both ? undefined : [lane])}
             onViewChange={setView}
           />
         </div>
@@ -639,7 +731,7 @@ export default function EditorPage(): JSX.Element {
           disabled={duration <= 0}
           canRemove={selected !== null}
           onTogglePlay={() => playerRef.current?.togglePlay()}
-          onSplit={() => handleSplit(selected?.lane ?? 'video', playhead)}
+          onSplit={() => handleSplit(playhead)}
           onRemove={() => selected && handleRemove(selected.lane, selected.id)}
           onClear={clearTimeline}
           onSeek={handleSeek}

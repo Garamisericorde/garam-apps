@@ -1636,35 +1636,51 @@ kbd {
  * A clip is a box with edges, not a region of a strip.
  *
  * That is the whole difference a split makes: cutting used to draw a line on
- * one continuous filmstrip, so the two halves still read as one thing. Two
- * boxes with a gap between them cannot be mistaken for one.
+ * one continuous filmstrip, so the two halves still read as one thing.
+ *
+ * The outer element holds the position — it has to, or the picture inside would
+ * be off by however wide the gap is — and the visible box is inset within it.
+ * Two clips butted up against each other therefore leave a real gap with a lit
+ * edge on either side of it, which is what makes them count as two.
  */
 .clip {
   position: absolute;
   top: 0;
   bottom: 0;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  background: var(--bg-elevated);
-  overflow: hidden;
   cursor: grab;
-  /* Hairline gap, so butted-up clips still show two edges */
-  margin-right: 1px;
 }
 
 .clip:active {
   cursor: grabbing;
 }
 
-.clip.is-selected {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent) inset;
-}
-
 .clip-inner {
   position: absolute;
-  inset: 0;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  right: 2px;
+  border-radius: 5px;
+  /* Lit ends, dimmer top and bottom: the ends are where one clip stops and the
+     next starts, and they are the only edges worth finding at a glance. */
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--text-muted);
+  border-right: 2px solid var(--text-muted);
+  background: var(--bg-elevated);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.55);
   overflow: hidden;
+}
+
+.clip:hover .clip-inner {
+  border-left-color: var(--text);
+  border-right-color: var(--text);
+}
+
+.clip.is-selected .clip-inner {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 1px var(--accent),
+    0 1px 4px rgb(0 0 0 / 0.55);
 }
 
 /* The strip covers the whole source and is clipped to the item, so trimming
