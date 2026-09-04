@@ -52,9 +52,6 @@ export const api = {
     saveReplay: (opts?: { durationSeconds?: number }): Promise<ClipRef> =>
       ipcRenderer.invoke('recorder:saveReplay', opts),
 
-    startManual: (): Promise<string> => ipcRenderer.invoke('recorder:startManual'),
-    stopManual: (): Promise<ClipRef | null> => ipcRenderer.invoke('recorder:stopManual'),
-
     getCacheSize: (): Promise<number> => ipcRenderer.invoke('recorder:getCacheSize'),
     clearCache: (): Promise<void> => ipcRenderer.invoke('recorder:clearCache'),
 

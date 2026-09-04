@@ -5,7 +5,6 @@ import { electronApp, is } from '@electron-toolkit/utils'
 import { violetSurfaces } from '@garam/theme'
 import { logger } from './logging/logger'
 import { registerSystemAudioHandler } from './audio/SystemAudioBridge'
-import { localTimestamp } from '../shared/time'
 import { SettingsStore } from './settings/SettingsStore'
 import { FfmpegManager } from './ffmpeg/FfmpegManager'
 import { RecorderService } from './ffmpeg/RecorderService'
@@ -237,7 +236,6 @@ function createTray(): void {
       void runGuarded(status.isRecording ? recorder.stop() : recorder.start())
     },
     saveReplay: () => void handleSaveReplay(),
-    toggleManualRecording: () => void handleToggleManualRecording(),
     openOutputFolder: () => {
       void shell.openPath(SettingsStore.getInstance().get().outputPath)
     },
@@ -299,29 +297,6 @@ async function handleSaveReplay(): Promise<void> {
   }
 }
 
-async function handleToggleManualRecording(): Promise<void> {
-  const recorder = RecorderService.getInstance()
-
-  try {
-    if (recorder.getStatus().isManualRecording) {
-      const outputPath = await recorder.stopManualRecording()
-      if (outputPath) {
-        announceReplaySaved(outputPath, 0)
-        showMainWindow('/editor')
-      }
-      return
-    }
-
-    const settings = SettingsStore.getInstance().get()
-    await recorder.startManualRecording(
-      join(settings.outputPath, `recording_${localTimestamp()}.mp4`),
-    )
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    logger.error('Manual recording toggle failed', message)
-    broadcast('app:notice', { level: 'error', message })
-  }
-}
 
 /** Run a background action, surfacing failures to the UI instead of swallowing them */
 async function runGuarded(work: Promise<unknown>): Promise<void> {
@@ -344,7 +319,6 @@ async function quit(): Promise<void> {
   const recorder = RecorderService.getInstance()
 
   try {
-    if (recorder.getStatus().isManualRecording) await recorder.stopManualRecording()
     await recorder.stop()
   } catch (err) {
     logger.warn('Error while stopping the recorder during shutdown', String(err))

@@ -336,11 +336,6 @@ export function buildSegmentOutputArgs(
   ]
 }
 
-/** Output arguments for a single continuous recording file */
-export function buildSingleFileOutputArgs(outputPath: string): string[] {
-  return ['-movflags', '+faststart', '-y', outputPath]
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Concat
 // ─────────────────────────────────────────────────────────────────────────────

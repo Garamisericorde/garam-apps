@@ -44,8 +44,6 @@ export interface AppSettings {
 
 export interface RecorderStatus {
   isRecording: boolean
-  /** True while a manual (non-buffer) recording is running */
-  isManualRecording: boolean
   segmentCount: number
   /** Seconds of footage currently held in the replay buffer */
   bufferSeconds: number

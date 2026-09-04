@@ -301,12 +301,12 @@ export default function SettingsPage(): JSX.Element {
       {/* ── Hotkeys ── */}
       <Section title="Hotkeys">
         <HotkeyField
-          label="Save replay"
+          label="Save clip from buffer"
           value={settings.hotkeySaveReplay}
           onChange={(accelerator) => void save({ hotkeySaveReplay: accelerator })}
         />
         <HotkeyField
-          label="Start / stop instant replay"
+          label="Turn buffer on / off"
           value={settings.hotkeyToggleRecording}
           onChange={(accelerator) => void save({ hotkeyToggleRecording: accelerator })}
         />
