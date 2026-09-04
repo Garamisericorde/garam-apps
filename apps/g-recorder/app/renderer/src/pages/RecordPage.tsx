@@ -18,7 +18,7 @@ export default function RecordPage(): JSX.Element {
   const [status, setStatus] = useState<RecorderStatus | null>(null)
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [cacheSize, setCacheSize] = useState<number | null>(null)
-  const [busy, setBusy] = useState<'toggle' | 'save' | null>(null)
+  const [busy, setBusy] = useState<'toggle' | 'save' | 'record' | 'clear' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
 
@@ -44,7 +44,7 @@ export default function RecordPage(): JSX.Element {
   }, [])
 
   const run = useCallback(
-    async (kind: 'toggle' | 'save', action: () => Promise<unknown>) => {
+    async (kind: 'toggle' | 'save' | 'record' | 'clear', action: () => Promise<unknown>) => {
       setBusy(kind)
       setError(null)
       try {
@@ -59,11 +59,12 @@ export default function RecordPage(): JSX.Element {
   )
 
   const buffering = status?.isRecording ?? false
+  const recording = status?.isManualRecording ?? false
   const buffered = status?.bufferSeconds ?? 0
   const replayLength = (settings?.replayLengthMinutes ?? 5) * 60
   const fill = replayLength > 0 ? Math.min(buffered / replayLength, 1) : 0
 
-  const state = buffering ? 'Instant replay on' : 'Not recording'
+  const state = recording ? 'Recording to file' : buffering ? 'Instant replay on' : 'Not recording'
 
   return (
     <div className="stack" style={{ gap: 16 }}>
@@ -93,11 +94,11 @@ export default function RecordPage(): JSX.Element {
 
       <section className="capture-card">
         <div className="capture-head">
-          <span className={`state-dot ${buffering ? 'is-buffering' : 'is-idle'}`} />
+          <span className={`state-dot ${recording ? 'is-recording' : buffering ? 'is-buffering' : 'is-idle'}`} />
           <div className="stack">
             <h1>{state}</h1>
             <span className="muted small">
-              {buffering
+              {buffering || recording
                 ? `Holding the last ${formatClock(buffered)} of footage`
                 : 'Start the buffer to keep the last few minutes on hand'}
             </span>
@@ -117,7 +118,7 @@ export default function RecordPage(): JSX.Element {
         <div className="row capture-actions">
           <button
             className={`btn ${buffering ? 'btn-danger' : 'btn-primary'}`}
-            disabled={busy !== null}
+            disabled={busy !== null || recording}
             onClick={() =>
               void run('toggle', () =>
                 buffering ? window.api.recorder.stop() : window.api.recorder.start(),
@@ -140,6 +141,23 @@ export default function RecordPage(): JSX.Element {
           >
             {busy === 'save' ? 'Saving…' : 'Save replay'}
           </button>
+
+          <div style={{ flex: 1 }} />
+
+          <button
+            className={recording ? 'btn btn-danger' : 'btn'}
+            disabled={busy !== null}
+            title="Record straight to a file. The replay buffer pauses while this runs."
+            onClick={() =>
+              void run('record', () =>
+                recording
+                  ? window.api.recorder.stopManual()
+                  : window.api.recorder.startManual(),
+              )
+            }
+          >
+            {recording ? 'Stop recording' : 'Start recording'}
+          </button>
         </div>
 
         {status?.error && <div className="banner banner-error">{status.error}</div>}
@@ -148,11 +166,39 @@ export default function RecordPage(): JSX.Element {
       <section className="capture-facts">
         <Fact label="Save clip from buffer" value={settings?.hotkeySaveReplay ?? '—'} mono />
         <Fact label="Turn buffer on / off" value={settings?.hotkeyToggleRecording ?? '—'} mono />
+        <Fact label="Start / stop recording" value={settings?.hotkeyRecordToFile ?? '—'} mono />
         <Fact
           label="Replay length"
           value={settings ? `${settings.replayLengthMinutes} min` : '—'}
         />
-        <Fact label="Cache on disk" value={cacheSize === null ? '—' : formatBytes(cacheSize)} />
+
+        {/* A number you cannot act on is just a number: the cache is the one
+            thing on this page that grows without limit, so it gets a button. */}
+        <div className="fact">
+          <span className="fact-label">Cache on disk</span>
+          <div className="row" style={{ gap: 8 }}>
+            <span className="fact-value">
+              {cacheSize === null ? '—' : formatBytes(cacheSize)}
+            </span>
+            <button
+              className="btn btn-ghost small"
+              disabled={busy !== null || buffering || recording || !cacheSize}
+              title={
+                buffering || recording
+                  ? 'Stop capturing first — these are the files being written'
+                  : 'Delete the buffered footage on disk'
+              }
+              onClick={() =>
+                void run('clear', async () => {
+                  await window.api.recorder.clearCache()
+                  setCacheSize(await window.api.recorder.getCacheSize())
+                })
+              }
+            >
+              {busy === 'clear' ? 'Clearing…' : 'Clear'}
+            </button>
+          </div>
+        </div>
       </section>
     </div>
   )

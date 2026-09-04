@@ -67,6 +67,10 @@ export function registerSettingsIpc(): void {
     const recorder = RecorderService.getInstance()
     const before = recorder.getStatus()
 
+    if (before.isManualRecording) {
+      throw new Error('Stop the recording before replacing FFmpeg')
+    }
+
     if (before.isRecording) await recorder.stop()
 
     try {

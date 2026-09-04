@@ -2,7 +2,7 @@ import { spawn } from 'child_process'
 import type { ChildProcess } from 'child_process'
 import { screen } from 'electron'
 import { constants as osConstants, cpus, setPriority } from 'os'
-import { basename, join } from 'path'
+import { basename, dirname, join } from 'path'
 import {
   createWriteStream,
   existsSync,
@@ -26,7 +26,11 @@ import { logger } from '../logging/logger'
 import { FfmpegManager } from './FfmpegManager'
 import { SettingsStore } from '../settings/SettingsStore'
 import { listAudioDevices, pickDefaultLoopback, pickDefaultMic } from './AudioDevices'
-import { buildCaptureArgs, buildSegmentOutputArgs } from './commands'
+import {
+  buildCaptureArgs,
+  buildSegmentOutputArgs,
+  buildSingleFileOutputArgs,
+} from './commands'
 import type { SystemAudioFormat } from '../audio/SystemAudioBridge'
 import {
   canCaptureSystemAudio,
@@ -152,8 +156,14 @@ export class RecorderService {
   /** Set while a replay is being written, to keep pruning off the used files */
   private _saveHolds = 0
 
+  /** Manual (non-buffer) recording state */
+  private _manualProcess: ChildProcess | null = null
+  private _manualOutputPath: string | null = null
+  private _bufferWasRunning = false
+
   private _status: RecorderStatus = {
     isRecording: false,
+    isManualRecording: false,
     segmentCount: 0,
     bufferSeconds: 0,
     oldestSegmentTime: null,
@@ -198,6 +208,10 @@ export class RecorderService {
       logger.warn('RecorderService: already recording or starting')
       return
     }
+    if (this._status.isManualRecording) {
+      throw new Error('Stop the manual recording before starting the replay buffer')
+    }
+
     this._starting = true
     try {
       this._restartAttempts = 0
@@ -395,6 +409,57 @@ export class RecorderService {
     } finally {
       this._stopping = false
     }
+  }
+
+  // ── Manual recording ───────────────────────────────────────────────────────
+
+  /**
+   * Record straight to a single file. The replay buffer is paused for the
+   * duration so only one desktop capture runs at a time.
+   */
+  async startManualRecording(outputPath: string): Promise<void> {
+    if (this._status.isManualRecording) throw new Error('A recording is already running')
+
+    const settings = SettingsStore.getInstance().get()
+    const { ffmpegPath, args: captureArgs } = await this.prepareCapture(settings)
+
+    this._bufferWasRunning = this._status.isRecording
+    if (this._bufferWasRunning) await this.stop()
+
+    mkdirSync(dirname(outputPath), { recursive: true })
+    const args = [...captureArgs, ...buildSingleFileOutputArgs(outputPath)]
+
+    this._manualOutputPath = outputPath
+    this._manualProcess = this.spawnCapture(ffmpegPath, args, 'manual-recording', () => {
+      if (this._status.isManualRecording) {
+        this.emit({ isManualRecording: false, error: 'Recording stopped unexpectedly' })
+      }
+    })
+
+    this.emit({ isManualRecording: true, error: null })
+    logger.info('RecorderService: manual recording started', { outputPath })
+  }
+
+  /** Stop the manual recording and return the finished file path */
+  async stopManualRecording(): Promise<string | null> {
+    const proc = this._manualProcess
+    const outputPath = this._manualOutputPath
+
+    this._manualProcess = null
+    this._manualOutputPath = null
+    this.emit({ isManualRecording: false })
+
+    if (proc) await gracefulStop(proc)
+    logger.info('RecorderService: manual recording stopped', { outputPath })
+
+    if (this._bufferWasRunning) {
+      this._bufferWasRunning = false
+      await this.start().catch((err) =>
+        logger.warn('Could not resume replay buffer', String(err)),
+      )
+    }
+
+    return outputPath
   }
 
   // ── Replay selection ───────────────────────────────────────────────────────

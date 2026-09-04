@@ -38,12 +38,18 @@ export interface AppSettings {
   outputPath: string
 
   // ── Hotkeys ──
+  /** Write what the buffer holds to a file */
   hotkeySaveReplay: string
+  /** Turn the rolling buffer on and off */
   hotkeyToggleRecording: string
+  /** Start and stop recording straight to a file */
+  hotkeyRecordToFile: string
 }
 
 export interface RecorderStatus {
   isRecording: boolean
+  /** True while a manual (non-buffer) recording is running */
+  isManualRecording: boolean
   segmentCount: number
   /** Seconds of footage currently held in the replay buffer */
   bufferSeconds: number

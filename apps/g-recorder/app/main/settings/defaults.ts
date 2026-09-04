@@ -29,6 +29,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // Hotkeys
   hotkeySaveReplay: 'Ctrl+Shift+F10',
   hotkeyToggleRecording: 'Ctrl+Shift+F9',
+  hotkeyRecordToFile: 'Ctrl+Shift+F8',
 }
 
 // ── Recording constants ──────────────────────────────────────────────────────

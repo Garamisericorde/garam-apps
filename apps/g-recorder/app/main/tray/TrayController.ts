@@ -12,6 +12,7 @@ export interface TrayActions {
   openSettings: () => void
   toggleReplayBuffer: () => void
   saveReplay: () => void
+  toggleManualRecording: () => void
   openOutputFolder: () => void
   quit: () => void
 }
@@ -41,7 +42,7 @@ export class TrayController {
     this.status = status
     if (!this.tray) return
 
-    this.tray.setImage(loadTrayIcon(status.isRecording))
+    this.tray.setImage(loadTrayIcon(status.isRecording || status.isManualRecording))
     this.tray.setToolTip(`G-Recorder — ${this.stateLabel()}`)
     this.render()
   }
@@ -49,6 +50,7 @@ export class TrayController {
   private stateLabel(): string {
     if (!this.status) return 'Starting…'
     if (this.status.error) return 'Error'
+    if (this.status.isManualRecording) return 'Recording to file'
     if (this.status.isRecording) return `Replay buffer · ${formatDuration(this.status.bufferSeconds)}`
     return 'Idle'
   }
@@ -58,6 +60,7 @@ export class TrayController {
 
     const status = this.status
     const bufferRunning = status?.isRecording ?? false
+    const manualRunning = status?.isManualRecording ?? false
     const hotkeys = SettingsStore.getInstance().get()
 
     const template: MenuItemConstructorOptions[] = [
@@ -65,6 +68,7 @@ export class TrayController {
       { type: 'separator' },
       {
         label: bufferRunning ? 'Stop instant replay' : 'Start instant replay',
+        enabled: !manualRunning,
         click: () => this.actions.toggleReplayBuffer(),
       },
       {
@@ -72,6 +76,11 @@ export class TrayController {
         accelerator: hotkeys.hotkeySaveReplay,
         enabled: bufferRunning,
         click: () => this.actions.saveReplay(),
+      },
+      { type: 'separator' },
+      {
+        label: manualRunning ? 'Stop recording' : 'Record to file…',
+        click: () => this.actions.toggleManualRecording(),
       },
       { type: 'separator' },
       { label: 'Open G-Recorder', click: () => this.actions.openWindow() },

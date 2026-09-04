@@ -5,12 +5,14 @@ import type { HotkeyFailure } from '../../shared/types'
 
 export interface HotkeyActions {
   saveReplay: () => void
+  recordToFile: () => void
   toggleRecording: () => void
 }
 
 export interface HotkeyRegistrationResult {
   saveReplay: boolean
   toggleRecording: boolean
+  recordToFile: boolean
   /**
    * Accelerators that did not take, with the reason.
    *
@@ -28,6 +30,7 @@ export class HotkeyManager {
   private lastResult: HotkeyRegistrationResult = {
     saveReplay: false,
     toggleRecording: false,
+    recordToFile: false,
     failed: [],
   }
 
@@ -39,21 +42,27 @@ export class HotkeyManager {
   register(): HotkeyRegistrationResult {
     this.unregister()
 
-    const { hotkeySaveReplay, hotkeyToggleRecording } = SettingsStore.getInstance().get()
+    const { hotkeySaveReplay, hotkeyToggleRecording, hotkeyRecordToFile } =
+      SettingsStore.getInstance().get()
 
     const saveReplay = this.tryRegister(hotkeySaveReplay, this.actions.saveReplay)
     const toggleRecording = this.tryRegister(hotkeyToggleRecording, this.actions.toggleRecording)
+    const recordToFile = this.tryRegister(hotkeyRecordToFile, this.actions.recordToFile)
 
     const failed: HotkeyFailure[] = []
     if (!saveReplay) failed.push({ accelerator: hotkeySaveReplay, reason: this.lastReason })
     if (!toggleRecording) {
       failed.push({ accelerator: hotkeyToggleRecording, reason: this.lastReason })
     }
+    if (!recordToFile) {
+      failed.push({ accelerator: hotkeyRecordToFile, reason: this.lastReason })
+    }
 
-    this.lastResult = { saveReplay, toggleRecording, failed }
+    this.lastResult = { saveReplay, toggleRecording, recordToFile, failed }
     logger.info('Hotkeys registered', {
       saveReplay: `${hotkeySaveReplay} ok=${saveReplay}`,
       toggleRecording: `${hotkeyToggleRecording} ok=${toggleRecording}`,
+      recordToFile: `${hotkeyRecordToFile} ok=${recordToFile}`,
     })
 
     return this.lastResult

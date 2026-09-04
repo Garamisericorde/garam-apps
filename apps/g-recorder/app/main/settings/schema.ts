@@ -73,6 +73,10 @@ const VALIDATORS: {
     typeof v === 'string' && v.trim() !== ''
       ? null
       : 'hotkeyToggleRecording must be a non-empty string',
+  hotkeyRecordToFile: (v) =>
+    typeof v === 'string' && v.trim() !== ''
+      ? null
+      : 'hotkeyRecordToFile must be a non-empty string',
 }
 
 const SETTING_KEYS = Object.keys(VALIDATORS) as (keyof AppSettings)[]

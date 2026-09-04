@@ -310,6 +310,11 @@ export default function SettingsPage(): JSX.Element {
           value={settings.hotkeyToggleRecording}
           onChange={(accelerator) => void save({ hotkeyToggleRecording: accelerator })}
         />
+        <HotkeyField
+          label="Start / stop recording"
+          value={settings.hotkeyRecordToFile}
+          onChange={(accelerator) => void save({ hotkeyRecordToFile: accelerator })}
+        />
       </Section>
 
       {/* ── Diagnostics ── */}

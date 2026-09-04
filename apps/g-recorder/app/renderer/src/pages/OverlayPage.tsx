@@ -25,10 +25,15 @@ export default function OverlayPage(): JSX.Element {
     return window.api.recorder.onStatusChange(setStatus)
   }, [])
 
+  const recording = status?.isManualRecording ?? false
   const buffering = status?.isRecording ?? false
 
-  const state = buffering ? 'is-buffering' : 'is-idle'
-  const label = buffering ? 'Instant replay on' : 'Instant replay off'
+  const state = recording ? 'is-recording' : buffering ? 'is-buffering' : 'is-idle'
+  const label = recording
+    ? 'Recording to file'
+    : buffering
+      ? 'Instant replay on'
+      : 'Instant replay off'
 
   return (
     <div className="state-overlay">
