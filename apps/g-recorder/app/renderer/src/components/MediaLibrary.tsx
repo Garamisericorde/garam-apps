@@ -9,6 +9,7 @@ interface MediaLibraryProps {
   activePath: string | null
   /** True while a clip is being opened — probing and thumbnails take a moment */
   busy?: boolean
+  /** Put a clip on the timeline. Reached by double click, never by one. */
   onOpen: (clipPath: string) => void
   onImport: () => void
   /** Called when a clip leaves the list, so the editor can let go of it */
@@ -36,6 +37,15 @@ export default function MediaLibrary({
   const [items, setItems] = useState<LibraryItem[]>([])
   const [loading, setLoading] = useState(true)
   const posterRequests = useRef(new Set<string>())
+  /*
+   * The row the user has clicked.
+   *
+   * Separate from `activePath`, which is whatever the preview is showing: a
+   * single click picks a clip out of the list, and only a double click puts it
+   * on the timeline. Adding on one click meant browsing the list appended a
+   * clip every time you looked at one.
+   */
+  const [picked, setPicked] = useState<string | null>(null)
   const [menu, setMenu] = useState<{ at: MenuPosition; item: LibraryItem } | null>(null)
 
   const refresh = useCallback(async () => {
@@ -110,11 +120,18 @@ export default function MediaLibrary({
           </p>
         )}
 
+        {!loading && items.length > 0 && (
+          <p className="small faint">Double click a clip, or drag it onto the timeline.</p>
+        )}
+
         {items.map((item) => (
           <button
             key={item.path}
-            className={`library-item${item.path === activePath ? ' is-active' : ''}`}
-            onClick={() => onOpen(item.path)}
+            className={`library-item${item.path === activePath ? ' is-active' : ''}${
+              item.path === picked ? ' is-picked' : ''
+            }`}
+            onClick={() => setPicked(item.path)}
+            onDoubleClick={() => onOpen(item.path)}
             // Dragging onto the stage is the same act as clicking; the drop
             // target reads this back rather than the file, which the renderer
             // is not allowed to construct.
@@ -123,7 +140,9 @@ export default function MediaLibrary({
               event.dataTransfer.setData('application/x-grecorder-clip', item.path)
               event.dataTransfer.effectAllowed = 'copy'
             }}
-            title={item.path}
+            title={`${item.path}
+
+Double click to add it to the timeline`}
             onContextMenu={(event) => {
               event.preventDefault()
               setMenu({ at: { x: event.clientX, y: event.clientY }, item })

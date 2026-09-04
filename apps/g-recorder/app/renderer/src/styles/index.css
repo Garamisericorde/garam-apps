@@ -1305,9 +1305,16 @@ kbd {
   background: var(--bg-elevated);
 }
 
+/* On the timeline and being previewed: the strongest state a row has. */
 .library-item.is-active {
   background: var(--accent-soft);
   border-color: var(--accent);
+}
+
+/* Picked out of the list by a click, which on its own does nothing else. */
+.library-item.is-picked:not(.is-active) {
+  border-color: var(--border-strong);
+  background: var(--bg-elevated);
 }
 
 /* Fixed 16:9 box: posters arrive one by one, and a box that grows as each
