@@ -193,9 +193,12 @@ export default function MediaLibrary({
           onSelect: () => void window.api.media.revealInFolder(paths[0]),
         },
         {
-          // Deletes it from the app, never from disk. The footage is the
-          // user's; taking it out of a list is not a reason to destroy it.
-          label: many ? `Delete ${count}` : 'Delete clip',
+          /*
+           * "Remove", not "Delete": the file stays where it is, and a word that
+           * says otherwise is a promise the app is not keeping either way.
+           * Still red, because it is the entry that takes something away.
+           */
+          label: many ? `Remove ${count}` : 'Remove clip',
           destructive: true,
           onSelect: forEach((path) => window.api.media.forget(path)),
         },
