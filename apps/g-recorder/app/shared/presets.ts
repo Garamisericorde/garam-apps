@@ -11,6 +11,15 @@ export const ALLOWED_FPS = [30, 60] as const
 
 
 export interface ExportPreset {
+  /**
+   * Whether maxBitrateKbps is a guard rather than the thing that decides.
+   *
+   * Small and Balanced are capped low enough that the cap is what the file
+   * ends up at, so it can be quoted as a size. High's ceiling only exists to
+   * stop one violent scene spiking; quoting it would promise a file several
+   * times larger than constant quality actually produces.
+   */
+  bitrateCapIsGuard?: boolean
   id: string
   label: string
   description: string
@@ -63,6 +72,7 @@ export const EXPORT_PRESETS: ExportPreset[] = [
      */
     quality: 23,
     maxBitrateKbps: 25000,
+    bitrateCapIsGuard: true,
     audioBitrateKbps: 192,
   },
 ]

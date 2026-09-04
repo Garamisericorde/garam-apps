@@ -395,6 +395,7 @@ export default function PresetPicker({
               format,
               targetSizeMb,
               preset?.maxBitrateKbps ?? 0,
+              preset?.bitrateCapIsGuard ?? false,
               preset?.audioBitrateKbps ?? 0,
               outputDuration,
               hasAudio && volume > 0,
@@ -526,13 +527,16 @@ function estimateLabel(
   format: ExportFormat,
   targetSizeMb: number | null,
   maxBitrateKbps: number,
+  capIsGuard: boolean,
   audioBitrateKbps: number,
   durationSeconds: number,
   includeAudio: boolean,
 ): string {
   if (format === 'gif') return 'GIF size varies with motion'
   if (targetSizeMb) return `≈ ${targetSizeMb} MB`
-  if (maxBitrateKbps <= 0) return 'size depends on the footage'
+  // A guard ceiling is not a number worth quoting: constant quality lands far
+  // below it, and printing it promises a file several times too large.
+  if (maxBitrateKbps <= 0 || capIsGuard) return 'size depends on the footage'
 
   const kbps = maxBitrateKbps + (includeAudio ? audioBitrateKbps : 0)
   const bytes = (kbps * 1000 * durationSeconds) / 8
