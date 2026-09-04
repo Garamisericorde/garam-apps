@@ -131,7 +131,12 @@ export class ExportService {
     const encoder: EncoderType = resolveEncoder(settings.encoder, caps)
 
     const framing = computeFraming(info, options.aspect, resolutionHeight(preset.resolution))
-    const includeAudio = info.hasAudio && options.volume > 0
+    /*
+     * The audio lane decides, not the first source's own track. With several
+     * clips the first one may be silent while the rest are not, and reading
+     * that one file's metadata dropped the sound from the whole export.
+     */
+    const includeAudio = options.timeline.audio.length > 0 && options.volume > 0
 
     const targetBitrateKbps = options.targetSizeMb
       ? computeTargetBitrate(
@@ -172,8 +177,8 @@ export class ExportService {
       maxBitrateKbps: preset.maxBitrateKbps,
       audioBitrateKbps: preset.audioBitrateKbps,
       speed: options.speed,
-      volume: includeAudio && audioLane.length > 0 ? options.volume : 0,
-      hasAudio: info.hasAudio,
+      volume: includeAudio ? options.volume : 0,
+      hasAudio: includeAudio,
       targetBitrateKbps,
     }
 

@@ -468,7 +468,10 @@ export function buildTimelineExportArgs(options: TimelineExportOptions): string[
     parts.push(
       `[${item.input}:v]trim=start=${item.sourceIn.toFixed(3)}:end=${item.sourceOut.toFixed(3)},` +
         `setpts=PTS-STARTPTS,scale=${options.outWidth}:${options.outHeight}:flags=lanczos,` +
-        `fps=${rate},setsar=1[${label}]`,
+        // concat needs every branch to agree on size, rate, aspect AND pixel
+        // format. Two clips from different sources rarely agree on the last
+        // one, and concat refuses outright rather than converting.
+        `fps=${rate},setsar=1,format=yuv420p[${label}]`,
     )
     videoLabels.push(`[${label}]`)
     cursor = item.start + (item.sourceOut - item.sourceIn)
@@ -482,7 +485,8 @@ export function buildTimelineExportArgs(options: TimelineExportOptions): string[
       if (item.start - audioCursor > 0.001) {
         const label = `sil${silence++}`
         parts.push(
-          `anullsrc=r=48000:cl=stereo:d=${(item.start - audioCursor).toFixed(3)}[${label}]`,
+          `anullsrc=r=48000:cl=stereo:d=${(item.start - audioCursor).toFixed(3)},` +
+            `aformat=sample_rates=48000:channel_layouts=stereo[${label}]`,
         )
         audioLabels.push(`[${label}]`)
       }
@@ -490,7 +494,10 @@ export function buildTimelineExportArgs(options: TimelineExportOptions): string[
       const label = `a${audioLabels.length}`
       parts.push(
         `[${item.input}:a]atrim=start=${item.sourceIn.toFixed(3)}:end=${item.sourceOut.toFixed(3)},` +
-          `asetpts=PTS-STARTPTS,aresample=48000[${label}]`,
+          // Same agreement on the audio side: a mono track next to a stereo one
+          // stops the concat, and a game capture beside a phone clip is exactly
+          // that pair.
+          `asetpts=PTS-STARTPTS,aformat=sample_rates=48000:channel_layouts=stereo[${label}]`,
       )
       audioLabels.push(`[${label}]`)
       audioCursor = item.start + (item.sourceOut - item.sourceIn)

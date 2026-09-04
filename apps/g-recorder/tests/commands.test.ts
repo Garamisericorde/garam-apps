@@ -5,6 +5,7 @@ import {
   buildConcatCopyArgs,
   buildGifExportArgs,
   buildSegmentOutputArgs,
+  buildTimelineExportArgs,
   buildVideoEncodeArgs,
 } from '../app/main/ffmpeg/commands'
 import type { ClipExportOptions } from '../app/main/ffmpeg/commands'
@@ -504,5 +505,89 @@ describe('buildGifExportArgs', () => {
 
   it('applies the same speed-aware output duration as video export', () => {
     expect(valueAfter(buildGifExportArgs({ ...base, speed: 2 }), '-t')).toBe('2.000')
+  })
+})
+
+describe('buildTimelineExportArgs across several sources', () => {
+  const base = {
+    clipPath: 'A.mp4',
+    outputPath: 'out.mp4',
+    inPoint: 0,
+    outPoint: 10,
+    encoder: 'x264' as const,
+    outWidth: 1920,
+    outHeight: 1080,
+    crop: null,
+    fps: 60,
+    quality: 22,
+    maxBitrateKbps: 12000,
+    audioBitrateKbps: 160,
+    speed: 1,
+    volume: 1,
+    hasAudio: true,
+    targetBitrateKbps: undefined,
+  }
+
+  const twoClips = {
+    ...base,
+    sources: ['A.mp4', 'B.mp4'],
+    video: [
+      { input: 0, start: 0, sourceIn: 1, sourceOut: 4 },
+      { input: 1, start: 3, sourceIn: 0, sourceOut: 2 },
+    ],
+    audio: [
+      { input: 0, start: 0, sourceIn: 1, sourceOut: 4 },
+      { input: 1, start: 3, sourceIn: 0, sourceOut: 2 },
+    ],
+    duration: 5,
+  }
+
+  it('passes every source as its own input, in order', () => {
+    const args = buildTimelineExportArgs(twoClips)
+    const inputs = args.filter((arg, index) => args[index - 1] === '-i')
+    expect(inputs).toEqual(['A.mp4', 'B.mp4'])
+  })
+
+  it('normalises each branch so concat will accept it', () => {
+    // concat refuses branches that disagree on size, rate, aspect or pixel
+    // format, and two files rarely agree on the last one.
+    const graph = buildTimelineExportArgs(twoClips)[
+      buildTimelineExportArgs(twoClips).indexOf('-filter_complex') + 1
+    ]
+
+    expect(graph.match(/format=yuv420p/g)).toHaveLength(2)
+    expect(graph.match(/aformat=sample_rates=48000:channel_layouts=stereo/g)).toHaveLength(2)
+    expect(graph).toContain('concat=n=2:v=1:a=0')
+    expect(graph).toContain('concat=n=2:v=0:a=1')
+  })
+
+  it('fills a gap between two clips with black and silence', () => {
+    const gapped = {
+      ...twoClips,
+      video: [
+        { input: 0, start: 0, sourceIn: 0, sourceOut: 2 },
+        { input: 1, start: 5, sourceIn: 0, sourceOut: 2 },
+      ],
+      audio: [
+        { input: 0, start: 0, sourceIn: 0, sourceOut: 2 },
+        { input: 1, start: 5, sourceIn: 0, sourceOut: 2 },
+      ],
+      duration: 7,
+    }
+
+    const args = buildTimelineExportArgs(gapped)
+    const graph = args[args.indexOf('-filter_complex') + 1]
+
+    expect(graph).toContain('color=c=black:s=1920x1080:r=60:d=3.000')
+    expect(graph).toContain('anullsrc=r=48000:cl=stereo:d=3.000')
+    // Three branches on each lane: clip, filler, clip.
+    expect(graph).toContain('concat=n=3:v=1:a=0')
+    expect(graph).toContain('concat=n=3:v=0:a=1')
+  })
+
+  it('drops the audio graph entirely when the lane is empty', () => {
+    const args = buildTimelineExportArgs({ ...twoClips, audio: [] })
+    expect(args).toContain('-an')
+    expect(args[args.indexOf('-filter_complex') + 1]).not.toContain('atrim')
   })
 })
