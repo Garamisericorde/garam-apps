@@ -28,6 +28,7 @@ export default function EditorPage(): JSX.Element {
   const requestedPath = (location.state as EditorLocationState | null)?.clipPath
 
   const playerRef = useRef<VideoPlayerHandle>(null)
+  const stageRef = useRef<HTMLDivElement>(null)
 
   const [clip, setClip] = useState<LoadedClip | null>(null)
   const [duration, setDuration] = useState(0)
@@ -42,6 +43,15 @@ export default function EditorPage(): JSX.Element {
   const [exportControl, setExportControl] = useState<ExportControl | null>(null)
   const [exportOpen, setExportOpen] = useState(false)
   const [libraryOpen, setLibraryOpen] = useState(true)
+  /*
+   * Absolute rotation, not a flip.
+   *
+   * A transform toggled between two values animates whichever way the browser
+   * decides. Accumulating the angle instead means the sign of the change picks
+   * the direction: collapsing winds clockwise, opening unwinds the same way it
+   * came, which is what makes the button feel like a hinge rather than a state.
+   */
+  const [chevron, setChevron] = useState(0)
   const [cuts, setCuts] = useState<number[]>([])
   /** Parts the export should leave out, keyed by their start time */
   const [discarded, setDiscarded] = useState<number[]>([])
@@ -140,6 +150,22 @@ export default function EditorPage(): JSX.Element {
     playerRef.current?.seek(seconds)
   }, [])
 
+  /**
+   * Fullscreen the stage rather than the video element.
+   *
+   * The element that goes fullscreen is the only thing on screen, so making it
+   * the container leaves room for anything drawn over the picture. Handing the
+   * <video> to the browser instead would give away that option, and with it the
+   * app's own controls.
+   */
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen()
+      return
+    }
+    void stageRef.current?.requestFullscreen().catch(() => undefined)
+  }, [])
+
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -177,6 +203,10 @@ export default function EditorPage(): JSX.Element {
         case 'S':
           splitAtPlayhead()
           break
+        case 'f':
+        case 'F':
+          toggleFullscreen()
+          break
         case 'ArrowLeft':
           event.preventDefault()
           playerRef.current?.nudge(event.shiftKey ? -1 : -frameStep)
@@ -198,7 +228,7 @@ export default function EditorPage(): JSX.Element {
 
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [clip, cuts, currentTime, duration, inPoint, outPoint])
+  }, [clip, cuts, currentTime, duration, inPoint, outPoint, toggleFullscreen])
 
   // ── Drag and drop ──────────────────────────────────────────────────────────
 
@@ -267,12 +297,30 @@ export default function EditorPage(): JSX.Element {
         <div className="row-between editor-head">
           <div className="row" style={{ gap: 8, alignItems: 'flex-start' }}>
             <button
-              className="btn btn-icon btn-ghost"
-              onClick={() => setLibraryOpen((open) => !open)}
+              className="btn btn-icon library-toggle"
+              onClick={() => {
+                setChevron((angle) => angle + (libraryOpen ? 180 : -180))
+                setLibraryOpen((open) => !open)
+              }}
               title={libraryOpen ? 'Hide the clip list' : 'Show the clip list'}
               aria-expanded={libraryOpen}
             >
-              {libraryOpen ? '⟨' : '⟩'}
+              <svg
+                viewBox="0 0 16 16"
+                width="14"
+                height="14"
+                aria-hidden
+                style={{ transform: `rotate(${chevron}deg)` }}
+              >
+                <path
+                  d="M10 3 L5 8 L10 13"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
             </button>
 
             <div className="stack">
@@ -316,6 +364,7 @@ export default function EditorPage(): JSX.Element {
         )}
 
         <div
+          ref={stageRef}
           className={`stage${dragOver ? ' drag-over' : ''}`}
           onDragOver={(event) => {
             event.preventDefault()
@@ -409,6 +458,7 @@ export default function EditorPage(): JSX.Element {
             setDiscarded([])
           }}
           onNudge={(delta) => playerRef.current?.nudge(delta)}
+        onToggleFullscreen={toggleFullscreen}
         />
 
         <PresetPicker

@@ -19,9 +19,20 @@ type DragTarget = 'in' | 'out' | 'playhead'
 /** Smallest selection the user can drag down to */
 const MIN_SELECTION_SECONDS = 0.1
 
-/** Zoom bounds: 1 = whole clip in view, 60 = about a second across the strip */
-const MIN_ZOOM = 1
+/**
+ * Zoom bounds. 1 fits the clip with its tail; below that the view keeps opening
+ * past the end, which is how room is made for material that is not there yet.
+ */
+const MIN_ZOOM = 0.2
 const MAX_ZOOM = 60
+
+/**
+ * How much empty track to leave past the end of the clip at Fit.
+ *
+ * A clip ending flush with the right edge looks like it continues off screen,
+ * and leaves nowhere to put anything after it.
+ */
+const TAIL_FACTOR = 1.12
 
 /**
  * Scrubbing strip with draggable IN/OUT handles and a zoom.
@@ -50,8 +61,14 @@ export default function Timeline({
   /** Seconds at the left edge of the strip */
   const [offset, setOffset] = useState(0)
 
-  const visible = duration / zoom
-  const maxOffset = Math.max(duration - visible, 0)
+  /*
+   * Track, view and clip are three different lengths. Keeping them apart is
+   * what lets the wheel pull back into empty track instead of stopping dead at
+   * the last frame.
+   */
+  const span = duration > 0 ? duration * TAIL_FACTOR : 1
+  const visible = span / zoom
+  const maxOffset = Math.max(span - visible, 0)
 
   // A shorter clip, or a zoom-out, can leave the window hanging past the end.
   useEffect(() => {
@@ -138,12 +155,12 @@ export default function Timeline({
       const anchor = offset + fraction * visible
 
       const next = clamp(zoom * (event.deltaY < 0 ? 1.25 : 0.8), MIN_ZOOM, MAX_ZOOM)
-      const nextVisible = duration / next
+      const nextVisible = span / next
 
       setZoom(next)
-      setOffset(clamp(anchor - fraction * nextVisible, 0, Math.max(duration - nextVisible, 0)))
+      setOffset(clamp(anchor - fraction * nextVisible, 0, Math.max(span - nextVisible, 0)))
     },
-    [duration, offset, visible, zoom],
+    [duration, offset, span, visible, zoom],
   )
 
   /** Fraction of the visible window a time sits at, or null when off-screen */
@@ -163,9 +180,10 @@ export default function Timeline({
         {thumbnails.length > 0 && (
           <div
             className="timeline-thumbs"
-            /* The strip is one image of the whole clip; zooming scales and
-               slides it rather than re-rendering thumbnails at every step. */
-            style={{ width: `${zoom * 100}%`, left: `${-(offset / duration) * zoom * 100}%` }}
+            /* The strip covers the clip, not the whole track: zooming scales
+               and slides it rather than re-rendering thumbnails, and the space
+               past the end stays deliberately empty. */
+            style={{ width: `${(duration / visible) * 100}%`, left: `${position(0)}%` }}
           >
             {thumbnails.map((frame, index) => (
               <img key={index} src={frame} alt="" draggable={false} />
@@ -192,7 +210,12 @@ export default function Timeline({
             />
             <div
               className="timeline-shade"
-              style={{ left: `${clamp(position(outPoint), 0, 100)}%`, right: 0, width: 'auto' }}
+              style={{
+                left: `${clamp(position(outPoint), 0, 100)}%`,
+                // Stops at the end of the clip: past that there is nothing to
+                // discard, and shading it would read as trimmed-away footage.
+                width: `${clamp(position(duration) - position(outPoint), 0, 100)}%`,
+              }}
             />
 
             <div

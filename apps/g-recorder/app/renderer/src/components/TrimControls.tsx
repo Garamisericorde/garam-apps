@@ -15,6 +15,7 @@ interface TrimControlsProps {
   onSetOut: () => void
   onReset: () => void
   onNudge: (deltaSeconds: number) => void
+  onToggleFullscreen: () => void
 }
 
 /**
@@ -33,6 +34,7 @@ export default function TrimControls({
   onSetOut,
   onReset,
   onNudge,
+  onToggleFullscreen,
 }: TrimControlsProps): JSX.Element {
   const selection = Math.max(outPoint - inPoint, 0)
   const trimmed = inPoint > 0.001 || outPoint < duration - 0.001
@@ -91,6 +93,15 @@ export default function TrimControls({
       </div>
 
       <div className="transport-actions">
+        <button
+          className="btn btn-icon"
+          onClick={onToggleFullscreen}
+          disabled={disabled}
+          title="Fullscreen (F) · Esc to leave"
+        >
+          ⛶
+        </button>
+
         <button className="btn" onClick={onSetIn} disabled={disabled} title="Cut the start here (I)">
           Cut start
         </button>

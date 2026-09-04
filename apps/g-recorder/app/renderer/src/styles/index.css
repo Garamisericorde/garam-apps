@@ -1129,11 +1129,35 @@ kbd {
   transition: opacity 0.18s ease;
 }
 
+/*
+ * A real button, not a ghost. It is the only way back to the clip list once the
+ * panel is closed, so it has to look like something that can be pressed even
+ * when nothing is hovering it.
+ */
 .library-toggle {
-  position: absolute;
-  top: 0;
-  left: 0;
-  z-index: 1;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  border-color: var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.library-toggle:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.library-toggle svg {
+  transition: transform 0.28s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .library-toggle svg {
+    transition: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
