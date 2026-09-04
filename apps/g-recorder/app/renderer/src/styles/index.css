@@ -487,6 +487,9 @@ input:focus {
   flex-direction: column;
   gap: 14px;
   height: 100%;
+  /* Flex items refuse to shrink below their content by default, which is how
+     a 1440p frame pushed the timeline and the transport off the bottom. */
+  min-height: 0;
 }
 
 .stage {
@@ -495,8 +498,13 @@ input:focus {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
-  flex: 1;
-  min-height: 220px;
+  /* Basis zero, so the preview takes what is left after the timeline and the
+     transport rather than sizing itself from the footage. The cap keeps it from
+     swallowing the page on a tall window; the floor keeps it usable on a short
+     one. */
+  flex: 1 1 0;
+  min-height: 180px;
+  max-height: 56vh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1100,6 +1108,39 @@ kbd {
   gap: 16px;
   height: 100%;
   min-height: 0;
+  transition: grid-template-columns 0.22s ease, gap 0.22s ease;
+}
+
+/* Collapsed: the column closes rather than the panel hiding, so the editor
+   grows into the space instead of leaving a hole where it was. */
+.editor-layout.is-collapsed {
+  grid-template-columns: 0 minmax(0, 1fr);
+  gap: 0;
+}
+
+.editor-layout.is-collapsed .library {
+  opacity: 0;
+  padding-right: 0;
+  border-right-color: transparent;
+  pointer-events: none;
+}
+
+.library {
+  transition: opacity 0.18s ease;
+}
+
+.library-toggle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editor-layout,
+  .library {
+    transition: none;
+  }
 }
 
 .library {

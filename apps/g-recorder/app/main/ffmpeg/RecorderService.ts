@@ -152,6 +152,8 @@ export class RecorderService {
   private _lastFrameAt = 0
   /** Whether the current capture has reported any progress at all yet */
   private _sawProgress = false
+  /** Set when the segment set changes, so an unchanged index is not rewritten */
+  private _indexDirty = false
 
   /** Set while a replay is being written, to keep pruning off the used files */
   private _saveHolds = 0
@@ -255,6 +257,10 @@ export class RecorderService {
         segmentListPath(),
       ),
     ]
+
+    // Once, here: anything already on disk is from a previous run or the
+    // capture we just replaced.
+    this.adoptOrphanSegments(settings)
 
     this._recordingStartedAt = Date.now()
     this._processStartedAt = Date.now()
@@ -404,7 +410,7 @@ export class RecorderService {
       if (proc) await gracefulStop(proc)
 
       // Give the final segment a chance to appear in the list
-      this.refreshSegments(SettingsStore.getInstance().get())
+      this.refreshSegments()
       logger.info('RecorderService: replay buffer stopped')
     } finally {
       this._stopping = false
@@ -473,8 +479,7 @@ export class RecorderService {
     concatPath: string
     coveredSeconds: number
   }> {
-    const settings = SettingsStore.getInstance().get()
-    this.refreshSegments(settings)
+    this.refreshSegments()
 
     const cutoffMs = Date.now() - durationSeconds * 1000
     const selected = [...this._knownSegments.values()]
@@ -787,9 +792,14 @@ export class RecorderService {
     this._pollTimer = setInterval(() => {
       try {
         this.checkForStall()
-        this.refreshSegments(settings)
+        this.refreshSegments()
         this.pruneSegments(settings)
-        this.saveIndex()
+        // Only when it changed: the index is a few hundred entries of JSON, and
+        // rewriting an unchanged file every second is pure blocking I/O.
+        if (this._indexDirty) {
+          this.saveIndex()
+          this._indexDirty = false
+        }
         this.emitSegmentStatus(settings)
       } catch (err) {
         logger.error('RecorderService: poll error', String(err))
@@ -808,7 +818,7 @@ export class RecorderService {
    * Read FFmpeg's own segment list. It records exact start/end offsets, which
    * beats inferring timings from file modification times.
    */
-  private refreshSegments(settings: AppSettings): void {
+  private refreshSegments(): void {
     for (const entry of readSegmentList(segmentListPath())) {
       if (this._knownSegments.has(entry.filename)) continue
       if (!existsSync(join(cacheDir(), entry.filename))) continue
@@ -818,14 +828,20 @@ export class RecorderService {
         startTimestamp: this._recordingStartedAt + entry.startSeconds * 1000,
         durationSeconds: Math.max(entry.endSeconds - entry.startSeconds, 0.01),
       })
+      this._indexDirty = true
     }
-
-    this.adoptOrphanSegments(settings)
   }
 
   /**
    * Pick up segment files left by a previous session. Their exact offsets are
    * gone, so the file's mtime marks the end of the segment.
+   *
+   * Runs once when capture starts, not on every poll. It has to stat every file
+   * in the cache, which on a full buffer is ~150 of them and 16 ms of blocking
+   * I/O — once a second, on the process that also serves window and input
+   * events, which is felt as the whole app hitching while you drag something.
+   * New segments arrive through FFmpeg's own segment list; the directory only
+   * needs reading when something else might have put files there.
    */
   private adoptOrphanSegments(settings: AppSettings): void {
     for (const filename of this.listSegmentFiles()) {
@@ -863,6 +879,7 @@ export class RecorderService {
     for (const [filename, info] of this._knownSegments) {
       if (info.startTimestamp + info.durationSeconds * 1000 >= cutoff) continue
       this._knownSegments.delete(filename)
+      this._indexDirty = true
       try {
         rmSync(join(cacheDir(), filename), { force: true })
       } catch (err) {

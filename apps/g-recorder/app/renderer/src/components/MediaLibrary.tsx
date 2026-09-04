@@ -53,6 +53,17 @@ export default function MediaLibrary({
     return window.api.recorder.onReplaySaved(() => void refresh())
   }, [refresh])
 
+  // A clip opened from outside the output folder is not in the listing yet, and
+  // an import that leaves the panel saying "nothing here" reads as a failure.
+  useEffect(() => {
+    if (!activePath) return
+    setItems((previous) => {
+      if (previous.some((item) => item.path === activePath)) return previous
+      void refresh()
+      return previous
+    })
+  }, [activePath, refresh])
+
   useEffect(() => {
     const missing = items.find((item) => !item.poster && !posterRequests.current.has(item.path))
     if (!missing) return

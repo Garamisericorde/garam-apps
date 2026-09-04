@@ -15,6 +15,23 @@ export interface OpenedClip {
 
 const VIDEO_EXTENSIONS = ['mp4', 'mkv', 'mov', 'webm', 'avi', 'm4v']
 
+/**
+ * Clips opened from outside the output folder, most recent first.
+ *
+ * Held in memory rather than written to disk: it is a convenience for the
+ * session you are in, and a file of "videos this app once touched" is a
+ * privacy footprint nobody asked for.
+ */
+const recentlyOpened: string[] = []
+const MAX_RECENT = 20
+
+function remember(clipPath: string): void {
+  const index = recentlyOpened.indexOf(clipPath)
+  if (index !== -1) recentlyOpened.splice(index, 1)
+  recentlyOpened.unshift(clipPath)
+  recentlyOpened.length = Math.min(recentlyOpened.length, MAX_RECENT)
+}
+
 export function registerMediaIpc(getMainWindow: () => BrowserWindow | null): void {
   /** Native "open video" dialog */
   ipcMain.handle('media:openFile', async (): Promise<OpenedClip | null> => {
@@ -60,7 +77,6 @@ export function registerMediaIpc(getMainWindow: () => BrowserWindow | null): voi
     },
   )
 
-  /** Open Explorer with the file selected */
   /**
    * The clips this app has produced, newest first.
    *
@@ -74,10 +90,30 @@ export function registerMediaIpc(getMainWindow: () => BrowserWindow | null): voi
    */
   ipcMain.handle('media:library', (): LibraryItem[] => {
     const dir = SettingsStore.getInstance().get().outputPath
-    if (!existsSync(dir)) return []
+    const items = new Map<string, LibraryItem>()
+
+    // Clips opened from elsewhere belong in the list too. Without them,
+    // importing a video appears to do nothing: it loads into the editor and
+    // the panel beside it still says the library is empty.
+    for (const path of recentlyOpened) {
+      if (!existsSync(path)) continue
+      try {
+        const stats = statSync(path)
+        items.set(path, {
+          path,
+          name: basename(path),
+          sizeBytes: stats.size,
+          modifiedAt: stats.mtimeMs,
+        })
+      } catch {
+        // Gone between the check and the stat; it simply does not appear.
+      }
+    }
+
+    if (!existsSync(dir)) return [...items.values()].sort((a, b) => b.modifiedAt - a.modifiedAt)
 
     try {
-      return readdirSync(dir)
+      readdirSync(dir)
         .filter((name) => VIDEO_EXTENSIONS.includes(extname(name).slice(1).toLowerCase()))
         .map((name) => {
           const path = join(dir, name)
@@ -89,11 +125,12 @@ export function registerMediaIpc(getMainWindow: () => BrowserWindow | null): voi
             modifiedAt: stats.mtimeMs,
           }
         })
-        .sort((a, b) => b.modifiedAt - a.modifiedAt)
+        .forEach((item) => items.set(item.path, item))
     } catch (err) {
       logger.warn('Could not read the clip library', String(err))
-      return []
     }
+
+    return [...items.values()].sort((a, b) => b.modifiedAt - a.modifiedAt)
   })
 
   ipcMain.handle('media:poster', async (_event, clipPath: string): Promise<string | null> => {
@@ -107,6 +144,7 @@ export function registerMediaIpc(getMainWindow: () => BrowserWindow | null): voi
     }
   })
 
+  /** Open Explorer with the file selected */
   ipcMain.handle('media:revealInFolder', (_event, filePath: string) => {
     if (typeof filePath === 'string' && existsSync(filePath)) {
       shell.showItemInFolder(filePath)
@@ -117,6 +155,10 @@ export function registerMediaIpc(getMainWindow: () => BrowserWindow | null): voi
 async function loadClip(clipPath: string): Promise<OpenedClip> {
   const info = await probeMedia(clipPath)
   logger.info('Clip opened', { clipPath, duration: info.durationSeconds })
+
+  // Every route in — the dialog, a drop, the library — comes through here, so
+  // this is the one place that has to remember what was opened.
+  remember(clipPath)
 
   return { clipPath, clipUrl: registerClipFile(clipPath), info }
 }

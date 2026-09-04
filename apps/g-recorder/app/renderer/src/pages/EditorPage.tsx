@@ -41,6 +41,7 @@ export default function EditorPage(): JSX.Element {
    */
   const [exportControl, setExportControl] = useState<ExportControl | null>(null)
   const [exportOpen, setExportOpen] = useState(false)
+  const [libraryOpen, setLibraryOpen] = useState(true)
   const [cuts, setCuts] = useState<number[]>([])
   /** Parts the export should leave out, keyed by their start time */
   const [discarded, setDiscarded] = useState<number[]>([])
@@ -254,7 +255,7 @@ export default function EditorPage(): JSX.Element {
   )
 
   return (
-    <div className="editor-layout">
+    <div className={`editor-layout${libraryOpen ? '' : ' is-collapsed'}`}>
       <MediaLibrary
         busy={busy === 'open'}
         activePath={clip?.path ?? null}
@@ -264,13 +265,24 @@ export default function EditorPage(): JSX.Element {
 
       <div className="editor">
         <div className="row-between editor-head">
-          <div className="stack">
-            <h1>{clip ? baseName(clip.path) : 'Edit'}</h1>
+          <div className="row" style={{ gap: 8, alignItems: 'flex-start' }}>
+            <button
+              className="btn btn-icon btn-ghost"
+              onClick={() => setLibraryOpen((open) => !open)}
+              title={libraryOpen ? 'Hide the clip list' : 'Show the clip list'}
+              aria-expanded={libraryOpen}
+            >
+              {libraryOpen ? '⟨' : '⟩'}
+            </button>
+
+            <div className="stack">
+              <h1>{clip ? baseName(clip.path) : 'Edit'}</h1>
             {clip && (
               <span className="muted small mono">
-                {clip.info.width}×{clip.info.height} · {formatTime(duration)}
-              </span>
-            )}
+                  {clip.info.width}×{clip.info.height} · {formatTime(duration)}
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="row">
