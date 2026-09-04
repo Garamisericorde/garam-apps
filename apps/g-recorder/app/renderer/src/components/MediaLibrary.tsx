@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { LibraryItem } from '../../../shared/types'
 import { formatBytes } from '../../../shared/time'
+import ContextMenu from './ContextMenu'
+import type { MenuPosition } from './ContextMenu'
 
 interface MediaLibraryProps {
   /** Path of the clip currently open, so the list can mark it */
@@ -9,6 +11,8 @@ interface MediaLibraryProps {
   busy?: boolean
   onOpen: (clipPath: string) => void
   onImport: () => void
+  /** Called when a clip leaves the list, so the editor can let go of it */
+  onRemoved: (clipPath: string) => void
 }
 
 /**
@@ -27,10 +31,12 @@ export default function MediaLibrary({
   busy = false,
   onOpen,
   onImport,
+  onRemoved,
 }: MediaLibraryProps): JSX.Element {
   const [items, setItems] = useState<LibraryItem[]>([])
   const [loading, setLoading] = useState(true)
   const posterRequests = useRef(new Set<string>())
+  const [menu, setMenu] = useState<{ at: MenuPosition; item: LibraryItem } | null>(null)
 
   const refresh = useCallback(async () => {
     try {
@@ -118,6 +124,10 @@ export default function MediaLibrary({
               event.dataTransfer.effectAllowed = 'copy'
             }}
             title={item.path}
+            onContextMenu={(event) => {
+              event.preventDefault()
+              setMenu({ at: { x: event.clientX, y: event.clientY }, item })
+            }}
           >
             <span className="library-thumb">
               {item.poster ? <img src={item.poster} alt="" draggable={false} /> : null}
@@ -129,6 +139,36 @@ export default function MediaLibrary({
           </button>
         ))}
       </div>
+
+      <ContextMenu
+        position={menu?.at ?? null}
+        onClose={() => setMenu(null)}
+        items={
+          menu
+            ? [
+                {
+                  label: 'Show in folder',
+                  onSelect: () => void window.api.media.revealInFolder(menu.item.path),
+                },
+                {
+                  label: 'Remove from list',
+                  onSelect: () => {
+                    void window.api.media.forget(menu.item.path).then(refresh)
+                    onRemoved(menu.item.path)
+                  },
+                },
+                {
+                  label: 'Delete clip',
+                  destructive: true,
+                  onSelect: () => {
+                    void window.api.media.delete(menu.item.path).then(refresh)
+                    onRemoved(menu.item.path)
+                  },
+                },
+              ]
+            : []
+        }
+      />
     </aside>
   )
 }

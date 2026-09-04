@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { clamp } from '../../../shared/time'
+import ContextMenu from './ContextMenu'
+import type { MenuPosition } from './ContextMenu'
 
 interface TimelineProps {
   duration: number
@@ -18,6 +20,9 @@ interface TimelineProps {
   selectedLane: Lane
   onSelectLane: (lane: Lane) => void
   onAudioTrimChange: (inPoint: number, outPoint: number) => void
+  /** Drop a lane's content: the audio is silenced, the video cleared */
+  onRemoveLane: (lane: Lane) => void
+  onResetLane: (lane: Lane) => void
   onSeek: (seconds: number) => void
   onTrimChange: (inPoint: number, outPoint: number) => void
 }
@@ -66,12 +71,15 @@ export default function Timeline({
   selectedLane,
   onSelectLane,
   onAudioTrimChange,
+  onRemoveLane,
+  onResetLane,
   onSeek,
   onTrimChange,
 }: TimelineProps): JSX.Element {
   const trackRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<DragTarget | null>(null)
 
+  const [menu, setMenu] = useState<{ at: MenuPosition; lane: Lane } | null>(null)
   const [zoom, setZoom] = useState(1)
   /** Seconds at the left edge of the strip */
   const [offset, setOffset] = useState(0)
@@ -239,8 +247,23 @@ export default function Timeline({
     </>
   )
 
+  const laneMenu = menu
+    ? [
+        {
+          label: menu.lane === 'audio' ? 'Reset audio trim' : 'Reset trim',
+          onSelect: () => onResetLane(menu.lane),
+        },
+        {
+          label: menu.lane === 'audio' ? 'Remove audio' : 'Remove clip',
+          destructive: true,
+          onSelect: () => onRemoveLane(menu.lane),
+        },
+      ]
+    : []
+
   return (
     <div className="timeline-wrap">
+      <ContextMenu position={menu?.at ?? null} items={laneMenu} onClose={() => setMenu(null)} />
       {/*
         * Two lanes, not one strip with a waveform painted into it. They carry
         * the same seconds but are edited apart, and a lane you can select is
@@ -272,6 +295,11 @@ export default function Timeline({
             onPointerDown={(event) => {
               onSelectLane('video')
               beginDrag('playhead', event)
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault()
+              onSelectLane('video')
+              setMenu({ at: { x: event.clientX, y: event.clientY }, lane: 'video' })
             }}
           >
             {thumbnails.length > 0 && (
@@ -307,6 +335,11 @@ export default function Timeline({
               onPointerDown={(event) => {
                 onSelectLane('audio')
                 beginDrag('playhead', event)
+              }}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                onSelectLane('audio')
+                setMenu({ at: { x: event.clientX, y: event.clientY }, lane: 'audio' })
               }}
             >
               <div

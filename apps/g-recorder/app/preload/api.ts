@@ -106,6 +106,11 @@ export const api = {
     revealInFolder: (filePath: string): Promise<void> =>
       ipcRenderer.invoke('media:revealInFolder', filePath),
 
+    /** Move a clip to the recycle bin — recoverable, never a hard delete */
+    delete: (filePath: string): Promise<void> => ipcRenderer.invoke('media:delete', filePath),
+    /** Drop a clip from the list without touching the file */
+    forget: (filePath: string): Promise<void> => ipcRenderer.invoke('media:forget', filePath),
+
     /**
      * Resolve the absolute path of a dropped File. Reading `File.path`
      * directly is deprecated in Electron, so this goes through webUtils.

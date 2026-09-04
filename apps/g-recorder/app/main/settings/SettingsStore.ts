@@ -30,7 +30,11 @@ export class SettingsStore {
     const filePath = settingsFilePath()
 
     if (!existsSync(filePath)) {
-      logger.info('No settings file found, using defaults')
+      logger.info('No settings file found, writing the defaults')
+      // Written out rather than only held in memory, so the file always shows
+      // the full set — a settings file you can open and read is half of why
+      // settings live in a file at all.
+      await this.persist()
       this.applyStartupPreference()
       return
     }
@@ -46,6 +50,21 @@ export class SettingsStore {
       }
 
       this.settings = settings
+
+      /*
+       * A setting added since this file was written is correct in memory but
+       * absent from disk, and stays absent until something unrelated is
+       * changed. Writing the merged set back on load keeps the file complete,
+       * which matters the moment anyone opens it to see what can be set.
+       */
+      const missing = Object.keys(settings).filter(
+        (key) => !Object.prototype.hasOwnProperty.call(raw ?? {}, key),
+      )
+      if (missing.length > 0) {
+        logger.info('Adding settings that were not in the file yet', missing)
+        await this.persist()
+      }
+
       logger.info('Settings loaded', filePath)
     } catch (err) {
       logger.error('Failed to load settings, using defaults', String(err))

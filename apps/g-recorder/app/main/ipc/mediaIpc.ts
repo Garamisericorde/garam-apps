@@ -30,6 +30,11 @@ const VIDEO_EXTENSIONS = ['mp4', 'mkv', 'mov', 'webm', 'avi', 'm4v']
 const recentlyOpened: string[] = []
 const MAX_RECENT = 20
 
+function forget(clipPath: string): void {
+  const index = recentlyOpened.indexOf(clipPath)
+  if (index !== -1) recentlyOpened.splice(index, 1)
+}
+
 function remember(clipPath: string): void {
   const index = recentlyOpened.indexOf(clipPath)
   if (index !== -1) recentlyOpened.splice(index, 1)
@@ -160,6 +165,25 @@ export function registerMediaIpc(getMainWindow: () => BrowserWindow | null): voi
       logger.debug('Poster unavailable', { clipPath, error: String(err) })
       return null
     }
+  })
+
+  /**
+   * Send a clip to the recycle bin.
+   *
+   * Trash rather than unlink: this is the user's footage, reached from a list
+   * where the neighbouring entry is "open", and a misclick that permanently
+   * destroys a recording is not a risk worth taking to save a keystroke.
+   */
+  ipcMain.handle('media:delete', async (_event, filePath: string): Promise<void> => {
+    if (typeof filePath !== 'string' || !existsSync(filePath)) return
+    await shell.trashItem(filePath)
+    forget(filePath)
+    logger.info('Clip moved to the recycle bin', { filePath })
+  })
+
+  /** Drop a clip from the list without touching the file */
+  ipcMain.handle('media:forget', (_event, filePath: string): void => {
+    forget(filePath)
   })
 
   /** Open Explorer with the file selected */

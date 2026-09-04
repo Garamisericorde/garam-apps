@@ -109,6 +109,12 @@ export default function EditorPage(): JSX.Element {
   const [audioIn, setAudioIn] = useState(0)
   const [audioOut, setAudioOut] = useState(0)
   const [selectedLane, setSelectedLane] = useState<Lane>('video')
+  /*
+   * Audio dropped from the timeline. Kept as a flag rather than by clearing the
+   * waveform: the lane has to be able to come back, and the footage still has
+   * the track — the export is simply told to leave it out.
+   */
+  const [audioRemoved, setAudioRemoved] = useState(false)
   const [keys, setKeys] = useState<EditorKeys>(DEFAULT_EDITOR_KEYS)
 
   useEffect(() => {
@@ -119,9 +125,25 @@ export default function EditorPage(): JSX.Element {
 
   const [busy, setBusy] = useState<'save' | 'record' | 'open' | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [dragOver, setDragOver] = useState(false)
+  /* Which region is under the cursor, so only that one lights up */
+  const [dragOver, setDragOver] = useState<'stage' | 'timeline' | null>(null)
 
   // ── Clip loading ───────────────────────────────────────────────────────────
+
+  /** Let go of the loaded clip, leaving the editor as it opens */
+  const clearClip = useCallback(() => {
+    setClip(null)
+    setDuration(0)
+    setInPoint(0)
+    setOutPoint(0)
+    setAudioIn(0)
+    setAudioOut(0)
+    setAudioRemoved(false)
+    setThumbnails([])
+    setWaveform([])
+    setCuts([])
+    setDiscarded([])
+  }, [])
 
   const loadClip = useCallback(async (clipPath: string) => {
     setError(null)
@@ -138,6 +160,7 @@ export default function EditorPage(): JSX.Element {
       setOutPoint(nextDuration)
       setAudioIn(0)
       setAudioOut(nextDuration)
+      setAudioRemoved(false)
       setCurrentTime(0)
 
       // Both strips are nice-to-haves — never block the preview on them.
@@ -304,7 +327,7 @@ export default function EditorPage(): JSX.Element {
   const handleDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault()
-      setDragOver(false)
+      setDragOver(null)
 
       // The library drags a path; Explorer drags a file. Check ours first —
       // an internal drag carries no File at all.
@@ -321,6 +344,25 @@ export default function EditorPage(): JSX.Element {
       if (path) void loadClip(path)
     },
     [loadClip],
+  )
+
+  /*
+   * A drop is a drop wherever it lands. The stage and the timeline are the two
+   * places a clip visibly belongs, so both take the same handlers rather than
+   * the picture being the only thing that accepts one.
+   */
+  const dropZone = useCallback(
+    (zone: 'stage' | 'timeline') => ({
+      onDragOver: (event: React.DragEvent) => {
+        event.preventDefault()
+        // Explorer defaults to "link"; without this the cursor says no.
+        event.dataTransfer.dropEffect = 'copy'
+        setDragOver(zone)
+      },
+      onDragLeave: () => setDragOver(null),
+      onDrop: handleDrop,
+    }),
+    [handleDrop],
   )
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -360,6 +402,11 @@ export default function EditorPage(): JSX.Element {
         activePath={clip?.path ?? null}
         onOpen={(clipPath) => void loadClip(clipPath)}
         onImport={() => void handleOpenFile()}
+        onRemoved={(removed) => {
+          // A clip that is gone cannot stay loaded — the editor would be
+          // holding a picture of a file that no longer exists.
+          if (clip?.path === removed) clearClip()
+        }}
       />
 
       <div className="editor">
@@ -434,13 +481,8 @@ export default function EditorPage(): JSX.Element {
 
         <div
           ref={stageRef}
-          className={`stage${dragOver ? ' drag-over' : ''}`}
-          onDragOver={(event) => {
-            event.preventDefault()
-            setDragOver(true)
-          }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={handleDrop}
+          className={`stage${dragOver === 'stage' ? ' drag-over' : ''}`}
+          {...dropZone('stage')}
         >
           {clip ? (
             <VideoPlayer
@@ -468,26 +510,44 @@ export default function EditorPage(): JSX.Element {
           )}
         </div>
 
-        <Timeline
-          duration={duration}
-          inPoint={inPoint}
-          outPoint={outPoint}
-          currentTime={currentTime}
-          thumbnails={thumbnails}
-        waveform={waveform}
-        audioIn={audioIn}
-        audioOut={audioOut}
-        selectedLane={selectedLane}
-        onSelectLane={setSelectedLane}
-        onAudioTrimChange={(nextIn, nextOut) => {
-          setAudioIn(nextIn)
-          setAudioOut(nextOut)
-        }}
-          loadingThumbnails={loadingThumbnails}
-          cuts={visibleCuts}
-          onSeek={handleSeek}
-          onTrimChange={handleTrimChange}
-        />
+        <div
+          className={`timeline-drop${dragOver === 'timeline' ? ' drag-over' : ''}`}
+          {...dropZone('timeline')}
+        >
+          <Timeline
+            duration={duration}
+            inPoint={inPoint}
+            outPoint={outPoint}
+            currentTime={currentTime}
+            thumbnails={thumbnails}
+            waveform={audioRemoved ? [] : waveform}
+            audioIn={audioIn}
+            audioOut={audioOut}
+            selectedLane={selectedLane}
+            onSelectLane={setSelectedLane}
+            onAudioTrimChange={(nextIn, nextOut) => {
+              setAudioIn(nextIn)
+              setAudioOut(nextOut)
+            }}
+            onRemoveLane={(lane) => {
+              if (lane === 'audio') setAudioRemoved(true)
+              else clearClip()
+            }}
+            onResetLane={(lane) => {
+              if (lane === 'audio') {
+                setAudioIn(0)
+                setAudioOut(duration)
+                setAudioRemoved(false)
+              } else {
+                handleTrimChange(0, duration)
+              }
+            }}
+            loadingThumbnails={loadingThumbnails}
+            cuts={visibleCuts}
+            onSeek={handleSeek}
+            onTrimChange={handleTrimChange}
+          />
+        </div>
 
         {hasCuts && (
           <div className="parts">
@@ -545,7 +605,7 @@ export default function EditorPage(): JSX.Element {
           outPoint={outPoint}
           ranges={keptRanges}
           audio={{ inPoint: audioIn, outPoint: audioOut }}
-          hasAudio={clip?.info.hasAudio ?? false}
+          hasAudio={(clip?.info.hasAudio ?? false) && !audioRemoved}
           disabled={!clip}
           onControlChange={setExportControl}
           open={exportOpen}

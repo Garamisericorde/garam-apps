@@ -8,6 +8,16 @@ import './styles/index.css'
 // is how g-snap does it and the only form Vite resolves for a package path.
 import '@garam/theme/accent-violet.css'
 
+/*
+ * A file dropped anywhere but a drop target would otherwise make Chromium
+ * navigate to it — the whole interface replaced by a bare video, with no way
+ * back short of restarting. The drop targets stop the event before it reaches
+ * here, so this only ever catches the misses.
+ */
+for (const type of ['dragover', 'drop'] as const) {
+  window.addEventListener(type, (event) => event.preventDefault())
+}
+
 const root = document.getElementById('root')
 if (!root) throw new Error('Root element not found')
 
