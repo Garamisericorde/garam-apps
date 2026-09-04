@@ -195,6 +195,19 @@ them to update a driver they chose deliberately.
 - `-t` after `-i` caps the OUTPUT timeline, so it must be divided by the speed factor.
 - `setpts` must come before `fps`, or the output frame rate is multiplied by speed.
 
+**Capture settings are not export settings.** The buffer runs `-tune ll` with
+`-bf 0` and no lookahead because every one of those holds frames on the GPU the
+game is trying to use. An export is racing nothing, and using the same flags
+produced a 1440p60 file at ~21 Mbps — roughly three times the bitrate its
+picture was worth. Exports use `p6 -tune hq -bf 3 -rc-lookahead 20 -spatial-aq 1`,
+and a CQ around 23 then looks like the CQ 19 that the flag-less encoder needed.
+- `-b_ref_mode` needs Turing or newer and NVENC **errors** rather than ignoring
+  it, so it stays out: this app supports Pascal.
+- `-multipass qres` only earns its keep against a size target; in CQ mode it
+  buys nothing.
+- A cancelled export must delete its own file. It has no moov atom, so nothing
+  can open it, and it otherwise lands in the library as a clip that only fails.
+
 ## Stability requirements
 - FFmpeg processes must be managed robustly:
   - log stderr to file
