@@ -218,25 +218,19 @@ export default function PresetPicker({
           </div>
         </div>
 
-        {format === 'mp4' && (
+        {format === 'mp4' && hasAudio && (
           <div className="field">
-            <span className="field-label">
-              Volume {hasAudio ? `${Math.round(volume * 100)}%` : ''}
-            </span>
-            {hasAudio ? (
-              <input
-                className="slider"
-                type="range"
-                min={0}
-                max={2}
-                step={0.05}
-                value={volume}
-                onChange={(event) => setVolume(Number(event.target.value))}
-                disabled={isExporting}
-              />
-            ) : (
-              <span className="small faint">No audio track</span>
-            )}
+            <span className="field-label">Volume {Math.round(volume * 100)}%</span>
+            <input
+              className="slider"
+              type="range"
+              min={0}
+              max={2}
+              step={0.05}
+              value={volume}
+              onChange={(event) => setVolume(Number(event.target.value))}
+              disabled={isExporting}
+            />
           </div>
         )}
 
@@ -282,18 +276,18 @@ export default function PresetPicker({
 
         <div style={{ flex: 1 }} />
 
-        <span className="small faint">
-          {sourceDuration > 0
-            ? `${formatDuration(outputDuration)} out · ${estimateLabel(
-                format,
-                targetSizeMb,
-                preset?.maxBitrateKbps ?? 0,
-                preset?.audioBitrateKbps ?? 0,
-                outputDuration,
-                hasAudio && volume > 0,
-              )}`
-            : 'Nothing selected'}
-        </span>
+        {sourceDuration > 0 && (
+          <span className="small faint">
+            {`${formatDuration(outputDuration)} out · ${estimateLabel(
+              format,
+              targetSizeMb,
+              preset?.maxBitrateKbps ?? 0,
+              preset?.audioBitrateKbps ?? 0,
+              outputDuration,
+              hasAudio && volume > 0,
+            )}`}
+          </span>
+        )}
       </div>
 
       {(isExporting || state === 'done') && (
