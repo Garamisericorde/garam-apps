@@ -549,7 +549,7 @@ function PadField({
 }): JSX.Element {
   const [capturing, setCapturing] = useState(false)
   const [held, setHeld] = useState('')
-  const [rejected, setRejected] = useState(false)
+  const [rejected, setRejected] = useState<string | null>(null)
 
   useEffect(() => {
     if (!capturing) return
@@ -578,8 +578,12 @@ function PadField({
 
       if (!isSafePadBinding(binding)) {
         // A single button, or two face buttons, would fire mid-game on its own.
-        setRejected(true)
-        setTimeout(() => setRejected(false), 420)
+        setRejected(
+          binding === ''
+            ? 'No buttons were pressed'
+            : `${binding} would fire during play — use three buttons, or two with a shoulder or trigger`,
+        )
+        setTimeout(() => setRejected(null), 3200)
         return
       }
       onChange(binding)
@@ -590,10 +594,14 @@ function PadField({
     <div className="row-between">
       <div className="stack">
         <span>{label}</span>
-        {capturing && (
-          <span className="small faint">
-            Hold the buttons together, then let go · Esc to cancel
-          </span>
+        {rejected ? (
+          <span className="small danger">{rejected}</span>
+        ) : (
+          capturing && (
+            <span className="small faint">
+              Hold the buttons together, then let go · Esc to cancel
+            </span>
+          )
         )}
       </div>
       <div className="row">
@@ -738,12 +746,19 @@ function HotkeyField({
   const [capturing, setCapturing] = useState(false)
   /** What is held down right now, shown while it is being pressed */
   const [preview, setPreview] = useState<string[]>([])
-  const [rejected, setRejected] = useState(false)
+  /**
+   * Why the last attempt bounced.
+   *
+   * A shake on its own is the worst possible answer here: the field goes red,
+   * keeps showing the old shortcut, and the user is left believing the setting
+   * reset itself rather than that their combination was refused.
+   */
+  const [rejected, setRejected] = useState<string | null>(null)
 
-  const reject = useCallback(() => {
-    setRejected(true)
+  const reject = useCallback((reason: string) => {
+    setRejected(reason)
     // Long enough for the shake to finish, short enough to keep trying.
-    setTimeout(() => setRejected(false), 420)
+    setTimeout(() => setRejected(null), 2600)
   }, [])
 
   useEffect(() => {
@@ -775,14 +790,18 @@ function HotkeyField({
 
       const key = acceleratorKey(event)
       if (!key) {
-        reject()
+        reject('That key cannot be part of a shortcut')
         return
       }
 
-      if (held.length === 0 && !allowBareKey) {
-        // A bare letter would swallow that key everywhere in Windows.
+      /*
+       * A function key on its own is fine: it types nothing, which is why
+       * recorders have used them alone for decades. Any other bare key would
+       * swallow that letter in every application on the machine.
+       */
+      if (held.length === 0 && !allowBareKey && !/^F\d{1,2}$/.test(key)) {
         setPreview([key])
-        reject()
+        reject(`${key} needs Ctrl, Alt or Shift with it`)
         return
       }
 
@@ -801,7 +820,7 @@ function HotkeyField({
       // Only the primary button gets through: it is how the field is opened.
       if (event.button === 0) return
       event.preventDefault()
-      reject()
+      reject('Windows cannot bind mouse buttons to a shortcut')
     }
 
     window.addEventListener('keydown', handleKey, true)
@@ -818,12 +837,16 @@ function HotkeyField({
     <div className="row-between">
       <div className="stack">
         <span>{label}</span>
-        {capturing && (
-          <span className="small faint">
-            {allowBareKey
-              ? 'Press any key · Esc to cancel'
-              : 'Hold the modifiers, then press one key · Esc to cancel'}
-          </span>
+        {rejected ? (
+          <span className="small danger">{rejected}</span>
+        ) : (
+          capturing && (
+            <span className="small faint">
+              {allowBareKey
+                ? 'Press any key · Esc to cancel'
+                : 'Hold Ctrl, Alt or Shift and press a key — or a function key on its own · Esc to cancel'}
+            </span>
+          )
         )}
       </div>
       <div className="row">

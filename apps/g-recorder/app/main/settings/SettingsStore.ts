@@ -89,6 +89,14 @@ export class SettingsStore {
     this.settings = mergeWithDefaults({ ...this.settings, ...partial })
     await this.persist()
 
+    // What changed, not just that something did. "Settings saved" on its own
+    // cannot answer the one question worth asking of this log — whether the
+    // value the user chose is the value that was written.
+    logger.info(
+      'Settings changed',
+      Object.fromEntries(changedKeys.map((key) => [key, this.settings[key]])),
+    )
+
     if (changedKeys.includes('launchOnStartup')) this.applyStartupPreference()
 
     const snapshot = this.get()

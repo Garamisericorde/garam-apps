@@ -1682,3 +1682,8 @@ kbd {
 .section-head .section-title {
   margin: 0;
 }
+
+/* A refusal that explains itself, beside the field that refused */
+.danger {
+  color: var(--danger);
+}

@@ -154,3 +154,36 @@ describe('time helpers', () => {
     expect(clamp(11, 0, 10)).toBe(10)
   })
 })
+
+describe('bindings survive a round trip', () => {
+  it('keeps a custom hotkey when the file is read back', () => {
+    // The complaint this covers: hotkeys reverting to the defaults on their
+    // own. Anything sanitize does not copy across silently becomes a default
+    // again on the next launch, which reads exactly like "it reset itself".
+    const stored = {
+      ...DEFAULT_SETTINGS,
+      hotkeySaveReplay: 'Ctrl+Shift+F8',
+      hotkeyToggleRecording: null,
+      editorKeySplit: 'C',
+      padSaveReplay: 'LB+RB+A',
+    }
+
+    const { settings, warnings } = sanitizeSettings(stored)
+
+    expect(warnings).toEqual([])
+    expect(settings.hotkeySaveReplay).toBe('Ctrl+Shift+F8')
+    expect(settings.hotkeyToggleRecording).toBeNull()
+    expect(settings.editorKeySplit).toBe('C')
+    expect(settings.padSaveReplay).toBe('LB+RB+A')
+  })
+
+  it('validates every setting it can store', () => {
+    // A key with no validator is never copied out of the file, so it reverts
+    // to its default on every load — invisibly.
+    const validated = Object.keys(sanitizeSettings({}).settings)
+    for (const key of validated) {
+      expect(validateSettings({ [key]: undefined }).valid).toBe(true)
+    }
+    expect(validated.sort()).toEqual(Object.keys(DEFAULT_SETTINGS).sort())
+  })
+})
