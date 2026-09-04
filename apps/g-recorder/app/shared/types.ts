@@ -167,6 +167,19 @@ export interface MediaInfo {
   sizeBytes: number
 }
 
+/** One clip in the editor's media library */
+export interface LibraryItem {
+  path: string
+  /** File name without its directory */
+  name: string
+  sizeBytes: number
+  /** Last-modified time, which is also the sort order (newest first) */
+  modifiedAt: number
+  /** Poster frame as a data URI; absent until it has been rendered */
+  poster?: string
+  durationSeconds?: number
+}
+
 /** A thumbnail strip for the editor timeline */
 export interface ThumbnailStrip {
   /** data: URIs, evenly spaced across the clip */

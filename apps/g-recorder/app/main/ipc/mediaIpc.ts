@@ -1,7 +1,9 @@
 import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
-import { existsSync } from 'fs'
-import type { MediaInfo, ThumbnailStrip } from '../../shared/types'
-import { buildThumbnailStrip, probeMedia } from '../ffmpeg/MediaProbe'
+import { existsSync, readdirSync, statSync } from 'fs'
+import { basename, extname, join } from 'path'
+import type { LibraryItem, MediaInfo, ThumbnailStrip } from '../../shared/types'
+import { buildPosterFrame, buildThumbnailStrip, probeMedia } from '../ffmpeg/MediaProbe'
+import { SettingsStore } from '../settings/SettingsStore'
 import { registerClipFile } from '../protocol/clipProtocol'
 import { logger } from '../logging/logger'
 
@@ -59,6 +61,52 @@ export function registerMediaIpc(getMainWindow: () => BrowserWindow | null): voi
   )
 
   /** Open Explorer with the file selected */
+  /**
+   * The clips this app has produced, newest first.
+   *
+   * Read from the output folder rather than kept as a list the user curates:
+   * everything the recorder saves lands there already, so a separate library
+   * would only be a second place for the same files to be missing from.
+   *
+   * Deliberately metadata-only — no probing, no thumbnails. A folder with a
+   * hundred replays would otherwise spawn a hundred FFmpeg processes before the
+   * panel could paint; posters are fetched per item, as they come into view.
+   */
+  ipcMain.handle('media:library', (): LibraryItem[] => {
+    const dir = SettingsStore.getInstance().get().outputPath
+    if (!existsSync(dir)) return []
+
+    try {
+      return readdirSync(dir)
+        .filter((name) => VIDEO_EXTENSIONS.includes(extname(name).slice(1).toLowerCase()))
+        .map((name) => {
+          const path = join(dir, name)
+          const stats = statSync(path)
+          return {
+            path,
+            name: basename(name),
+            sizeBytes: stats.size,
+            modifiedAt: stats.mtimeMs,
+          }
+        })
+        .sort((a, b) => b.modifiedAt - a.modifiedAt)
+    } catch (err) {
+      logger.warn('Could not read the clip library', String(err))
+      return []
+    }
+  })
+
+  ipcMain.handle('media:poster', async (_event, clipPath: string): Promise<string | null> => {
+    if (!existsSync(clipPath)) return null
+    try {
+      const info = await probeMedia(clipPath)
+      return await buildPosterFrame(clipPath, info.durationSeconds)
+    } catch (err) {
+      logger.debug('Poster unavailable', { clipPath, error: String(err) })
+      return null
+    }
+  })
+
   ipcMain.handle('media:revealInFolder', (_event, filePath: string) => {
     if (typeof filePath === 'string' && existsSync(filePath)) {
       shell.showItemInFolder(filePath)

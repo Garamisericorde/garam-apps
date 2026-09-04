@@ -7,6 +7,7 @@ import type {
   ExportOptions,
   ExportProgress,
   FfmpegStatus,
+  LibraryItem,
   MediaInfo,
   RecorderStatus,
   HotkeyFailure,
@@ -80,6 +81,12 @@ export const api = {
     loadPath: (clipPath: string): Promise<OpenedClip> =>
       ipcRenderer.invoke('media:loadPath', clipPath),
     probe: (clipPath: string): Promise<MediaInfo> => ipcRenderer.invoke('media:probe', clipPath),
+
+    /** Clips this app has saved, newest first — metadata only */
+    library: (): Promise<LibraryItem[]> => ipcRenderer.invoke('media:library'),
+    /** One poster frame for a library item, rendered on demand */
+    poster: (clipPath: string): Promise<string | null> =>
+      ipcRenderer.invoke('media:poster', clipPath),
 
     thumbnails: (clipPath: string, durationSeconds: number): Promise<ThumbnailStrip> =>
       ipcRenderer.invoke('media:thumbnails', clipPath, durationSeconds),

@@ -7,6 +7,7 @@ import type { VideoPlayerHandle } from '../components/VideoPlayer'
 import Timeline from '../components/Timeline'
 import TrimControls from '../components/TrimControls'
 import PresetPicker from '../components/PresetPicker'
+import MediaLibrary from '../components/MediaLibrary'
 import type { ExportControl } from '../components/PresetPicker'
 
 /** Shortest part a cut may create — below this it cannot be aimed at or seen */
@@ -205,6 +206,14 @@ export default function EditorPage(): JSX.Element {
       event.preventDefault()
       setDragOver(false)
 
+      // The library drags a path; Explorer drags a file. Check ours first —
+      // an internal drag carries no File at all.
+      const fromLibrary = event.dataTransfer.getData('application/x-grecorder-clip')
+      if (fromLibrary) {
+        void loadClip(fromLibrary)
+        return
+      }
+
       const file = event.dataTransfer.files[0]
       if (!file) return
 
@@ -235,7 +244,8 @@ export default function EditorPage(): JSX.Element {
 
   const hasCuts = parts.length > 1
   const keptRanges = useMemo(
-    () => (hasCuts ? parts.filter((p) => p.kept).map(({ start, end }) => ({ start, end })) : undefined),
+    () =>
+      hasCuts ? parts.filter((p) => p.kept).map(({ start, end }) => ({ start, end })) : undefined,
     [hasCuts, parts],
   )
   const visibleCuts = useMemo(
@@ -244,168 +254,176 @@ export default function EditorPage(): JSX.Element {
   )
 
   return (
-    <div className="editor">
-      <div className="row-between editor-head">
-        <div className="stack">
-          <h1>{clip ? baseName(clip.path) : 'Edit'}</h1>
-          {clip && (
-            <span className="muted small mono">
-              {clip.info.width}×{clip.info.height} · {formatTime(duration)}
-            </span>
-          )}
-        </div>
+    <div className="editor-layout">
+      <MediaLibrary
+        activePath={clip?.path ?? null}
+        onOpen={(clipPath) => void loadClip(clipPath)}
+        onImport={() => void handleOpenFile()}
+      />
 
-        <div className="row">
-          <button className="btn" onClick={() => void handleOpenFile()} disabled={busy !== null}>
-            Open video…
-          </button>
+      <div className="editor">
+        <div className="row-between editor-head">
+          <div className="stack">
+            <h1>{clip ? baseName(clip.path) : 'Edit'}</h1>
+            {clip && (
+              <span className="muted small mono">
+                {clip.info.width}×{clip.info.height} · {formatTime(duration)}
+              </span>
+            )}
+          </div>
 
-          {/* Export sits with the other things you do to a clip, not under the
-              settings that shape it. */}
-          <button
-            className="btn btn-primary"
-            onClick={() => exportControl?.run()}
-            disabled={!exportControl?.canExport}
-          >
-            {exportControl?.isExporting
-              ? `Exporting ${exportControl.percent.toFixed(0)}%`
-              : 'Export'}
-          </button>
-
-          {exportControl?.isExporting && (
-            <button className="btn" onClick={() => exportControl.cancel()}>
-              Cancel
+          <div className="row">
+            <button className="btn" onClick={() => void handleOpenFile()} disabled={busy !== null}>
+              Open video…
             </button>
-          )}
-        </div>
-      </div>
 
-      {error && (
-        <div className="banner banner-error">
-          <span style={{ flex: 1 }}>{error}</span>
-          <button className="btn btn-ghost" onClick={() => setError(null)}>
-            Dismiss
-          </button>
-        </div>
-      )}
+            {/* Export sits with the other things you do to a clip, not under the
+              settings that shape it. */}
+            <button
+              className="btn btn-primary"
+              onClick={() => exportControl?.run()}
+              disabled={!exportControl?.canExport}
+            >
+              {exportControl?.isExporting
+                ? `Exporting ${exportControl.percent.toFixed(0)}%`
+                : 'Export'}
+            </button>
 
-      <div
-        className={`stage${dragOver ? ' drag-over' : ''}`}
-        onDragOver={(event) => {
-          event.preventDefault()
-          setDragOver(true)
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={handleDrop}
-      >
-        {clip ? (
-          <VideoPlayer
-            ref={playerRef}
-            src={clip.url}
-            inPoint={inPoint}
-            outPoint={outPoint}
-            onTimeUpdate={setCurrentTime}
-            onDurationChange={(value) => {
-              // Trust the container metadata over ffprobe when they disagree
-              if (!Number.isFinite(value) || value <= 0) return
-              setDuration((previous) => (Math.abs(previous - value) > 0.25 ? value : previous))
-              setOutPoint((previous) => (previous <= 0 ? value : previous))
-            }}
-            onPlayingChange={setIsPlaying}
-            onError={setError}
-          />
-        ) : (
-          <div className="stage-empty">
-            <p>Drop a video here, or open one, to start editing.</p>
-            <div className="row">
-              <button className="btn btn-primary" onClick={() => void handleOpenFile()}>
-                Open video…
+            {exportControl?.isExporting && (
+              <button className="btn" onClick={() => exportControl.cancel()}>
+                Cancel
               </button>
-              <button className="btn" onClick={() => navigate('/record')}>
-                Save a replay
-              </button>
-            </div>
+            )}
+          </div>
+        </div>
+
+        {error && (
+          <div className="banner banner-error">
+            <span style={{ flex: 1 }}>{error}</span>
+            <button className="btn btn-ghost" onClick={() => setError(null)}>
+              Dismiss
+            </button>
           </div>
         )}
-      </div>
 
-      <Timeline
-        duration={duration}
-        inPoint={inPoint}
-        outPoint={outPoint}
-        currentTime={currentTime}
-        thumbnails={thumbnails}
-        loadingThumbnails={loadingThumbnails}
-        cuts={visibleCuts}
-        onSeek={handleSeek}
-        onTrimChange={handleTrimChange}
-      />
-
-      {hasCuts && (
-        <div className="parts">
-          <span className="parts-label">Parts</span>
-          {parts.map((part) => (
-            <button
-              key={part.start}
-              className={`part${part.kept ? '' : ' is-dropped'}`}
-              title={part.kept ? 'Click to drop this part' : 'Click to keep this part'}
-              onClick={() =>
-                setDiscarded((previous) =>
-                  part.kept
-                    ? [...previous, part.start]
-                    : previous.filter((d) => Math.abs(d - part.start) >= 0.001),
-                )
-              }
-            >
-              <span className="mono">{formatTime(part.end - part.start)}</span>
-            </button>
-          ))}
-          <button
-            className="btn btn-ghost small"
-            onClick={() => {
-              setCuts([])
-              setDiscarded([])
-            }}
-          >
-            Clear cuts
-          </button>
+        <div
+          className={`stage${dragOver ? ' drag-over' : ''}`}
+          onDragOver={(event) => {
+            event.preventDefault()
+            setDragOver(true)
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={handleDrop}
+        >
+          {clip ? (
+            <VideoPlayer
+              ref={playerRef}
+              src={clip.url}
+              inPoint={inPoint}
+              outPoint={outPoint}
+              onTimeUpdate={setCurrentTime}
+              onDurationChange={(value) => {
+                // Trust the container metadata over ffprobe when they disagree
+                if (!Number.isFinite(value) || value <= 0) return
+                setDuration((previous) => (Math.abs(previous - value) > 0.25 ? value : previous))
+                setOutPoint((previous) => (previous <= 0 ? value : previous))
+              }}
+              onPlayingChange={setIsPlaying}
+              onError={setError}
+            />
+          ) : (
+            <div className="stage-empty">
+              <p>Drop a video here, or open one, to start editing.</p>
+              <div className="row">
+                <button className="btn btn-primary" onClick={() => void handleOpenFile()}>
+                  Open video…
+                </button>
+                <button className="btn" onClick={() => navigate('/record')}>
+                  Save a replay
+                </button>
+              </div>
+            </div>
+          )}
         </div>
-      )}
 
-      <TrimControls
-        duration={duration}
-        currentTime={currentTime}
-        inPoint={inPoint}
-        outPoint={outPoint}
-        isPlaying={isPlaying}
-        disabled={!clip}
-        onTogglePlay={() => playerRef.current?.togglePlay()}
-        onSetIn={() => setInPoint(clamp(currentTime, 0, outPoint - 0.1))}
-        onSetOut={() => setOutPoint(clamp(currentTime, inPoint + 0.1, duration))}
-        onReset={() => {
-          handleTrimChange(0, duration)
-          setCuts([])
-          setDiscarded([])
-        }}
-        onNudge={(delta) => playerRef.current?.nudge(delta)}
-      />
+        <Timeline
+          duration={duration}
+          inPoint={inPoint}
+          outPoint={outPoint}
+          currentTime={currentTime}
+          thumbnails={thumbnails}
+          loadingThumbnails={loadingThumbnails}
+          cuts={visibleCuts}
+          onSeek={handleSeek}
+          onTrimChange={handleTrimChange}
+        />
 
-      <PresetPicker
-        clipPath={clip?.path ?? null}
-        inPoint={inPoint}
-        outPoint={outPoint}
-        ranges={keptRanges}
-        hasAudio={clip?.info.hasAudio ?? false}
-        disabled={!clip}
-        onControlChange={setExportControl}
-      />
+        {hasCuts && (
+          <div className="parts">
+            <span className="parts-label">Parts</span>
+            {parts.map((part) => (
+              <button
+                key={part.start}
+                className={`part${part.kept ? '' : ' is-dropped'}`}
+                title={part.kept ? 'Click to drop this part' : 'Click to keep this part'}
+                onClick={() =>
+                  setDiscarded((previous) =>
+                    part.kept
+                      ? [...previous, part.start]
+                      : previous.filter((d) => Math.abs(d - part.start) >= 0.001),
+                  )
+                }
+              >
+                <span className="mono">{formatTime(part.end - part.start)}</span>
+              </button>
+            ))}
+            <button
+              className="btn btn-ghost small"
+              onClick={() => {
+                setCuts([])
+                setDiscarded([])
+              }}
+            >
+              Clear cuts
+            </button>
+          </div>
+        )}
 
-      {clip && (
-        <p className="small faint">
-          {clip.info.width}×{clip.info.height} · {clip.info.fps} fps ·{' '}
-          {formatBytes(clip.info.sizeBytes)} · {clip.path}
-        </p>
-      )}
+        <TrimControls
+          duration={duration}
+          currentTime={currentTime}
+          inPoint={inPoint}
+          outPoint={outPoint}
+          isPlaying={isPlaying}
+          disabled={!clip}
+          onTogglePlay={() => playerRef.current?.togglePlay()}
+          onSetIn={() => setInPoint(clamp(currentTime, 0, outPoint - 0.1))}
+          onSetOut={() => setOutPoint(clamp(currentTime, inPoint + 0.1, duration))}
+          onReset={() => {
+            handleTrimChange(0, duration)
+            setCuts([])
+            setDiscarded([])
+          }}
+          onNudge={(delta) => playerRef.current?.nudge(delta)}
+        />
+
+        <PresetPicker
+          clipPath={clip?.path ?? null}
+          inPoint={inPoint}
+          outPoint={outPoint}
+          ranges={keptRanges}
+          hasAudio={clip?.info.hasAudio ?? false}
+          disabled={!clip}
+          onControlChange={setExportControl}
+        />
+
+        {clip && (
+          <p className="small faint">
+            {clip.info.width}×{clip.info.height} · {clip.info.fps} fps ·{' '}
+            {formatBytes(clip.info.sizeBytes)} · {clip.path}
+          </p>
+        )}
+      </div>
     </div>
   )
 }

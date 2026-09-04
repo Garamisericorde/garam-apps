@@ -5,6 +5,9 @@ import type { MediaInfo, ThumbnailStrip } from '../../shared/types'
 import { thumbsDir } from '../../shared/paths'
 import { TIMELINE_THUMBNAIL_COUNT, TIMELINE_THUMBNAIL_WIDTH } from '../settings/defaults'
 import { buildProbeArgs, buildThumbnailArgs } from './commands'
+
+/** Poster width in the media library — small, and never displayed larger */
+const LIBRARY_POSTER_WIDTH = 240
 import { FfmpegManager } from './FfmpegManager'
 import { logger } from '../logging/logger'
 
@@ -94,6 +97,39 @@ export async function buildThumbnailStrip(
 
     const frames = (await Promise.all(jobs)).filter((f): f is string => f !== null)
     return { frames }
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+/**
+ * A single poster frame for the media library.
+ *
+ * Taken a little way in rather than at zero: recordings routinely open on a
+ * loading screen or a fade from black, and a bin full of black rectangles
+ * identifies nothing.
+ */
+export async function buildPosterFrame(
+  clipPath: string,
+  durationSeconds: number,
+): Promise<string | null> {
+  const ffmpeg = FfmpegManager.getInstance()
+  const dir = join(thumbsDir(), `poster-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  mkdirSync(dir, { recursive: true })
+
+  const outputPath = join(dir, 'poster.jpg')
+  const timestamp = durationSeconds > 2 ? Math.min(durationSeconds * 0.1, 5) : 0
+
+  try {
+    await run(
+      ffmpeg.path,
+      buildThumbnailArgs(clipPath, timestamp, LIBRARY_POSTER_WIDTH, outputPath),
+      THUMBNAIL_TIMEOUT_MS,
+    )
+    return toDataUri(outputPath)
+  } catch (err) {
+    logger.debug('Poster frame failed', { clipPath, error: String(err) })
+    return null
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
