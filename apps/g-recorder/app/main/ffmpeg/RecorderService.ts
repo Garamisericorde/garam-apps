@@ -490,7 +490,7 @@ export class RecorderService {
     if (selected.length === 0) {
       throw new Error(
         this._status.isRecording
-          ? 'The replay buffer is still filling up — try again in a few seconds'
+          ? 'The replay buffer is still filling up. Try again in a few seconds.'
           : 'Recording is not running, so there is nothing to save',
       )
     }
@@ -597,7 +597,7 @@ export class RecorderService {
         level: 'warning',
         message:
           'Fast screen capture (ddagrab) is unavailable, so recording uses the slower GDI path. ' +
-          'It costs noticeably more CPU and cannot record fullscreen-exclusive games — ' +
+          'It costs noticeably more CPU and cannot record fullscreen-exclusive games. ' +
           'switch the game to borderless windowed mode.',
       })
     }
@@ -673,7 +673,7 @@ export class RecorderService {
       // the one situation where the recording really would come out silent.
       if (!systemAudioDevice && noLoopbackFound && !canCaptureSystemAudio()) {
         const message =
-          'System audio is on, but it cannot be captured right now — the app window that ' +
+          'System audio is on, but it cannot be captured right now. The app window that ' +
           'records it is not available. Recording continues without system sound.'
         logger.warn(message)
         broadcast('app:notice', { level: 'warning', message })

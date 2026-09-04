@@ -99,7 +99,7 @@ export function registerSettingsIpc(): void {
 
     return screen.getAllDisplays().map((display, index) => ({
       index,
-      label: `Display ${index + 1} — ${display.size.width}×${display.size.height}`,
+      label: `Display ${index + 1}: ${display.size.width}×${display.size.height}`,
       width: display.size.width,
       height: display.size.height,
       // Rounded to even: both dimensions of a real display mode always are, and

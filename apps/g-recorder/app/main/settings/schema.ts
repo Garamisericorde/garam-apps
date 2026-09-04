@@ -96,7 +96,7 @@ function optionalBinding(name: string) {
   return (v: unknown): string | null => {
     if (v === null) return null
     if (typeof v !== 'string') return `${name} must be a string or null`
-    return v.trim() === '' ? `${name} must not be empty — use null to unbind` : null
+    return v.trim() === '' ? `${name} must not be empty; use null to unbind` : null
   }
 }
 

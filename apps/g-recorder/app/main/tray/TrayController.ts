@@ -43,7 +43,7 @@ export class TrayController {
     if (!this.tray) return
 
     this.tray.setImage(loadTrayIcon(status.isRecording || status.isManualRecording))
-    this.tray.setToolTip(`G-Recorder — ${this.stateLabel()}`)
+    this.tray.setToolTip(`G-Recorder: ${this.stateLabel()}`)
     this.render()
   }
 

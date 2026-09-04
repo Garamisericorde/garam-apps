@@ -92,7 +92,7 @@ async function openLoopbackStream(): Promise<MediaStream> {
   // Every route's reason, not just the first: they fail for different causes,
   // and one of them is usually the one that explains the machine.
   throw new Error(
-    `no loopback route worked (secureContext=${window.isSecureContext}) — ${failures.join(' | ')}`,
+    `no loopback route worked (secureContext=${window.isSecureContext}): ${failures.join(' | ')}`,
   )
 }
 

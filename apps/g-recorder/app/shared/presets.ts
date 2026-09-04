@@ -1,5 +1,15 @@
 import type { AspectId, Resolution } from './types'
 
+/**
+ * Supported capture frame rates.
+ *
+ * Two, because there is no third answer anyone wants. 60 is what a clip is for
+ * and 30 is what a small file is for; capturing a 144 Hz display at 144 costs
+ * more than double the bitrate to record frames no share target will keep.
+ */
+export const ALLOWED_FPS = [30, 60] as const
+
+
 export interface ExportPreset {
   id: string
   label: string
@@ -20,7 +30,7 @@ export const EXPORT_PRESETS: ExportPreset[] = [
   {
     id: 'small',
     label: 'Small',
-    description: '720p 30fps — smallest file, easy to share anywhere',
+    description: '720p 30fps, smallest file and easy to share anywhere',
     resolution: '720p',
     fps: 30,
     quality: 30,
@@ -30,7 +40,7 @@ export const EXPORT_PRESETS: ExportPreset[] = [
   {
     id: 'balanced',
     label: 'Balanced',
-    description: '1080p 60fps — good quality at a moderate size',
+    description: '1080p 60fps, good quality at a moderate size',
     resolution: '1080p',
     fps: 60,
     quality: 25,
@@ -40,7 +50,7 @@ export const EXPORT_PRESETS: ExportPreset[] = [
   {
     id: 'high',
     label: 'High Quality',
-    description: 'Source resolution and frame rate — largest file',
+    description: 'Source resolution and frame rate, largest file',
     resolution: 'source',
     fps: 0,
     quality: 19,

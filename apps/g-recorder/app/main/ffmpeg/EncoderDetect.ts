@@ -127,7 +127,7 @@ function warnAboutSoftwareEncoding(caps: EncoderCapabilities): void {
 
   const advice = buildTooNewForDriver
     ? 'This copy of FFmpeg needs a newer NVIDIA driver than you have, so it will not use your GPU. ' +
-      'Your card is fine — install the compatible FFmpeg build from Settings to turn GPU encoding on.'
+      'Your card is fine. Install the compatible FFmpeg build from Settings to turn GPU encoding on.'
     : 'Check the encoder list in Settings for why each one was rejected.'
 
   const message =
@@ -193,7 +193,7 @@ async function probeEncoder(ffmpegPath: string, encoderName: string): Promise<En
   }
 
   const reason = extractReason(result.stderr)
-  logger.info(`Encoder probe: ${encoderName} unavailable — ${reason}`)
+  logger.info(`Encoder probe: ${encoderName} unavailable: ${reason}`)
   return { available: false, reason }
 }
 

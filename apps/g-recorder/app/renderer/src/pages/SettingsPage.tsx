@@ -13,6 +13,7 @@ import {
   DEFAULT_HOTKEYS,
   DEFAULT_PAD_BINDINGS,
 } from '../../../shared/hotkeyDefaults'
+import { ALLOWED_FPS } from '../../../shared/presets'
 import { formatBytes } from '../../../shared/time'
 import { resolutionHeight } from '../../../shared/presets'
 
@@ -134,11 +135,11 @@ export default function SettingsPage(): JSX.Element {
           />
         </Field>
 
-        <Field label="Frame rate" hint={frameRateHint(settings, displays)}>
+        <Field label="Frame rate">
           <Select
             value={settings.fps}
             onChange={(value) => void save({ fps: Number(value) })}
-            options={[30, 60, 120, 144].map((fps) => ({ value: fps, label: `${fps} fps` }))}
+            options={ALLOWED_FPS.map((fps) => ({ value: fps, label: `${fps} fps` }))}
           />
         </Field>
 
@@ -160,7 +161,7 @@ export default function SettingsPage(): JSX.Element {
           <div className="banner banner-warning">
             <span style={{ flex: 1 }}>
               This copy of FFmpeg needs a newer NVIDIA driver than you have, so it will not use
-              your GPU and recording runs on the CPU. Your card is fine — installing the
+              your GPU and recording runs on the CPU. Your card is fine. Installing the
               compatible build fixes it without touching your driver.
             </span>
             <button
@@ -198,7 +199,7 @@ export default function SettingsPage(): JSX.Element {
       <Section title="Audio">
         {noLoopback && settings.captureAudio && (
           <div className="banner banner-info" style={{ marginBottom: 10 }}>
-            Windows exposes no loopback device, so system audio is captured directly instead —
+            Windows exposes no loopback device, so system audio is captured directly instead.
             nothing to set up. The device list below is only for picking a specific input.
           </div>
         )}
@@ -435,7 +436,7 @@ export default function SettingsPage(): JSX.Element {
         </Field>
 
         <Field label="Version">
-          <span className="small muted mono">{version || '—'}</span>
+          <span className="small muted mono">{version || 'Unknown'}</span>
         </Field>
       </Section>
     </div>
@@ -494,7 +495,7 @@ function GamepadSection({
         <p className="small faint" style={{ margin: 0 }}>
           {status && !status.available
             ? `Controller support is unavailable on this install${
-                status.reason ? ` — ${status.reason}` : ''
+                status.reason ? `: ${status.reason}` : ''
               }`
             : status?.connected
               ? 'Controller connected. These work while a game is in the foreground.'
@@ -576,7 +577,7 @@ function PadField({
         setRejected(
           binding === ''
             ? 'No buttons were pressed'
-            : `${binding} would fire during play — use three buttons, or two with a shoulder or trigger`,
+            : `${binding} would fire during play. Use three buttons, or two with a shoulder or trigger.`,
         )
         setTimeout(() => setRejected(null), 3200)
         return
@@ -591,7 +592,7 @@ function PadField({
         <span>{label}</span>
         {!capturing && !rejected && swallowsTyping(value) && (
           <span className="small faint">
-            Held globally — {value} will not reach other applications
+            Held globally, so {value} will not reach other applications
           </span>
         )}
         {rejected ? (
@@ -840,7 +841,7 @@ function HotkeyField({
           <button
             className="btn btn-ghost"
             onClick={() => onChange(null)}
-            title="Unbind this action — it keeps working from the tray and the buttons"
+            title="Unbind this action. It keeps working from the tray and the buttons."
           >
             Clear
           </button>
@@ -960,7 +961,7 @@ function encoderOption(
   const probe = capabilities?.[id]
   return {
     value: id,
-    label: probe && !probe.available && probe.reason ? `${label} — ${probe.reason}` : label,
+    label: probe && !probe.available && probe.reason ? `${label}: ${probe.reason}` : label,
     disabled: probe ? !probe.available : false,
   }
 }
@@ -989,7 +990,7 @@ function resolutionHint(
   const scaling = target !== null && display?.nativeHeight !== target
 
   return scaling
-    ? `${base} — and lets capture stay on the GPU. Resizing costs noticeably more CPU.`
+    ? `${base}, and lets capture stay on the GPU. Resizing costs noticeably more CPU.`
     : `${base} · capture is running entirely on the GPU`
 }
 
@@ -1007,13 +1008,6 @@ function deviceHint(audio: AudioDevices | null, scan: 'idle' | 'scanning' | 'don
  * file size — and one people make by accident on a high-refresh monitor.
  * Matching it needs no explanation, so it gets none.
  */
-function frameRateHint(settings: AppSettings, displays: DisplayInfo[]): string | undefined {
-  const display = displays[settings.monitorIndex] ?? displays.find((d) => d.isPrimary)
-  const refresh = display?.refreshRate
-
-  if (!refresh || refresh <= settings.fps) return undefined
-  return `Your display runs at ${refresh} Hz — recording at ${settings.fps} captures fewer frames than it shows`
-}
 
 /**
  * Whether the installed FFmpeg is the reason the GPU is idle.

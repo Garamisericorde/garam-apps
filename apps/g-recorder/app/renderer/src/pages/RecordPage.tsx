@@ -164,12 +164,12 @@ export default function RecordPage(): JSX.Element {
       </section>
 
       <section className="capture-facts">
-        <Fact label="Save clip from buffer" value={settings?.hotkeySaveReplay ?? '—'} mono />
-        <Fact label="Turn buffer on / off" value={settings?.hotkeyToggleRecording ?? '—'} mono />
-        <Fact label="Start / stop recording" value={settings?.hotkeyRecordToFile ?? '—'} mono />
+        <Fact label="Save clip from buffer" value={settings?.hotkeySaveReplay ?? 'Not bound'} mono />
+        <Fact label="Turn buffer on / off" value={settings?.hotkeyToggleRecording ?? 'Not bound'} mono />
+        <Fact label="Start / stop recording" value={settings?.hotkeyRecordToFile ?? 'Not bound'} mono />
         <Fact
           label="Replay length"
-          value={settings ? `${settings.replayLengthMinutes} min` : '—'}
+          value={settings ? `${settings.replayLengthMinutes} min` : '...'}
         />
 
         {/* A number you cannot act on is just a number: the cache is the one
@@ -178,14 +178,14 @@ export default function RecordPage(): JSX.Element {
           <span className="fact-label">Cache on disk</span>
           <div className="row" style={{ gap: 8 }}>
             <span className="fact-value">
-              {cacheSize === null ? '—' : formatBytes(cacheSize)}
+              {cacheSize === null ? '...' : formatBytes(cacheSize)}
             </span>
             <button
               className="btn btn-ghost small"
               disabled={busy !== null || buffering || recording || !cacheSize}
               title={
                 buffering || recording
-                  ? 'Stop capturing first — these are the files being written'
+                  ? 'Stop capturing first. These are the files being written.'
                   : 'Delete the buffered footage on disk'
               }
               onClick={() =>

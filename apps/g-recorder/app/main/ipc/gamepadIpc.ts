@@ -45,33 +45,36 @@ export function registerGamepadIpc(getPad: () => GamepadHotkeys | null): void {
     return new Promise<string | null>((resolve) => {
       let settled = false
 
+      const finish = (binding: string | null): void => {
+        if (settled) return
+        settled = true
+        stopPreview()
+        ipcMain.removeListener('gamepad:cancelCapture', onCancel)
+        resolve(binding)
+      }
+
+      const onCancel = (): void => {
+        pad.cancelCapture()
+        finish(null)
+      }
+
       stopPreview()
       preview = setInterval(() => {
         broadcast('gamepad:held', formatBinding(pad.heldMask()))
       }, PREVIEW_MS)
       preview.unref?.()
 
-      pad.beginCapture((mask) => {
-        if (settled) return
-        settled = true
-        stopPreview()
-        resolve(formatBinding(mask))
-      })
+      pad.beginCapture((mask) => finish(formatBinding(mask)))
 
-      // A cancel from the renderer ends the same promise, so the field is
-      // never left waiting on a capture nobody is watching.
-      ipcMain.once('gamepad:cancelCapture', () => {
-        if (settled) return
-        settled = true
-        stopPreview()
-        pad.cancelCapture()
-        resolve(null)
-      })
+      /*
+       * A cancel from the renderer ends the same promise, so the field is never
+       * left waiting on a capture nobody is watching.
+       *
+       * Removed by hand when the capture ends, rather than left to `once`: a
+       * capture that completed normally would otherwise leave its listener
+       * behind, and they piled up one per binding the user ever recorded.
+       */
+      ipcMain.on('gamepad:cancelCapture', onCancel)
     })
-  })
-
-  ipcMain.on('gamepad:cancelCapture', () => {
-    // Handled by the once() above while a capture is running; this keeps a
-    // stray cancel from piling up an unhandled channel warning.
   })
 }

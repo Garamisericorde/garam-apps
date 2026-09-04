@@ -76,7 +76,7 @@ export default function TimelineZoom({
       <button
         className={`zoom-btn${snap ? ' is-on' : ''}`}
         onClick={() => onSnapChange(!snap)}
-        title={snap ? 'Snapping on — edges pull into line' : 'Snapping off'}
+        title={snap ? 'Snapping on: edges pull into line' : 'Snapping off'}
       >
         <svg viewBox="0 0 20 20" aria-hidden>
           <path d="M6 4v6a4 4 0 0 0 8 0V4" />

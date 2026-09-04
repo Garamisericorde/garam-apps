@@ -205,12 +205,13 @@ export class ExportService {
     // A GIF of a multi-clip timeline is out of scope; the first clip is what
     // the format is ever used for here.
     const first = options.timeline.video[0]
+    if (!first) throw new Error('There is no video on the timeline to make a GIF from')
 
     return buildGifExportArgs({
-      clipPath: options.timeline.sources[first?.input ?? 0] ?? '',
+      clipPath: options.timeline.sources[first.input],
       outputPath,
-      inPoint: first?.sourceIn ?? 0,
-      outPoint: first?.sourceOut ?? 0,
+      inPoint: first.sourceIn,
+      outPoint: first.sourceOut,
       outWidth: toEvenSize(framing.outWidth * scale),
       outHeight: toEvenSize(framing.outHeight * scale),
       crop: framing.crop,
@@ -254,7 +255,7 @@ export class ExportService {
           return
         }
 
-        const message = `Export failed — FFmpeg exited with code ${code}. See the logs for details.`
+        const message = `Export failed. FFmpeg exited with code ${code}. See the logs for details.`
         this._emit({ percent: 0, eta: null, isComplete: false, error: message })
         logger.error('ExportService: export failed', { code, outputPath })
         rejectPromise(new Error(message))

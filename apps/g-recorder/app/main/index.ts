@@ -35,7 +35,7 @@ registerClipScheme()
 
 // A second instance would fight over the cache, hotkeys, and tray icon.
 if (!app.requestSingleInstanceLock()) {
-  logger.info('Another instance is already running — exiting')
+  logger.info('Another instance is already running, exiting')
   app.quit()
 } else {
   app.on('second-instance', () => showMainWindow())
@@ -90,7 +90,7 @@ async function prepareFfmpeg(): Promise<void> {
   const status = await FfmpegManager.getInstance().ensureReady()
 
   if (status.state !== 'ready') {
-    logger.warn('FFmpeg is unavailable — recording is disabled until it is installed')
+    logger.warn('FFmpeg is unavailable, recording is disabled until it is installed')
     return
   }
 
@@ -295,7 +295,7 @@ function registerHotkeys(): void {
 
 async function handleSaveReplay(): Promise<void> {
   if (isSaving()) {
-    logger.warn('Save replay ignored — one is already running')
+    logger.warn('Save replay ignored, one is already running')
     return
   }
 

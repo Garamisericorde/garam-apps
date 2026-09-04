@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import { join } from 'path'
 import type { AppSettings } from '../../shared/types'
+import { ALLOWED_FPS } from '../../shared/presets'
 import {
   DEFAULT_EDITOR_KEYS,
   DEFAULT_HOTKEYS,
@@ -39,6 +40,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
 // ── Recording constants ──────────────────────────────────────────────────────
 
+export { ALLOWED_FPS }
+
 export const MIN_SEGMENT_DURATION_SECONDS = 1
 export const MAX_SEGMENT_DURATION_SECONDS = 10
 export const MIN_REPLAY_MINUTES = 1
@@ -47,15 +50,7 @@ export const MAX_REPLAY_MINUTES = 60
 /** Keyframe cadence, in seconds — matches the segment length for clean cuts */
 export const KEYFRAME_INTERVAL_SECONDS = 2
 
-/**
- * Supported capture frame rates.
- *
- * The high rates are here for high-refresh monitors: capture samples the screen
- * at this rate, so it also sets the ceiling on the frame rate the overlay can
- * report. A 144 Hz display captured at 60 can only ever read 60, however fast
- * the game is actually running.
- */
-export const ALLOWED_FPS = [30, 60, 120, 144] as const
+
 
 /** Extra headroom kept in the cache beyond the replay window, in segments */
 export const PRUNE_BUFFER_SEGMENTS = 2

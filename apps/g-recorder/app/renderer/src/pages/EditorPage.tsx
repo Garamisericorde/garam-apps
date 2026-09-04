@@ -213,22 +213,17 @@ export default function EditorPage(): JSX.Element {
         },
       }))
 
-      edit((previous) => {
-        const appended = appendClip(previous, {
-          path: opened.clipPath,
-          durationSeconds: info.durationSeconds,
-          hasAudio: info.hasAudio,
-        })
-        if (start === undefined) return appended
-
-        // Placed where it was dropped, which is the whole point of dropping it
-        // somewhere in particular. appendClip puts it last on each lane.
-        const place = (items: TimelineItem[]): TimelineItem[] =>
-          items.map((item, index) =>
-            index === items.length - 1 ? { ...item, start: Math.max(0, start) } : item,
-          )
-        return { video: place(appended.video), audio: place(appended.audio) }
-      })
+      edit((previous) =>
+        appendClip(
+          previous,
+          {
+            path: opened.clipPath,
+            durationSeconds: info.durationSeconds,
+            hasAudio: info.hasAudio,
+          },
+          start,
+        ),
+      )
 
       // Both strips are nice-to-haves — never block the preview on them.
       setLoadingThumbnails(true)
@@ -314,10 +309,13 @@ export default function EditorPage(): JSX.Element {
    * render that carries them.
    */
   const pendingSeek = useRef<number | null>(null)
+  /** Whether to carry on playing once that seek lands */
+  const resumeAfterSeek = useRef(false)
   const [seekTick, setSeekTick] = useState(0)
 
-  const requestSeek = useCallback((sourceSeconds: number) => {
+  const requestSeek = useCallback((sourceSeconds: number, resume = false) => {
     pendingSeek.current = sourceSeconds
+    resumeAfterSeek.current = resume
     setSeekTick((tick) => tick + 1)
   }, [])
 
@@ -325,7 +323,13 @@ export default function EditorPage(): JSX.Element {
     const target = pendingSeek.current
     if (target === null) return
     pendingSeek.current = null
+
     playerRef.current?.seek(target)
+
+    if (resumeAfterSeek.current) {
+      resumeAfterSeek.current = false
+      playerRef.current?.play()
+    }
   }, [seekTick])
 
   const handleSeek = useCallback(
@@ -357,7 +361,9 @@ export default function EditorPage(): JSX.Element {
         if (next) {
           setActiveId(next.id)
           setPlayhead(next.start)
-          requestSeek(next.sourceIn)
+          // The player has already paused itself at this clip's end, so handing
+          // over is not enough: without this, playback stopped at every cut.
+          requestSeek(next.sourceIn, true)
         }
       }
     },
@@ -560,17 +566,35 @@ export default function EditorPage(): JSX.Element {
     [addClip],
   )
 
-  /** Where on the timeline the cursor is, in seconds */
-  const dropTimeFrom = useCallback(
-    (clientX: number): number => {
+  /**
+   * Where on the timeline the cursor is, and how much of a second a pixel is
+   * worth there. Snapping is a gesture, so its reach has to be measured on the
+   * screen: as a fraction of the timeline's length it grew with the timeline,
+   * and on a seven-minute one nothing could be dropped except on an edge.
+   */
+  const dropPosition = useCallback(
+    (clientX: number): { time: number; perPixel: number } => {
       const lanes = timelineRef.current?.querySelector('.lane-stack')
-      if (!lanes) return duration
+      if (!lanes) return { time: duration, perPixel: 0 }
 
       const rect = lanes.getBoundingClientRect()
       const visible = view.visible ?? fitSpan(duration)
-      return Math.max(0, view.offset + ((clientX - rect.left) / rect.width) * visible)
+      const perPixel = rect.width > 0 ? visible / rect.width : 0
+      return {
+        time: Math.max(0, view.offset + (clientX - rect.left) * perPixel),
+        perPixel,
+      }
     },
     [duration, view],
+  )
+
+  /** Where a clip dropped at this cursor position would start */
+  const dropStart = useCallback(
+    (clientX: number): number => {
+      const { time, perPixel } = dropPosition(clientX)
+      return snapDropTo(timeline, time, snapEnabled ? DROP_SNAP_PX * perPixel : 0)
+    },
+    [dropPosition, snapEnabled, timeline],
   )
 
   /*
@@ -606,17 +630,13 @@ export default function EditorPage(): JSX.Element {
         : ''
       const known = path ? sources[path]?.durationSeconds : undefined
 
-      setPendingDrop({
-        start: snapDropTo(timeline, dropTimeFrom(event.clientX), snapEnabled),
-        durationSeconds: known ?? null,
-      })
+      setPendingDrop({ start: dropStart(event.clientX), durationSeconds: known ?? null })
     },
     onDragLeave: () => {
       setDragOver(null)
       setPendingDrop(null)
     },
-    onDrop: (event: React.DragEvent) =>
-      handleDrop(event, snapDropTo(timeline, dropTimeFrom(event.clientX), snapEnabled)),
+    onDrop: (event: React.DragEvent) => handleDrop(event, dropStart(event.clientX)),
   }
 
   // ── Export ─────────────────────────────────────────────────────────────────
@@ -840,15 +860,18 @@ function patchSource(
   })
 }
 
+/** How close a drop must come to an edge to land on it, in pixels */
+const DROP_SNAP_PX = 10
+
 /**
  * Pull an incoming clip onto the nearest clip edge.
  *
- * Judged in seconds against the content rather than in pixels against the
- * pointer: a drop meant as "right after this one" should butt up against it
- * exactly, and the pointer is nowhere near the edge it is aiming for.
+ * A drop meant as "right after this one" should butt up against it exactly, so
+ * the reach is given in seconds converted from pixels by the caller. Zero turns
+ * snapping off.
  */
-function snapDropTo(timeline: TimelineModel, time: number, snap: boolean): number {
-  if (!snap) return time
+function snapDropTo(timeline: TimelineModel, time: number, reach: number): number {
+  if (reach <= 0) return time
 
   const edges = [0]
   for (const lane of ['video', 'audio'] as LaneId[]) {
@@ -858,7 +881,7 @@ function snapDropTo(timeline: TimelineModel, time: number, snap: boolean): numbe
   }
 
   let best = time
-  let bestGap = Math.max(timelineDuration(timeline) * 0.02, 0.25)
+  let bestGap = reach
   for (const edge of edges) {
     const gap = Math.abs(edge - time)
     if (gap < bestGap) {

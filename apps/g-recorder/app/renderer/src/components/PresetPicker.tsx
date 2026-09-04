@@ -381,7 +381,7 @@ function PresetShelf({
           </span>
         ))}
         {presets.length === 0 && (
-          <span className="small faint">Nothing saved yet — name the current settings below.</span>
+          <span className="small faint">Nothing saved yet. Name the current settings below.</span>
         )}
       </div>
 

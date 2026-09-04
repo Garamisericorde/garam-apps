@@ -74,23 +74,29 @@ function nextId(prefix: string): string {
 }
 
 /**
- * Append a clip to the end of both lanes.
+ * Add a clip to both lanes.
  *
- * Appended rather than dropped at the playhead: a clip landing under the
- * playhead would overlap whatever is already there, and an editor that silently
- * covers footage is worse than one that makes you drag.
+ * Placed at `start`, or after everything when that is not given — a clip
+ * landing under the playhead by default would overlap whatever is already
+ * there, and an editor that silently covers footage is worse than one that
+ * makes you drag.
+ *
+ * The position belongs here rather than in the caller: a clip with no audio
+ * track adds nothing to the audio lane, so a caller moving "the last item on
+ * each lane" afterwards would drag an unrelated audio clip along with it.
  */
 export function appendClip(
   timeline: Timeline,
   clip: { path: string; durationSeconds: number; hasAudio: boolean },
+  start = timelineDuration(timeline),
 ): Timeline {
-  const start = timelineDuration(timeline)
   const window = { sourceIn: 0, sourceOut: Math.max(clip.durationSeconds, MIN_ITEM_SECONDS) }
 
+  const at = Math.max(0, start)
   return {
-    video: [...timeline.video, { id: nextId('v'), path: clip.path, start, ...window }],
+    video: [...timeline.video, { id: nextId('v'), path: clip.path, start: at, ...window }],
     audio: clip.hasAudio
-      ? [...timeline.audio, { id: nextId('a'), path: clip.path, start, ...window }]
+      ? [...timeline.audio, { id: nextId('a'), path: clip.path, start: at, ...window }]
       : timeline.audio,
   }
 }
