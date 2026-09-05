@@ -221,16 +221,27 @@ budget on a still desktop.
 
 ## When the desktop stops sending frames
 
-FFmpeg prints "More than N frames duplicated" when the capture source cannot
-keep up and it is padding the output to hold the frame rate. **The stall
-watchdog cannot see this**: `frame=` goes on rising the whole time, so the
-capture looks healthy while the recording is a frozen picture.
+FFmpeg duplicates the last frame when the capture source cannot keep up, to
+hold the output at a constant rate. **The stall watchdog cannot see this**:
+`frame=` goes on rising the whole time, so the capture looks healthy while the
+recording is a frozen picture. Measured on a saved replay: 6960 frames of which
+1289 were new, an eleven-frame-a-second recording claiming sixty.
 
-It is watched for in stderr and told to the user once per run, because the
-cause is theirs to fix: DXGI Desktop Duplication gets starved by a game running
-in exclusive fullscreen, and borderless windowed avoids it. Restarting the
-capture does not help — the same wall is still there, and each restart is a
-real hole in the buffer.
+Two causes, and the first was ours:
+
+- **Do not deprioritise a hardware capture.** Below-normal was right when the
+  buffer encoded on the CPU and competed with the game. On the NVENC/D3D11 path
+  FFmpeg spends 0.08 s of CPU per 5 s captured, so it cannot crowd anything
+  out — but it still has to be scheduled sixty times a second to take the next
+  desktop frame, and behind a game filling every core it misses that window.
+  Desktop Duplication then repeats the last frame it had.
+- DXGI Desktop Duplication is starved by a game in exclusive fullscreen.
+  Borderless windowed avoids it, and restarting the capture does not help:
+  the same wall is still there and each restart is a real hole in the buffer.
+
+The ratio is read from `-progress` (`dup_frames` against `frame`), not from
+FFmpeg's stderr string — the string only appears at fixed milestones and says
+nothing about how bad it is. Over 40% duplicates, the user is told once.
 
 ## Stability requirements
 - FFmpeg processes must be managed robustly:

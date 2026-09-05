@@ -243,7 +243,12 @@ export class RecorderService {
    */
   private async spawnBuffer(resuming: boolean): Promise<void> {
     const settings = SettingsStore.getInstance().get()
-    const { ffmpegPath, args: captureArgs, systemAudioPiped } = await this.prepareCapture(settings)
+    const {
+      ffmpegPath,
+      args: captureArgs,
+      systemAudioPiped,
+      encoder,
+    } = await this.prepareCapture(settings)
 
     mkdirSync(cacheDir(), { recursive: true })
     if (resuming) this.saveIndex()
@@ -272,8 +277,12 @@ export class RecorderService {
     this._sawProgress = false
     this._warnedAboutDuplicates = false
     this._stderrTail = ''
-    this._process = this.spawnCapture(ffmpegPath, args, 'replay-buffer', () =>
-      this.handleBufferExit(),
+    this._process = this.spawnCapture(
+      ffmpegPath,
+      args,
+      'replay-buffer',
+      () => this.handleBufferExit(),
+      encoder,
     )
     if (systemAudioPiped) this.feedSystemAudio(this._process)
 
@@ -432,7 +441,7 @@ export class RecorderService {
     if (this._status.isManualRecording) throw new Error('A recording is already running')
 
     const settings = SettingsStore.getInstance().get()
-    const { ffmpegPath, args: captureArgs } = await this.prepareCapture(settings)
+    const { ffmpegPath, args: captureArgs, encoder } = await this.prepareCapture(settings)
 
     this._bufferWasRunning = this._status.isRecording
     if (this._bufferWasRunning) await this.stop()
@@ -441,11 +450,17 @@ export class RecorderService {
     const args = [...captureArgs, ...buildSingleFileOutputArgs(outputPath)]
 
     this._manualOutputPath = outputPath
-    this._manualProcess = this.spawnCapture(ffmpegPath, args, 'manual-recording', () => {
-      if (this._status.isManualRecording) {
-        this.emit({ isManualRecording: false, error: 'Recording stopped unexpectedly' })
-      }
-    })
+    this._manualProcess = this.spawnCapture(
+      ffmpegPath,
+      args,
+      'manual-recording',
+      () => {
+        if (this._status.isManualRecording) {
+          this.emit({ isManualRecording: false, error: 'Recording stopped unexpectedly' })
+        }
+      },
+      encoder,
+    )
 
     this.emit({ isManualRecording: true, error: null })
     logger.info('RecorderService: manual recording started', { outputPath })
@@ -553,7 +568,12 @@ export class RecorderService {
   /** Resolve FFmpeg, encoder, capture backend, and audio devices */
   private async prepareCapture(
     settings: AppSettings,
-  ): Promise<{ ffmpegPath: string; args: string[]; systemAudioPiped: boolean }> {
+  ): Promise<{
+    ffmpegPath: string
+    args: string[]
+    systemAudioPiped: boolean
+    encoder: EncoderType
+  }> {
     const manager = FfmpegManager.getInstance()
     const status = await manager.ensureReady()
     if (status.state !== 'ready') {
@@ -619,7 +639,7 @@ export class RecorderService {
       encoderThreads: softwareEncoderThreads(),
     })
 
-    return { ffmpegPath, args, systemAudioPiped: systemAudioPipe !== null }
+    return { ffmpegPath, args, systemAudioPiped: systemAudioPipe !== null, encoder }
   }
 
   /**
@@ -701,6 +721,7 @@ export class RecorderService {
     args: string[],
     label: string,
     onUnexpectedExit: () => void,
+    encoder: EncoderType = 'x264',
   ): ChildProcess {
     const proc = spawn(ffmpegPath, args, {
       windowsHide: true,
@@ -708,7 +729,7 @@ export class RecorderService {
       stdio: ['pipe', 'pipe', 'pipe'],
     })
 
-    this.deprioritise(proc, label)
+    this.deprioritise(proc, label, encoder)
     attachStderrLog(proc, label, ffmpegPath, args)
     this.trackProgress(proc)
 
@@ -716,9 +737,7 @@ export class RecorderService {
     // has to know *why* FFmpeg stopped, and re-reading the log file to find out
     // would race with the write stream still flushing it.
     proc.stderr?.on('data', (chunk: Buffer) => {
-      const text = chunk.toString()
-      this._stderrTail = (this._stderrTail + text).slice(-STDERR_TAIL_CHARS)
-      this.checkForDuplicateFlood(text)
+      this._stderrTail = (this._stderrTail + chunk.toString()).slice(-STDERR_TAIL_CHARS)
     })
 
     proc.on('close', (code, signal) => {
@@ -751,24 +770,34 @@ export class RecorderService {
   /**
    * Notice when the desktop stops sending new frames.
    *
-   * FFmpeg says "More than N frames duplicated" when the source cannot keep up
-   * and it is padding the output to hold the frame rate. The frame counter goes
-   * on rising the whole time, so the stall watchdog cannot see it: as far as
-   * that is concerned the capture is healthy, while the recording is a frozen
-   * picture. It is worth saying out loud, because it has a cause the user can
-   * do something about.
+   * FFmpeg duplicates the last frame when the source cannot keep up, to hold
+   * the output at a constant rate. The frame counter goes on rising the whole
+   * time, so the stall watchdog cannot see it: as far as that is concerned the
+   * capture is healthy, while the recording is a frozen picture.
+   *
+   * Measured from `-progress` rather than from the stderr string, because the
+   * string only appears at fixed milestones and says nothing about how bad it
+   * is. `dup_frames` against the frame count is the ratio itself, and a
+   * recording made of more repeats than pictures is worth saying out loud: the
+   * cause is one the user can do something about.
    */
-  private checkForDuplicateFlood(text: string): void {
+  private checkDuplicateRatio(frames: number, duplicated: number): void {
     if (this._warnedAboutDuplicates) return
-    if (!/frames duplicated/i.test(text)) return
+    // Long enough in that a slow start cannot trip it.
+    if (frames < 600) return
+
+    const ratio = duplicated / frames
+    if (ratio < 0.4) return
 
     this._warnedAboutDuplicates = true
-    logger.warn('RecorderService: the desktop stopped producing new frames', {
-      stderr: text.slice(-200),
+    logger.warn('RecorderService: the desktop is not keeping up with the capture', {
+      frames,
+      duplicated,
+      realFps: Math.round(((frames - duplicated) / frames) * 60),
     })
     // Short enough to fit the overlay, which is where it will be read: this
     // happens while the game is in the foreground, never while the app is.
-    this._onWarning?.('Desktop froze the capture. Try borderless windowed.')
+    this._onWarning?.('The desktop is not keeping up. Try borderless windowed.')
   }
 
   private trackProgress(proc: ChildProcess): void {
@@ -797,22 +826,30 @@ export class RecorderService {
       lastFrames = frames
       this._lastFrameAt = Date.now()
       this._sawProgress = true
+
+      const duplicated = /^dup_frames=\s*(\d+)/m.exec(report)
+      if (duplicated) this.checkDuplicateRatio(frames, Number(duplicated[1]))
     })
   }
 
   /**
-   * Drop the capture process below the game in Windows' scheduling order.
+   * Drop the capture below the game in Windows' scheduling order — but only
+   * when it is encoding on the CPU.
    *
-   * At normal priority FFmpeg competes with the foreground game as an equal,
-   * which is what the buffer being "on" felt like. Below-normal means it only
-   * gets the time the game is not using — capture is never the thing that must
-   * finish first.
+   * Software encoding competes with the game as an equal, which is what the
+   * buffer being "on" used to feel like, and below-normal gives it only the
+   * time the game is not using.
    *
-   * Best-effort: a failure here costs performance, not correctness, so it is
-   * logged rather than raised.
+   * On the hardware path it is actively harmful. FFmpeg spends 0.08 s of CPU
+   * per 5 s captured there, so it cannot crowd anything out — but it still has
+   * to be scheduled sixty times a second to take the next desktop frame, and
+   * behind a game filling every core it misses that window. Desktop
+   * Duplication then repeats the last frame it had. Measured on a saved replay:
+   * 6960 frames of which only 1289 were new, a recording that looks frozen
+   * while every counter says it is healthy.
    */
-  private deprioritise(proc: ChildProcess, label: string): void {
-    if (proc.pid === undefined) return
+  private deprioritise(proc: ChildProcess, label: string, encoder: EncoderType): void {
+    if (proc.pid === undefined || encoder !== 'x264') return
     try {
       setPriority(proc.pid, osConstants.priority.PRIORITY_BELOW_NORMAL)
     } catch (err) {
