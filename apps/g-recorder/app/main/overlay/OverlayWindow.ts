@@ -3,7 +3,15 @@ import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { logger } from '../logging/logger'
 
-const WIDTH = 26
+/*
+ * Wide enough for a line of text beside the dot.
+ *
+ * The window is transparent and click-through, so the extra room costs nothing
+ * when there is nothing to say — but it has to exist in advance: what the
+ * recorder did has to be readable while a game is in the foreground, and the
+ * app's own window is behind it at exactly that moment.
+ */
+const WIDTH = 420
 const HEIGHT = 26
 const MARGIN = 4
 

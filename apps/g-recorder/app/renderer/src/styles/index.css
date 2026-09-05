@@ -916,7 +916,36 @@ kbd {
   inset: 0;
   display: flex;
   align-items: center;
-  justify-content: center;
+  /* The dot keeps the corner it has always had; the text grows to its right. */
+  justify-content: flex-start;
+  gap: 8px;
+  padding-left: 7px;
+}
+
+/*
+ * What the recorder just did, over whatever is running.
+ *
+ * Its own background rather than the window's: the window is transparent so
+ * the dot can sit on a game, and text without a backing is unreadable on a
+ * bright frame.
+ */
+.state-message {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.78);
+  color: #fff;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: state-message-in 0.16s ease-out;
+}
+
+@keyframes state-message-in {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
 }
 
 .state-dot {

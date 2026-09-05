@@ -766,10 +766,9 @@ export class RecorderService {
     logger.warn('RecorderService: the desktop stopped producing new frames', {
       stderr: text.slice(-200),
     })
-    this._onWarning?.(
-      'The desktop stopped sending new frames, so part of the recording is frozen. ' +
-        'A game running in exclusive fullscreen does this; borderless windowed avoids it.',
-    )
+    // Short enough to fit the overlay, which is where it will be read: this
+    // happens while the game is in the foreground, never while the app is.
+    this._onWarning?.('Desktop froze the capture. Try borderless windowed.')
   }
 
   private trackProgress(proc: ChildProcess): void {
