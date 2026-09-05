@@ -208,6 +208,30 @@ and a CQ around 23 then looks like the CQ 19 that the flag-less encoder needed.
 - A cancelled export must delete its own file. It has no moov atom, so nothing
   can open it, and it otherwise lands in the library as a clip that only fails.
 
+## The buffer has a bitrate ceiling
+
+Constant quality alone let a busy 1440p60 scene run at 37 Mbps: 280 MB a
+minute written and deleted again, so the buffer rewrote its whole cache every
+couple of minutes. That disk churn is felt as stutter in the game being
+recorded. `captureCeilingKbps` scales a peak cap by pixels and rate (about 0.1
+bits per pixel) — invisible in the picture, and it halves the writing.
+
+It stays `-maxrate`, never `-b:v`: an average target would spend the whole
+budget on a still desktop.
+
+## When the desktop stops sending frames
+
+FFmpeg prints "More than N frames duplicated" when the capture source cannot
+keep up and it is padding the output to hold the frame rate. **The stall
+watchdog cannot see this**: `frame=` goes on rising the whole time, so the
+capture looks healthy while the recording is a frozen picture.
+
+It is watched for in stderr and told to the user once per run, because the
+cause is theirs to fix: DXGI Desktop Duplication gets starved by a game running
+in exclusive fullscreen, and borderless windowed avoids it. Restarting the
+capture does not help — the same wall is still there, and each restart is a
+real hole in the buffer.
+
 ## Stability requirements
 - FFmpeg processes must be managed robustly:
   - log stderr to file

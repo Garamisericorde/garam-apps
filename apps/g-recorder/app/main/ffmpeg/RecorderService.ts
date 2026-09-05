@@ -158,6 +158,10 @@ export class RecorderService {
   /** Set while a replay is being written, to keep pruning off the used files */
   private _saveHolds = 0
 
+  /** Told once per capture run, so the same freeze is not reported repeatedly */
+  private _warnedAboutDuplicates = false
+  private _onWarning: ((message: string) => void) | null = null
+
   /** Manual (non-buffer) recording state */
   private _manualProcess: ChildProcess | null = null
   private _manualOutputPath: string | null = null
@@ -266,6 +270,7 @@ export class RecorderService {
     this._processStartedAt = Date.now()
     this._lastFrameAt = Date.now()
     this._sawProgress = false
+    this._warnedAboutDuplicates = false
     this._stderrTail = ''
     this._process = this.spawnCapture(ffmpegPath, args, 'replay-buffer', () =>
       this.handleBufferExit(),
@@ -711,7 +716,9 @@ export class RecorderService {
     // has to know *why* FFmpeg stopped, and re-reading the log file to find out
     // would race with the write stream still flushing it.
     proc.stderr?.on('data', (chunk: Buffer) => {
-      this._stderrTail = (this._stderrTail + chunk.toString()).slice(-STDERR_TAIL_CHARS)
+      const text = chunk.toString()
+      this._stderrTail = (this._stderrTail + text).slice(-STDERR_TAIL_CHARS)
+      this.checkForDuplicateFlood(text)
     })
 
     proc.on('close', (code, signal) => {
@@ -736,6 +743,35 @@ export class RecorderService {
    * makes a counter that stops a reliable sign that the input died, and is the
    * only thing the stall watchdog needs.
    */
+  /** Something the user should hear about, without it being an error */
+  onWarning(handler: (message: string) => void): void {
+    this._onWarning = handler
+  }
+
+  /**
+   * Notice when the desktop stops sending new frames.
+   *
+   * FFmpeg says "More than N frames duplicated" when the source cannot keep up
+   * and it is padding the output to hold the frame rate. The frame counter goes
+   * on rising the whole time, so the stall watchdog cannot see it: as far as
+   * that is concerned the capture is healthy, while the recording is a frozen
+   * picture. It is worth saying out loud, because it has a cause the user can
+   * do something about.
+   */
+  private checkForDuplicateFlood(text: string): void {
+    if (this._warnedAboutDuplicates) return
+    if (!/frames duplicated/i.test(text)) return
+
+    this._warnedAboutDuplicates = true
+    logger.warn('RecorderService: the desktop stopped producing new frames', {
+      stderr: text.slice(-200),
+    })
+    this._onWarning?.(
+      'The desktop stopped sending new frames, so part of the recording is frozen. ' +
+        'A game running in exclusive fullscreen does this; borderless windowed avoids it.',
+    )
+  }
+
   private trackProgress(proc: ChildProcess): void {
     if (!proc.stdout) return
 

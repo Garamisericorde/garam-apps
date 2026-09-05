@@ -45,6 +45,8 @@ export function registerRecorderIpc(): void {
     broadcast('recorder:statusChange', status)
   })
 
+  recorder.onWarning((message) => broadcast('app:notice', { level: 'error', message }))
+
   // Raw PCM from the renderer's loopback capture. `on`, not `handle`: this
   // fires many times a second and has nothing to return.
   ipcMain.on('systemAudio:chunk', (_event, pcm: ArrayBuffer) => {

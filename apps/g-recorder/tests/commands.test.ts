@@ -159,6 +159,41 @@ describe('buildCaptureArgs', () => {
     })
   })
 
+  describe('the buffer has a bitrate ceiling', () => {
+    it('caps the peak, scaled to what is being captured', () => {
+      // Constant quality alone let a busy 1440p60 scene run at 37 Mbps, which
+      // is 280 MB a minute written and deleted again. The churn is felt as
+      // stutter in the game being recorded.
+      const args = buildCaptureArgs({
+        ...base,
+        encoder: 'nvenc',
+        settings: settings({ resolution: '1440p', fps: 60 }),
+      })
+
+      // 2560x1440 at 60, about a tenth of a bit per pixel.
+      expect(valueAfter(args, '-maxrate')).toBe('22118k')
+      expect(valueAfter(args, '-bufsize')).toBe('44236k')
+    })
+
+    it('gives a smaller capture a smaller budget', () => {
+      const args = buildCaptureArgs({
+        ...base,
+        encoder: 'nvenc',
+        settings: settings({ resolution: '720p', fps: 30 }),
+      })
+      expect(valueAfter(args, '-maxrate')).toBe('2765k')
+    })
+
+    it('is still a ceiling, not a target', () => {
+      // -b:v would make it an average and spend the whole budget on a still
+      // desktop; the buffer must stay quality-driven.
+      const args = buildCaptureArgs({ ...base, encoder: 'nvenc' })
+      expect(valueAfter(args, '-rc')).toBe('vbr')
+      expect(valueAfter(args, '-cq')).toBe('23')
+      expect(valueAfter(args, '-b:v')).toBe('0')
+    })
+  })
+
   describe('D3D11-direct path', () => {
     it('inserts no video filter at all — a filter would undo the whole point', () => {
       const args = buildCaptureArgs({ ...base, encoder: 'nvenc', useD3d11Direct: true })

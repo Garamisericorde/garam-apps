@@ -45,6 +45,28 @@ export interface VideoEncodeOptions {
  * Note the NVENC mode is plain `vbr`: modern FFmpeg only offers constqp, vbr,
  * and cbr, so the old `vbr_hq` alias fails outright.
  */
+/** Constant quality the buffer records at, before any ceiling */
+const CAPTURE_QUALITY = 23
+
+/**
+ * A peak ceiling for the buffer, in kbps.
+ *
+ * Constant quality alone let a busy 1440p60 scene run at 37 Mbps, which is
+ * 280 MB a minute written and deleted again — the buffer rewrites its whole
+ * cache every couple of minutes, and that disk churn is felt as stutter in the
+ * game it is recording. A ceiling is invisible in the picture and halves it.
+ *
+ * Scaled by pixels and rate rather than fixed, so 720p30 is not given a budget
+ * meant for 1440p60: about 0.1 bits per pixel, which quality-based encoding
+ * lands under except in the scenes that were spiking.
+ */
+function captureCeilingKbps(settings: AppSettings): number {
+  const height = resolutionHeight(settings.resolution) ?? 1440
+  const width = Math.round((height * 16) / 9)
+  const bitsPerPixel = 0.1
+  return Math.round((width * height * settings.fps * bitsPerPixel) / 1000)
+}
+
 /**
  * How hard the encoder works, which is the only real trade an export has.
  *
@@ -320,7 +342,8 @@ export function buildCaptureArgs(options: CaptureOptions): string[] {
   args.push(
     ...buildVideoEncodeArgs({
       encoder,
-      quality: 23,
+      quality: CAPTURE_QUALITY,
+      maxBitrateKbps: captureCeilingKbps(settings),
       gopSize,
       lowLatency: true,
       threads: options.encoderThreads,
