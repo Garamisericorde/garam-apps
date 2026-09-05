@@ -329,7 +329,7 @@ async function handleToggleManualRecording(): Promise<void> {
 
     const settings = SettingsStore.getInstance().get()
     await recorder.startManualRecording(
-      join(settings.outputPath, `recording_${localTimestamp()}.mp4`),
+      join(settings.outputPath, `recording ${localTimestamp()}.mp4`),
     )
     announce('Recording started')
   } catch (err) {

@@ -75,7 +75,7 @@ export function registerRecorderIpc(): void {
 
   ipcMain.handle('recorder:startManual', async () => {
     const settings = SettingsStore.getInstance().get()
-    const outputPath = join(settings.outputPath, `recording_${localTimestamp()}.mp4`)
+    const outputPath = join(settings.outputPath, `recording ${localTimestamp()}.mp4`)
     await recorder.startManualRecording(outputPath)
     announce('Recording started')
     return outputPath

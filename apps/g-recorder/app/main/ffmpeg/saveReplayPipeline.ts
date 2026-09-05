@@ -43,7 +43,7 @@ export async function runSaveReplay(opts: SaveReplayOptions = {}): Promise<SaveR
     const { concatPath, coveredSeconds } = await recorder.prepareReplayConcat(durationSeconds)
 
     mkdirSync(settings.outputPath, { recursive: true })
-    const outputPath = join(settings.outputPath, `replay_${localTimestamp()}.mp4`)
+    const outputPath = join(settings.outputPath, `replay ${localTimestamp()}.mp4`)
 
     logger.info('SaveReplay: concat start', { concatPath, outputPath, coveredSeconds })
     await spawnFfmpeg(ffmpegPath, buildConcatCopyArgs(concatPath, outputPath))

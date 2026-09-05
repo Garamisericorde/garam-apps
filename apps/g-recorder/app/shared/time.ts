@@ -25,11 +25,21 @@ export function formatBytes(bytes: number): string {
   return `${value.toFixed(value >= 10 || exponent === 0 ? 0 : 1)} ${units[exponent]}`
 }
 
-/** Returns a filesystem-safe local-time timestamp: YYYY-MM-DD_HH-MM-SS */
+/**
+ * A timestamp for a file name, in local time.
+ *
+ * The date and the time are separated differently on purpose. Written with
+ * dashes throughout, "2026-09-06_00-59-55" reads as one long number and the
+ * eye cannot find where the date ends; dots for the clock make it a date and a
+ * time at a glance. Windows forbids the colon a clock would otherwise use.
+ *
+ * Local rather than UTC: this names a moment the user was present for, and
+ * "the clip I took at midnight" has to be findable by that.
+ */
 export function localTimestamp(date = new Date()): string {
   return (
     `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
-    `_${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}`
+    ` ${pad(date.getHours())}.${pad(date.getMinutes())}.${pad(date.getSeconds())}`
   )
 }
 

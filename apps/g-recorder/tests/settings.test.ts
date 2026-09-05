@@ -148,7 +148,7 @@ describe('time helpers', () => {
 
   it('builds a filesystem-safe timestamp', () => {
     const stamp = localTimestamp(new Date(2026, 7, 25, 9, 5, 3))
-    expect(stamp).toBe('2026-08-25_09-05-03')
+    expect(stamp).toBe('2026-08-25 09.05.03')
     expect(stamp).not.toMatch(/[\\/:*?"<>|]/)
   })
 
