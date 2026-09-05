@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { join } from 'path'
+import { basename, join } from 'path'
 import type { RecorderStatus } from '../../shared/types'
 import { localTimestamp } from '../../shared/time'
 import { RecorderService } from '../ffmpeg/RecorderService'
@@ -16,6 +16,17 @@ export interface ReplaySavedPayload {
   durationSeconds: number
 }
 
+/**
+ * Say out loud what the recorder just did.
+ *
+ * A hotkey pressed with a game in the foreground has no other feedback: the
+ * window is behind the game, the tray icon is a few pixels, and without a line
+ * of text the honest answer to "did it save?" was to go and look in a folder.
+ */
+export function announce(message: string): void {
+  broadcast('app:notice', { level: 'info', message })
+}
+
 /** Notify every renderer that a new clip is ready to edit */
 export function announceReplaySaved(clipPath: string, durationSeconds: number): void {
   const payload: ReplaySavedPayload = {
@@ -24,6 +35,7 @@ export function announceReplaySaved(clipPath: string, durationSeconds: number): 
     durationSeconds,
   }
   broadcast('recorder:replaySaved', payload)
+  announce(`Clip saved · ${basename(clipPath)}`)
 }
 
 export function registerRecorderIpc(): void {
@@ -63,6 +75,7 @@ export function registerRecorderIpc(): void {
     const settings = SettingsStore.getInstance().get()
     const outputPath = join(settings.outputPath, `recording_${localTimestamp()}.mp4`)
     await recorder.startManualRecording(outputPath)
+    announce('Recording started')
     return outputPath
   })
 
@@ -70,6 +83,7 @@ export function registerRecorderIpc(): void {
     const outputPath = await recorder.stopManualRecording()
     if (!outputPath) return null
 
+    announce('Recording stopped')
     announceReplaySaved(outputPath, 0)
     return { clipPath: outputPath, clipUrl: registerClipFile(outputPath), durationSeconds: 0 }
   })

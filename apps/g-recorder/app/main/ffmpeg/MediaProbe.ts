@@ -122,12 +122,19 @@ export async function buildPosterFrame(
   mkdirSync(dir, { recursive: true })
 
   const outputPath = join(dir, 'poster.jpg')
-  const timestamp = durationSeconds > 2 ? Math.min(durationSeconds * 0.1, 5) : 0
+  /*
+   * A tenth of the way in was landing on a loading screen or an alt-tabbed
+   * desktop, which is why the list was a column of black rectangles. A third
+   * of the way in is past whatever the clip opens on, and the `thumbnail`
+   * filter then picks the most representative frame of the next hundred
+   * rather than whichever one happens to be there.
+   */
+  const timestamp = durationSeconds > 6 ? durationSeconds / 3 : 0
 
   try {
     await run(
       ffmpeg.path,
-      buildThumbnailArgs(clipPath, timestamp, LIBRARY_POSTER_WIDTH, outputPath),
+      buildThumbnailArgs(clipPath, timestamp, LIBRARY_POSTER_WIDTH, outputPath, true),
       THUMBNAIL_TIMEOUT_MS,
     )
     return toDataUri(outputPath)

@@ -268,10 +268,13 @@ export default function EditorPage(): JSX.Element {
     setView(FIT_VIEW)
   }, [edit])
 
-  // A replay saved from the tray or a hotkey lands here
-  useEffect(() => {
-    return window.api.recorder.onReplaySaved((saved) => void addClip(saved.clipPath))
-  }, [addClip])
+  /*
+   * A replay saved from the tray or a hotkey is NOT put on the timeline.
+   *
+   * It used to be, and that made every save an edit: the clip you had been
+   * arranging gained a stranger on the end of it. Saving writes a file; the
+   * list beside this picks it up, and adding it is a decision of its own.
+   */
 
   // Navigating in with a clip already chosen
   useEffect(() => {

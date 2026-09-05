@@ -868,6 +868,16 @@ export function buildThumbnailArgs(
   timestamp: number,
   width: number,
   outputPath: string,
+  /**
+   * Pick the most representative frame of the next second or so, rather than
+   * whichever one the seek happens to land on.
+   *
+   * For the strip along the timeline that would be wrong — each frame there
+   * stands for a moment and has to be that moment. For a poster it is the
+   * difference between a picture of the clip and a picture of the black frame
+   * it opened on.
+   */
+  representative = false,
 ): string[] {
   return [
     '-hide_banner',
@@ -876,7 +886,10 @@ export function buildThumbnailArgs(
     '-ss', timestamp.toFixed(3),
     '-i', clipPath,
     '-frames:v', '1',
-    '-vf', `scale=${width}:-2:flags=fast_bilinear`,
+    '-vf',
+    representative
+      ? `thumbnail=100,scale=${width}:-2:flags=fast_bilinear`
+      : `scale=${width}:-2:flags=fast_bilinear`,
     '-q:v', '6',
     '-f', 'image2',
     '-y',

@@ -11,7 +11,7 @@ import { FfmpegManager } from './ffmpeg/FfmpegManager'
 import { RecorderService } from './ffmpeg/RecorderService'
 import { cleanThumbnailCache } from './ffmpeg/MediaProbe'
 import { isSaving, runSaveReplay } from './ffmpeg/saveReplayPipeline'
-import { announceReplaySaved, registerRecorderIpc } from './ipc/recorderIpc'
+import { announce, announceReplaySaved, registerRecorderIpc } from './ipc/recorderIpc'
 import { registerExportIpc } from './ipc/exportIpc'
 import { registerSettingsIpc } from './ipc/settingsIpc'
 import { registerMediaIpc } from './ipc/mediaIpc'
@@ -301,8 +301,12 @@ async function handleSaveReplay(): Promise<void> {
 
   try {
     const { outputPath, durationSeconds } = await runSaveReplay()
+    /*
+     * No window is raised. The hotkey is pressed mid-game, and taking the
+     * foreground is the one thing a replay recorder must never do; the line of
+     * text is what says it worked.
+     */
     announceReplaySaved(outputPath, durationSeconds)
-    showMainWindow('/editor')
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     logger.error('Save replay failed', message)
@@ -317,8 +321,8 @@ async function handleToggleManualRecording(): Promise<void> {
     if (recorder.getStatus().isManualRecording) {
       const outputPath = await recorder.stopManualRecording()
       if (outputPath) {
+        announce('Recording stopped')
         announceReplaySaved(outputPath, 0)
-        showMainWindow('/editor')
       }
       return
     }
@@ -327,6 +331,7 @@ async function handleToggleManualRecording(): Promise<void> {
     await recorder.startManualRecording(
       join(settings.outputPath, `recording_${localTimestamp()}.mp4`),
     )
+    announce('Recording started')
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     logger.error('Manual recording toggle failed', message)
