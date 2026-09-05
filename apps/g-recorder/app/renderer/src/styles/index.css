@@ -927,17 +927,25 @@ kbd {
  *
  * Its own background rather than the window's: the window is transparent so
  * the dot can sit on a game, and text without a backing is unreadable on a
- * bright frame.
+ * bright frame. The ramp is the app's, so the message reads as coming from it
+ * rather than from the game.
+ *
+ * A dark rim under the fill, not instead of it: the accent is bright enough
+ * that over a pale frame the pill's own edge would disappear.
  */
 .state-message {
-  padding: 3px 9px;
+  padding: 3px 10px;
   border-radius: 999px;
-  background: rgb(0 0 0 / 0.78);
-  color: #fff;
+  background: var(--accent-gradient);
+  color: var(--text-on-accent);
   font-size: 12px;
+  font-weight: 550;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.35),
+    0 1px 6px rgb(0 0 0 / 0.45);
   animation: state-message-in 0.16s ease-out;
 }
 
