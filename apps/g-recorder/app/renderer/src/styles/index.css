@@ -118,6 +118,17 @@
   padding: 20px 24px 32px;
 }
 
+/*
+ * The editor fills the window rather than scrolling inside it.
+ *
+ * Its own children already share out the height, and the generous bottom
+ * padding the other pages want is picture the preview is not getting.
+ */
+.page:has(> .editor-layout) {
+  overflow: hidden;
+  padding: 14px 16px 16px;
+}
+
 .page-narrow {
   max-width: 720px;
   margin: 0 auto;
@@ -516,13 +527,16 @@ input:focus {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
-  /* Basis zero, so the preview takes what is left after the timeline and the
-     transport rather than sizing itself from the footage. The cap keeps it from
-     swallowing the page on a tall window; the floor keeps it usable on a short
-     one. */
+  /*
+   * Basis zero, so the preview takes everything left after the timeline and
+   * the transport rather than sizing itself from the footage.
+   *
+   * There is no cap. A 56vh ceiling both kept the picture small and left the
+   * space it refused sitting empty under the transport, which is the worst of
+   * both: the text in a 1440p recording is hard enough to read as it is.
+   */
   flex: 1 1 0;
   min-height: 180px;
-  max-height: 56vh;
   display: flex;
   align-items: center;
   justify-content: center;
