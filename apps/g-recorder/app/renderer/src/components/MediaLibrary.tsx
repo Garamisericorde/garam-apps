@@ -231,7 +231,9 @@ export default function MediaLibrary({
 
         {!loading && items.length === 0 && (
           <p className="small faint">
-            Nothing here yet. Save a replay, or import a video from anywhere.
+            {/* Saving a replay no longer puts it here; the list is what the
+                user brings to it, so the empty state has to say so. */}
+            Nothing here yet. Import a clip to work on it.
           </p>
         )}
 
