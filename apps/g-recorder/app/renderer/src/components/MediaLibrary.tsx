@@ -229,14 +229,8 @@ export default function MediaLibrary({
       <div className="library-list">
         {loading && <p className="small faint">Reading your clips…</p>}
 
-        {!loading && items.length === 0 && (
-          <p className="small faint">
-            {/* Saving a replay no longer puts it here; the list is what the
-                user brings to it, so the empty state has to say so. */}
-            Nothing here yet. Import a clip to work on it.
-          </p>
-        )}
-
+        {/* No empty state: the Import button above is the whole answer to an
+            empty list, and a line repeating it is one more thing to read. */}
         {!loading && items.length > 0 && (
           <p className="small faint">
             {picked.length > 1
