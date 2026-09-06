@@ -2104,10 +2104,16 @@ kbd {
  */
 .shortcut-table {
   display: grid;
-  grid-template-columns: 1fr max-content max-content;
+  /*
+   * Packed to the left, not spread across the window. A 1fr label column threw
+   * the keys to the far right of a wide window, where they are nowhere near
+   * the action they belong to and the eye has to travel the whole line.
+   */
+  grid-template-columns: max-content max-content max-content;
+  justify-content: start;
   align-items: center;
-  column-gap: 20px;
-  row-gap: 8px;
+  column-gap: 24px;
+  row-gap: 6px;
 }
 
 .shortcut-head {
