@@ -196,34 +196,46 @@ export default function RecordPage(): JSX.Element {
         {status?.error && <div className="banner banner-error">{status.error}</div>}
       </section>
 
-      <section className="capture-facts">
-        {/* The controller bindings sit with the keys rather than in a row of
-            their own: they are the same three actions, and which button does
-            what is only worth knowing next to the key it stands in for. */}
-        <Fact
+      <section className="shortcuts">
+        <div className="row-between">
+          <p className="section-title" style={{ margin: 0 }}>
+            Shortcuts
+          </p>
+          <button className="btn btn-ghost small" onClick={openHotkeySettings}>
+            Change
+          </button>
+        </div>
+
+        {/*
+          * Keys and buttons on one line each, because they are two ways to do
+          * the same thing. Drawn rather than printed: a shortcut is read at a
+          * glance in the middle of a game, and "Alt+Shift+F10" as running text
+          * has to be parsed.
+          */}
+        <Shortcut
           label="Save clip from buffer"
-          value={settings?.hotkeySaveReplay ?? 'Not bound'}
+          keys={settings?.hotkeySaveReplay ?? null}
           pad={settings?.padSaveReplay ?? null}
-          padConnected={padConnected}
-          onClick={openHotkeySettings}
-          mono
         />
-        <Fact
+        <Shortcut
           label="Turn buffer on / off"
-          value={settings?.hotkeyToggleRecording ?? 'Not bound'}
+          keys={settings?.hotkeyToggleRecording ?? null}
           pad={settings?.padToggleRecording ?? null}
-          padConnected={padConnected}
-          onClick={openHotkeySettings}
-          mono
         />
-        <Fact
+        <Shortcut
           label="Start / stop recording"
-          value={settings?.hotkeyRecordToFile ?? 'Not bound'}
+          keys={settings?.hotkeyRecordToFile ?? null}
           pad={settings?.padRecordToFile ?? null}
-          padConnected={padConnected}
-          onClick={openHotkeySettings}
-          mono
         />
+
+        <p className="small faint" style={{ margin: 0 }}>
+          {padConnected
+            ? 'Controller connected.'
+            : 'No controller connected. Bindings are kept and work as soon as one is.'}
+        </p>
+      </section>
+
+      <section className="capture-facts">
         <Fact
           label="Replay length"
           value={settings ? `${settings.replayLengthMinutes} min` : '...'}
@@ -261,47 +273,71 @@ export default function RecordPage(): JSX.Element {
   )
 }
 
+/**
+ * One action, and the two ways to reach it.
+ *
+ * Keys and buttons are drawn as the things they are rather than printed as
+ * text: a shortcut gets read at a glance in the middle of a game, and
+ * "Alt+Shift+F10" as running text has to be parsed first.
+ *
+ * A controller binding is shown whether or not a pad is awake. It is a
+ * setting, and hiding it while the pad sleeps makes the app look like it
+ * forgot.
+ */
+function Shortcut({
+  label,
+  keys,
+  pad,
+}: {
+  label: string
+  keys: string | null
+  pad: string | null
+}): JSX.Element {
+  return (
+    <div className="shortcut">
+      <span className="shortcut-label">{label}</span>
+
+      <span className="shortcut-keys">
+        {keys ? (
+          keys.split('+').map((key, index) => (
+            <span key={`${key}-${index}`} className="key-cap">
+              {key}
+            </span>
+          ))
+        ) : (
+          <span className="small faint">Not bound</span>
+        )}
+      </span>
+
+      <span className="shortcut-pad">
+        {pad ? (
+          pad.split('+').map((button, index) => (
+            <span key={`${button}-${index}`} className={`pad-cap is-${button.toLowerCase()}`}>
+              {button}
+            </span>
+          ))
+        ) : (
+          <span className="small faint">No button</span>
+        )}
+      </span>
+    </div>
+  )
+}
+
 function Fact({
   label,
   value,
-  pad,
-  padConnected = false,
   mono,
-  onClick,
 }: {
   label: string
   value: string
-  /**
-   * The same action on a controller.
-   *
-   * null means a pad is plugged in and this action has no button on it, which
-   * is worth showing: with only the bound ones drawn, the rows without a badge
-   * read as "controllers do not do that" rather than "you have not set it".
-   */
-  pad?: string | null
-  /** Whether a controller is there at all, which is what decides if pad shows */
-  padConnected?: boolean
-  /** Where this fact is changed, when it is something that can be */
-  onClick?: () => void
   mono?: boolean
 }): JSX.Element {
-  const Tag = onClick ? 'button' : 'div'
-
   return (
-    <Tag
-      className={`fact${onClick ? ' is-actionable' : ''}`}
-      onClick={onClick}
-      title={onClick ? 'Change this in Settings' : undefined}
-    >
+    <div className="fact">
       <span className="fact-label">{label}</span>
       <span className={`fact-value${mono ? ' mono' : ''}`}>{value}</span>
-      {padConnected &&
-        (pad ? (
-          <span className="fact-pad mono">{pad}</span>
-        ) : (
-          <span className="fact-pad is-unbound">No button yet</span>
-        ))}
-    </Tag>
+    </div>
   )
 }
 

@@ -2084,3 +2084,82 @@ kbd {
   white-space: nowrap;
   pointer-events: none;
 }
+
+/* ── Shortcuts ───────────────────────────────────────────────────────────── */
+
+.shortcuts {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+
+.shortcut {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.shortcut-label {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.shortcut-keys,
+.shortcut-pad {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* The keys, drawn as keys */
+.key-cap {
+  min-width: 24px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * The pad buttons, in the colours a controller actually uses. Nothing else on
+ * screen is those colours, which is what makes them readable without being
+ * read: green means A wherever you see it.
+ */
+.pad-cap {
+  min-width: 24px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.pad-cap.is-a { border-color: #3ba55d; color: #57d982; }
+.pad-cap.is-b { border-color: #d83c3e; color: #f2696b; }
+.pad-cap.is-x { border-color: #3b7fd6; color: #6ea8f0; }
+.pad-cap.is-y { border-color: #d6a53b; color: #f0cb6e; }
+
+/* The shoulders and sticks read as a group, distinct from the face buttons. */
+.pad-cap.is-lb,
+.pad-cap.is-rb,
+.pad-cap.is-lt,
+.pad-cap.is-rt,
+.pad-cap.is-ls,
+.pad-cap.is-rs {
+  border-color: var(--accent);
+  color: var(--accent-hover);
+}
