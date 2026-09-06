@@ -1,6 +1,6 @@
-import { app, BrowserWindow, nativeImage, shell } from 'electron'
+import { app, BrowserWindow, dialog, nativeImage, shell } from 'electron'
 import { join, resolve } from 'path'
-import { existsSync } from 'fs'
+import { existsSync, rmSync } from 'fs'
 import { electronApp, is } from '@electron-toolkit/utils'
 import { violetSurfaces } from '@garam/theme'
 import { logger } from './logging/logger'
@@ -137,18 +137,21 @@ function createMainWindow(): void {
   })
 
   /*
-   * The close button hides to the tray; only the tray's Exit really quits.
-   * A recorder that stops when its window is closed stops recording, which is
-   * the opposite of what closing a window means for a background capture tool.
+   * Minimize gets out of the way; the close button closes.
    *
-   * Minimize is deliberately left alone. Hiding on minimize too would take the
-   * taskbar button away, and minimize is exactly the gesture people use when
-   * they still want the app one click away.
+   * They mean different things and the app now says so. Minimize hides to the
+   * tray with everything still running, which is the gesture for "keep
+   * recording, I am playing". The close button ends the app, and asks first
+   * whenever ending it would stop a capture.
    */
+  // 'minimize' fires after the fact and cannot be prevented, so the window is
+  // hidden from under it: the taskbar button goes, the tray icon stays.
+  mainWindow.on('minimize', () => mainWindow?.hide())
+
   mainWindow.on('close', (event) => {
     if (isQuitting) return
     event.preventDefault()
-    mainWindow?.hide()
+    void confirmClose()
   })
 
   mainWindow.on('closed', () => {
@@ -251,6 +254,67 @@ function createTray(): void {
   })
 
   tray.update(recorder.getStatus())
+}
+
+/**
+ * Close the app, after asking about anything it would interrupt.
+ *
+ * Closing while a capture runs is the one destructive thing this window does,
+ * and it is one click from everything else. A recording in progress gets the
+ * full three answers, because "close without saving" is a real thing to want
+ * and losing the take by accident is not.
+ */
+async function confirmClose(): Promise<void> {
+  const recorder = RecorderService.getInstance()
+  const status = recorder.getStatus()
+  const window = mainWindow
+
+  if (status.isManualRecording && window) {
+    const { response } = await dialog.showMessageBox(window, {
+      type: 'question',
+      buttons: ['Save and close', 'Discard and close', 'Cancel'],
+      defaultId: 0,
+      cancelId: 2,
+      title: 'Recording in progress',
+      message: 'A recording is still running.',
+      detail: 'Closing G-Recorder stops it. Keep what has been recorded so far?',
+    })
+
+    if (response === 2) return
+
+    try {
+      const outputPath = await recorder.stopManualRecording()
+      if (response === 1 && outputPath) {
+        // "Discard" has to mean it. Leaving the file behind would be the app
+        // deciding it knew better than the button that was pressed.
+        rmSync(outputPath, { force: true })
+        logger.info('Recording discarded on close', { outputPath })
+      } else if (outputPath) {
+        announceReplaySaved(outputPath, 0)
+      }
+    } catch (err) {
+      logger.error('Could not stop the recording while closing', String(err))
+    }
+
+    await quit()
+    return
+  }
+
+  if (status.isRecording && window) {
+    const { response } = await dialog.showMessageBox(window, {
+      type: 'question',
+      buttons: ['Close', 'Cancel'],
+      defaultId: 1,
+      cancelId: 1,
+      title: 'Instant replay is on',
+      message: 'Closing stops the replay buffer.',
+      detail: 'Whatever it is holding is discarded. Minimize instead to leave it running.',
+    })
+
+    if (response === 1) return
+  }
+
+  await quit()
 }
 
 function toggleMainWindow(): void {

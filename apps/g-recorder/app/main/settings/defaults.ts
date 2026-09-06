@@ -11,7 +11,12 @@ import {
 
 export const DEFAULT_SETTINGS: AppSettings = {
   // Capture
-  replayLengthMinutes: 5,
+  /*
+   * Two minutes. Long enough that a round you want back is still in it, short
+   * enough that the cache is a couple of hundred megabytes rather than a
+   * gigabyte being rewritten all evening.
+   */
+  replayLengthMinutes: 2,
   segmentDurationSeconds: 2,
   fps: 60,
   resolution: '1080p',
@@ -27,7 +32,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
   // Behaviour
   autoStartRecording: true,
-  launchOnStartup: false,
+  /*
+   * On by default, like g-snap. A replay buffer that has to be started by hand
+   * is a replay buffer that is off for the moment worth keeping.
+   */
+  launchOnStartup: true,
   showOverlay: true,
 
   // Output
