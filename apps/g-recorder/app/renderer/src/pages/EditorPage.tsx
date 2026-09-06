@@ -808,7 +808,7 @@ export default function EditorPage(): JSX.Element {
              * rectangle and then having to imagine the result.
              */
             <div
-              className={showCrop ? 'stage-crop' : undefined}
+              className={`stage-media${showCrop ? ' stage-crop' : ''}`}
               style={
                 showCrop
                   ? {
