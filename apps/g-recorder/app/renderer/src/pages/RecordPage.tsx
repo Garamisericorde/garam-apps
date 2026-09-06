@@ -66,6 +66,16 @@ export default function RecordPage(): JSX.Element {
     return () => clearInterval(timer)
   }, [])
 
+  /** The hotkey rows are also the way to change them */
+  const openHotkeySettings = useCallback(() => {
+    navigate('/settings')
+    // The section is rendered by the page that is about to mount, so the jump
+    // waits for it rather than running against a page that is not there yet.
+    requestAnimationFrame(() => {
+      document.getElementById('settings-hotkeys')?.scrollIntoView({ block: 'start' })
+    })
+  }, [navigate])
+
   const run = useCallback(
     async (kind: 'toggle' | 'save' | 'record' | 'clear', action: () => Promise<unknown>) => {
       setBusy(kind)
@@ -195,6 +205,7 @@ export default function RecordPage(): JSX.Element {
           value={settings?.hotkeySaveReplay ?? 'Not bound'}
           pad={settings?.padSaveReplay ?? null}
           padConnected={padConnected}
+          onClick={openHotkeySettings}
           mono
         />
         <Fact
@@ -202,6 +213,7 @@ export default function RecordPage(): JSX.Element {
           value={settings?.hotkeyToggleRecording ?? 'Not bound'}
           pad={settings?.padToggleRecording ?? null}
           padConnected={padConnected}
+          onClick={openHotkeySettings}
           mono
         />
         <Fact
@@ -209,6 +221,7 @@ export default function RecordPage(): JSX.Element {
           value={settings?.hotkeyRecordToFile ?? 'Not bound'}
           pad={settings?.padRecordToFile ?? null}
           padConnected={padConnected}
+          onClick={openHotkeySettings}
           mono
         />
         <Fact
@@ -254,6 +267,7 @@ function Fact({
   pad,
   padConnected = false,
   mono,
+  onClick,
 }: {
   label: string
   value: string
@@ -267,19 +281,27 @@ function Fact({
   pad?: string | null
   /** Whether a controller is there at all, which is what decides if pad shows */
   padConnected?: boolean
+  /** Where this fact is changed, when it is something that can be */
+  onClick?: () => void
   mono?: boolean
 }): JSX.Element {
+  const Tag = onClick ? 'button' : 'div'
+
   return (
-    <div className="fact">
+    <Tag
+      className={`fact${onClick ? ' is-actionable' : ''}`}
+      onClick={onClick}
+      title={onClick ? 'Change this in Settings' : undefined}
+    >
       <span className="fact-label">{label}</span>
       <span className={`fact-value${mono ? ' mono' : ''}`}>{value}</span>
       {padConnected &&
         (pad ? (
           <span className="fact-pad mono">{pad}</span>
         ) : (
-          <span className="fact-pad is-unbound">No button · set one in Settings</span>
+          <span className="fact-pad is-unbound">No button yet</span>
         ))}
-    </div>
+    </Tag>
   )
 }
 

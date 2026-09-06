@@ -111,8 +111,23 @@ export class GamepadHotkeys {
     return xinputAvailable()
   }
 
-  /** Whether a pad has actually answered, which is what users want to know */
+  /**
+   * Whether a pad has actually answered.
+   *
+   * Asks the slots rather than reporting what the poll loop last saw: the loop
+   * only runs once something is bound, so before that this could only ever say
+   * "no controller" — including on the screen whose whole job is to offer to
+   * bind one.
+   *
+   * The scan is the expensive kind (an empty slot costs about a millisecond),
+   * which is why it is here and not in the poll: the UI asks every couple of
+   * seconds, and only while a page that shows it is open.
+   */
   padConnected(): boolean {
+    for (let index = 0; index < MAX_PADS; index += 1) {
+      if (readPad(index) === null) this.connected.delete(index)
+      else this.connected.add(index)
+    }
     return this.connected.size > 0
   }
 

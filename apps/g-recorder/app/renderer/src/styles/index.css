@@ -1125,6 +1125,8 @@ kbd {
 
 .fact {
   display: flex;
+  text-align: left;
+  border: none;
   flex-direction: column;
   gap: 3px;
   padding: 12px 14px;
@@ -1852,6 +1854,16 @@ kbd {
   border: none;
   background: var(--accent);
   box-shadow: 0 0 6px var(--accent);
+}
+
+/* A fact you can act on says so on hover, and nowhere else */
+.fact.is-actionable {
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.fact.is-actionable:hover {
+  background: var(--bg-elevated);
 }
 
 /*
