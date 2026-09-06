@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
-import type { AppSettings, MediaInfo } from '../../../shared/types'
+import type { AppSettings, FrameCrop, MediaInfo } from '../../../shared/types'
 import { formatBytes, formatTime } from '../../../shared/time'
 import {
   appendClip,
@@ -29,6 +29,7 @@ import type { PendingDrop, Selection, SourceAssets } from '../components/Timelin
 import TrimControls from '../components/TrimControls'
 import { fitSpan, FIT_VIEW } from '../components/timelineView'
 import type { TimelineView } from '../components/timelineView'
+import CropOverlay, { FULL_FRAME, isCropped } from '../components/CropOverlay'
 import PresetPicker from '../components/PresetPicker'
 import MediaLibrary from '../components/MediaLibrary'
 import type { ExportControl } from '../components/PresetPicker'
@@ -141,6 +142,15 @@ export default function EditorPage(): JSX.Element {
   /* How much of the timeline the strip spans. Held here because the strip's
      wheel and the transport's buttons both move it. */
   const [view, setView] = useState<TimelineView>(FIT_VIEW)
+  /*
+   * What to keep of the frame, and whether the rectangle is on screen.
+   *
+   * One crop for the export rather than one per clip: it answers "what part of
+   * my screen is worth showing", which is a property of the recording setup,
+   * not of the moment.
+   */
+  const [crop, setCrop] = useState<FrameCrop>(FULL_FRAME)
+  const [cropping, setCropping] = useState(false)
   const [dragOver, setDragOver] = useState<'stage' | 'timeline' | null>(null)
   /** Where an incoming clip would land, drawn while it is over the lanes */
   const [pendingDrop, setPendingDrop] = useState<PendingDrop | null>(null)
@@ -798,14 +808,25 @@ export default function EditorPage(): JSX.Element {
               onPlayingChange={setIsPlaying}
               onError={setError}
             />
-          ) : (
+          ) : null}
+
+          {cropping && activeSource && (
+            <CropOverlay
+              crop={crop}
+              sourceWidth={activeSource.info.width || 1920}
+              sourceHeight={activeSource.info.height || 1080}
+              onChange={setCrop}
+            />
+          )}
+
+          {!activeItem || !activeSource ? (
             <div className="stage-empty">
               {/* The library beside this holds the clips and the way to add
                   more, so the empty state points at it rather than repeating
                   its buttons. */}
               <p>Pick a clip from the left, or drop a video here.</p>
             </div>
-          )}
+          ) : null}
         </div>
 
         <div
@@ -846,6 +867,10 @@ export default function EditorPage(): JSX.Element {
           onRemove={() => selected && handleRemove(selected.lane, selected.id)}
           onClear={clearTimeline}
           onSeek={handleSeek}
+          cropping={cropping}
+          cropped={isCropped(crop)}
+          onToggleCrop={() => setCropping((on) => !on)}
+          onResetCrop={() => setCrop(FULL_FRAME)}
           view={view}
           span={fitSpan(duration)}
           onViewChange={setView}
@@ -859,6 +884,7 @@ export default function EditorPage(): JSX.Element {
 
         <PresetPicker
           timeline={exportTimeline}
+          crop={isCropped(crop) ? crop : undefined}
           hasAudio={timeline.audio.length > 0}
           disabled={duration <= 0}
           onControlChange={setExportControl}

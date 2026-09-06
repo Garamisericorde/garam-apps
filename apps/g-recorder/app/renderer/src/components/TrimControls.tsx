@@ -17,6 +17,11 @@ interface TrimControlsProps {
   onRemove: () => void
   onClear: () => void
   onSeek: (seconds: number) => void
+  /** Whether the crop rectangle is on screen, and whether it takes anything */
+  cropping: boolean
+  cropped: boolean
+  onToggleCrop: () => void
+  onResetCrop: () => void
   onToggleFullscreen: () => void
   /* The timeline's zoom rides here rather than in a row of its own: it is
      three small controls, and a whole row of window height for them costs more
@@ -44,6 +49,10 @@ export default function TrimControls({
   onRemove,
   onClear,
   onSeek,
+  cropping,
+  cropped,
+  onToggleCrop,
+  onResetCrop,
   onToggleFullscreen,
   view,
   span,
@@ -157,6 +166,20 @@ export default function TrimControls({
             <path d="M4 8V4h4M16 8V4h-4M4 12v4h4M16 12v4h-4" />
           </svg>
         </button>
+
+        <button
+          className={`btn${cropping ? ' btn-primary' : ''}`}
+          onClick={onToggleCrop}
+          disabled={disabled}
+          title="Draw what to keep of the frame"
+        >
+          {cropping ? 'Done' : 'Crop'}
+        </button>
+        {cropped && (
+          <button className="btn btn-ghost" onClick={onResetCrop} title="Keep the whole frame">
+            Reset crop
+          </button>
+        )}
 
         <button
           className="btn"

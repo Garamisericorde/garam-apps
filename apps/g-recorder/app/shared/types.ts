@@ -141,8 +141,24 @@ export interface ExportTimeline {
  */
 export type EncodeEffort = 'fast' | 'balanced' | 'small'
 
+/**
+ * A crop the user drew, as fractions of the source frame.
+ *
+ * Fractions rather than pixels because it is drawn on a preview whose size has
+ * nothing to do with the recording's, and because it then survives the clip
+ * being swapped for one at another resolution.
+ */
+export interface FrameCrop {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 export interface ExportOptions {
   presetId: string
+  /** The user's crop, or absent to keep the whole frame */
+  crop?: FrameCrop
   effort: EncodeEffort
   timeline: ExportTimeline
   /** Folder to write into; empty string = the configured export folder */

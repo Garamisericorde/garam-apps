@@ -2,7 +2,14 @@ import { spawn } from 'child_process'
 import type { ChildProcess } from 'child_process'
 import { join } from 'path'
 import { createWriteStream, mkdirSync, readdirSync, rmSync } from 'fs'
-import type { AspectId, EncoderType, ExportOptions, ExportProgress, MediaInfo } from '../../shared/types'
+import type {
+  AspectId,
+  EncoderType,
+  ExportOptions,
+  ExportProgress,
+  FrameCrop,
+  MediaInfo,
+} from '../../shared/types'
 import { getAspectRatio, getPreset, resolutionHeight } from '../../shared/presets'
 import { logsDir } from '../../shared/paths'
 import { nextNumberedName, sanitizeNamePattern } from '../../shared/exportNaming'
@@ -144,7 +151,12 @@ export class ExportService {
     const settings = SettingsStore.getInstance().get()
     const encoder: EncoderType = resolveEncoder(settings.encoder, caps)
 
-    const framing = computeFraming(info, options.aspect, resolutionHeight(preset.resolution))
+    const framing = computeFraming(
+      info,
+      options.aspect,
+      resolutionHeight(preset.resolution),
+      options.crop,
+    )
     /*
      * The audio lane decides, not the first source's own track. With several
      * clips the first one may be silent while the rest are not, and reading
@@ -397,6 +409,7 @@ export function computeFraming(
   info: MediaInfo,
   aspect: AspectId,
   targetHeight: number | null,
+  drawn?: FrameCrop,
 ): Framing {
   const sourceWidth = info.width || 1920
   const sourceHeight = info.height || 1080
@@ -405,6 +418,28 @@ export function computeFraming(
   let crop: CropRect | null = null
   let width = sourceWidth
   let height = sourceHeight
+
+  /*
+   * A crop the user drew wins over the aspect preset.
+   *
+   * The preset takes a centred slice of a given shape; a drawn rectangle says
+   * where. Applying both would move the rectangle the user placed, which is the
+   * one thing it must not do — so the aspect becomes a no-op once one exists.
+   */
+  if (drawn) {
+    const cropWidth = toEvenSize(Math.max(drawn.width, 0.01) * sourceWidth)
+    const cropHeight = toEvenSize(Math.max(drawn.height, 0.01) * sourceHeight)
+    const x = toEvenOffset(Math.min(drawn.x * sourceWidth, sourceWidth - cropWidth))
+    const y = toEvenOffset(Math.min(drawn.y * sourceHeight, sourceHeight - cropHeight))
+
+    crop = { width: cropWidth, height: cropHeight, x: Math.max(0, x), y: Math.max(0, y) }
+    const outHeight = toEvenSize(targetHeight ? Math.min(targetHeight, cropHeight) : cropHeight)
+    return {
+      crop,
+      outHeight,
+      outWidth: toEvenSize((cropWidth * outHeight) / cropHeight),
+    }
+  }
 
   if (ratio !== null) {
     const cropWidth = toEvenSize(Math.min(sourceWidth, sourceHeight * ratio))

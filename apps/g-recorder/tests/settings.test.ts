@@ -191,3 +191,68 @@ describe('bindings survive a round trip', () => {
     expect(validated.sort()).toEqual(Object.keys(DEFAULT_SETTINGS).sort())
   })
 })
+
+describe('a crop drawn on the preview', () => {
+  const info = {
+    path: 'a.mp4',
+    durationSeconds: 10,
+    width: 2560,
+    height: 1440,
+    fps: 60,
+    hasAudio: true,
+    sizeBytes: 0,
+  }
+
+  it('cuts exactly where it was drawn', () => {
+    // Half the height, starting a quarter of the way down.
+    const framing = computeFraming(info, 'source', null, {
+      x: 0,
+      y: 0.25,
+      width: 1,
+      height: 0.5,
+    })
+
+    expect(framing.crop).toEqual({ x: 0, y: 360, width: 2560, height: 720 })
+    expect(framing.outWidth).toBe(2560)
+    expect(framing.outHeight).toBe(720)
+  })
+
+  it('rounds to even, since half a pixel is not a video', () => {
+    const framing = computeFraming(info, 'source', null, {
+      x: 0.1,
+      y: 0.1,
+      width: 0.333,
+      height: 0.333,
+    })
+
+    expect(framing.crop!.width % 2).toBe(0)
+    expect(framing.crop!.height % 2).toBe(0)
+    expect(framing.crop!.x % 2).toBe(0)
+    expect(framing.crop!.y % 2).toBe(0)
+  })
+
+  it('keeps the rectangle inside the frame', () => {
+    const framing = computeFraming(info, 'source', null, {
+      x: 0.9,
+      y: 0.9,
+      width: 0.5,
+      height: 0.5,
+    })
+
+    expect(framing.crop!.x + framing.crop!.width).toBeLessThanOrEqual(2560)
+    expect(framing.crop!.y + framing.crop!.height).toBeLessThanOrEqual(1440)
+  })
+
+  it('overrides the aspect preset rather than compounding with it', () => {
+    // Applying both would move the rectangle the user placed, which is the one
+    // thing it must not do.
+    const framing = computeFraming(info, '1:1', null, { x: 0, y: 0, width: 1, height: 0.5 })
+    expect(framing.crop).toEqual({ x: 0, y: 0, width: 2560, height: 720 })
+  })
+
+  it('scales the crop to the preset height, not the source height', () => {
+    const framing = computeFraming(info, 'source', 720, { x: 0, y: 0, width: 0.5, height: 1 })
+    expect(framing.outHeight).toBe(720)
+    expect(framing.outWidth).toBe(640)
+  })
+})

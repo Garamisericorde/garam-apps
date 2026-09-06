@@ -14,6 +14,7 @@ import type {
   ExportOptions,
   ExportProgress,
   ExportTimeline,
+  FrameCrop,
   UserExportPreset,
 } from '../../../shared/types'
 import { formatBytes, formatDuration } from '../../../shared/time'
@@ -21,6 +22,8 @@ import { formatBytes, formatDuration } from '../../../shared/time'
 interface PresetPickerProps {
   /** The whole timeline, which is what gets rendered */
   timeline: ExportTimeline
+  /** The rectangle drawn on the preview, or absent for the whole frame */
+  crop?: FrameCrop
   hasAudio: boolean
   disabled?: boolean
   /**
@@ -54,6 +57,7 @@ type ExportState = 'idle' | 'exporting' | 'done' | 'error'
  */
 export default function PresetPicker({
   timeline,
+  crop,
   hasAudio,
   disabled = false,
   onControlChange,
@@ -125,6 +129,7 @@ export default function PresetPicker({
     const options: ExportOptions = {
       presetId,
       effort,
+      crop,
       timeline,
       directory,
       // Empty means "the next name in the pattern", settled against the folder
@@ -155,6 +160,7 @@ export default function PresetPicker({
     }
   }, [
     aspect,
+    crop,
     directory,
     effort,
     fileName,
