@@ -2056,7 +2056,7 @@ kbd {
 
 .crop-rect {
   position: absolute;
-  border: 1px solid var(--accent);
+  border: 1px solid rgb(255 255 255 / 0.85);
   box-shadow: 0 0 0 1px rgb(0 0 0 / 0.5);
   cursor: move;
 }
@@ -2083,23 +2083,97 @@ kbd {
     linear-gradient(to bottom, transparent 66.66%, #fff 66.66%, #fff calc(66.66% + 1px), transparent calc(66.66% + 1px));
 }
 
+/*
+ * Handles shaped like what they do.
+ *
+ * An edge is a bar lying along that edge; a corner is a bracket wrapping it.
+ * Eight identical squares said nothing about which one moved what, and a
+ * square straddling a corner reads as a point rather than as the corner
+ * itself.
+ *
+ * White with a dark rim, not the accent: these sit on arbitrary footage, and
+ * white over a thin black outline is the one pair that survives any frame
+ * behind it.
+ */
 .crop-handle {
   position: absolute;
-  width: 12px;
-  height: 12px;
-  background: var(--accent);
-  border: 1px solid #fff;
-  border-radius: 2px;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.65);
 }
 
-.crop-handle.is-n { top: -6px; left: calc(50% - 6px); cursor: ns-resize; }
-.crop-handle.is-s { bottom: -6px; left: calc(50% - 6px); cursor: ns-resize; }
-.crop-handle.is-w { left: -6px; top: calc(50% - 6px); cursor: ew-resize; }
-.crop-handle.is-e { right: -6px; top: calc(50% - 6px); cursor: ew-resize; }
-.crop-handle.is-nw { top: -6px; left: -6px; cursor: nwse-resize; }
-.crop-handle.is-ne { top: -6px; right: -6px; cursor: nesw-resize; }
-.crop-handle.is-sw { bottom: -6px; left: -6px; cursor: nesw-resize; }
-.crop-handle.is-se { bottom: -6px; right: -6px; cursor: nwse-resize; }
+/* Edges: a bar along the edge it moves */
+.crop-handle.is-n,
+.crop-handle.is-s {
+  left: 50%;
+  width: 28px;
+  height: 4px;
+  margin-left: -14px;
+  border-radius: 2px;
+  cursor: ns-resize;
+}
+
+.crop-handle.is-n { top: -2px; }
+.crop-handle.is-s { bottom: -2px; }
+
+.crop-handle.is-e,
+.crop-handle.is-w {
+  top: 50%;
+  width: 4px;
+  height: 28px;
+  margin-top: -14px;
+  border-radius: 2px;
+  cursor: ew-resize;
+}
+
+.crop-handle.is-w { left: -2px; }
+.crop-handle.is-e { right: -2px; }
+
+/* Corners: a bracket, drawn from two borders so the corner stays open */
+.crop-handle.is-nw,
+.crop-handle.is-ne,
+.crop-handle.is-sw,
+.crop-handle.is-se {
+  width: 18px;
+  height: 18px;
+  background: transparent;
+  box-shadow: none;
+  border-style: solid;
+  border-color: #fff;
+  border-width: 0;
+  filter: drop-shadow(0 0 1px rgb(0 0 0 / 0.9));
+}
+
+.crop-handle.is-nw {
+  top: -3px;
+  left: -3px;
+  border-top-width: 4px;
+  border-left-width: 4px;
+  cursor: nwse-resize;
+}
+
+.crop-handle.is-ne {
+  top: -3px;
+  right: -3px;
+  border-top-width: 4px;
+  border-right-width: 4px;
+  cursor: nesw-resize;
+}
+
+.crop-handle.is-sw {
+  bottom: -3px;
+  left: -3px;
+  border-bottom-width: 4px;
+  border-left-width: 4px;
+  cursor: nesw-resize;
+}
+
+.crop-handle.is-se {
+  bottom: -3px;
+  right: -3px;
+  border-bottom-width: 4px;
+  border-right-width: 4px;
+  cursor: nwse-resize;
+}
 
 /* The size it will export at, which is the number that decides if it is enough */
 .crop-size {
