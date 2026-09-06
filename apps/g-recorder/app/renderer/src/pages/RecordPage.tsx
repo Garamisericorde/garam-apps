@@ -100,7 +100,7 @@ export default function RecordPage(): JSX.Element {
   const state = recording ? 'Recording to file' : buffering ? 'Instant replay on' : 'Not recording'
 
   return (
-    <div className="stack" style={{ gap: 16 }}>
+    <div className="record-page">
       {error && (
         <div className="banner banner-error">
           <span style={{ flex: 1 }}>{error}</span>

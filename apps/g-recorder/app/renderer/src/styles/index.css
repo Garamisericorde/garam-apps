@@ -1052,6 +1052,21 @@ kbd {
 
 /* ── Record page ─────────────────────────────────────────────────────────── */
 
+/*
+ * The page is capped and centred.
+ *
+ * Stretched across a 2000-pixel window the progress bar became a rule with a
+ * number at each far end, and the shortcuts sat in the left third of an empty
+ * field. Everything here is read together, so it is held together.
+ */
+.record-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 1080px;
+  margin: 0 auto;
+}
+
 .capture-card {
   position: relative;
   overflow: hidden;
@@ -2090,7 +2105,7 @@ kbd {
 .shortcuts {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   padding: 14px 16px;
   border-radius: var(--radius);
   border: 1px solid var(--border);
@@ -2102,24 +2117,28 @@ kbd {
  * Rows sizing themselves left the chips ragged, which turns a list you scan
  * into three lines you read across.
  */
-/* The table and the standing numbers, side by side */
+/*
+ * The table and the standing numbers, side by side, each taking half. Sized to
+ * their content they left a gap down the middle of the card.
+ */
 .shortcuts-body {
-  display: flex;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: start;
   gap: 24px;
 }
 
 .shortcut-table {
   display: grid;
+  width: 100%;
   /*
    * Packed to the left, not spread across the window. A 1fr label column threw
    * the keys to the far right of a wide window, where they are nowhere near
    * the action they belong to and the eye has to travel the whole line.
    */
-  grid-template-columns: max-content max-content max-content;
-  justify-content: start;
+  /* The label takes the slack so the two chip columns stay next to each other */
+  grid-template-columns: 1fr max-content max-content;
   align-items: center;
-  flex: 0 0 auto;
 }
 
 /*
@@ -2129,8 +2148,12 @@ kbd {
  * inside each cell instead and the border runs the width of the table.
  */
 .shortcut-table > * {
-  padding: 7px 24px 7px 0;
+  padding: 6px 0 6px 18px;
   border-bottom: 1px solid var(--border);
+}
+
+.shortcut-table > *:nth-child(3n + 1) {
+  padding-left: 0;
 }
 
 .shortcut-table > *:nth-last-child(-n + 3) {
@@ -2154,7 +2177,7 @@ kbd {
 .capture-stats {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   padding-left: 24px;
   border-left: 1px solid var(--border);
   align-self: stretch;
