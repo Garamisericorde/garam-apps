@@ -263,12 +263,22 @@
   color: var(--text);
 }
 
+/*
+ * The slot stretches across the middle of the bar, so it has to stay a drag
+ * region: marking the whole slot no-drag leaves a frameless window with almost
+ * nothing to grab. Its children opt out one by one instead.
+ */
 .g-titlebar__slot {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
   flex: 1;
   min-width: 0;
+  -webkit-app-region: drag;
+}
+
+.g-titlebar__slot > * {
+  -webkit-app-region: no-drag;
 }
 
 .g-titlebar__controls {
@@ -303,6 +313,13 @@
 
 .g-panel {
   position: relative;
+  /*
+   * A card states its own height; it is never the thing that gives way when a
+   * column runs out of room. Without this, a panel inside a scrolling flex
+   * column is squashed instead of scrolled — and because of the overflow below,
+   * squashed silently.
+   */
+  flex-shrink: 0;
   overflow: hidden;
   background: var(--bg-surface);
   border: 1px solid var(--border);
