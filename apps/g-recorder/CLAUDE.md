@@ -245,6 +245,18 @@ changes, so an idle desktop is legitimately 100% duplicates: nothing here can
 tell "the capture cannot keep up" from "nothing is happening", and a warning
 that fires whenever the machine is quiet teaches people to ignore it.
 
+## The poll loop must not block
+
+The buffer's once-a-second poll runs on the process that also pumps window and
+input messages, so **any synchronous file call there is felt as the whole app
+hitching** — most visibly while dragging the window, which Windows drives from
+that same message loop. Deleting a spent 16 MB segment while the disk is busy
+writing the next one is the worst offender; reading the segment list and
+writing the index are the others.
+
+All three are async, and a poll that is still running skips the next tick
+rather than stacking up on a slow disk.
+
 ## Stability requirements
 - FFmpeg processes must be managed robustly:
   - log stderr to file

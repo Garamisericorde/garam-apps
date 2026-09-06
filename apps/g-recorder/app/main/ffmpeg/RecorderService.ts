@@ -13,6 +13,7 @@ import {
   statSync,
   writeFileSync,
 } from 'fs'
+import { readFile, rm, writeFile } from 'fs/promises'
 import type {
   AppSettings,
   EncoderType,
@@ -154,6 +155,8 @@ export class RecorderService {
   private _sawProgress = false
   /** Set when the segment set changes, so an unchanged index is not rewritten */
   private _indexDirty = false
+  /** A poll still running, so a slow disk cannot stack them up */
+  private _polling = false
 
   /** Set while a replay is being written, to keep pruning off the used files */
   private _saveHolds = 0
@@ -849,21 +852,37 @@ export class RecorderService {
 
   private startPolling(settings: AppSettings): void {
     this.stopPolling()
+    /*
+     * Nothing in here may block.
+     *
+     * This runs on the process that also pumps window and input messages, so a
+     * synchronous read, unlink or write is felt as the whole app hitching —
+     * most visibly while dragging the window, which Windows drives from that
+     * same message loop. Deleting a spent 16 MB segment while the disk is busy
+     * writing the next one is the worst of them.
+     */
     this._pollTimer = setInterval(() => {
-      try {
-        this.checkForStall()
-        this.refreshSegments()
-        this.pruneSegments(settings)
-        // Only when it changed: the index is a few hundred entries of JSON, and
-        // rewriting an unchanged file every second is pure blocking I/O.
-        if (this._indexDirty) {
-          this.saveIndex()
-          this._indexDirty = false
+      if (this._polling) return
+      this._polling = true
+
+      void (async () => {
+        try {
+          this.checkForStall()
+          await this.refreshSegments()
+          await this.pruneSegments(settings)
+          // Only when it changed: the index is a few hundred entries of JSON,
+          // and rewriting an unchanged file every second is I/O for nothing.
+          if (this._indexDirty) {
+            this._indexDirty = false
+            await this.saveIndex()
+          }
+          this.emitSegmentStatus(settings)
+        } catch (err) {
+          logger.error('RecorderService: poll error', String(err))
+        } finally {
+          this._polling = false
         }
-        this.emitSegmentStatus(settings)
-      } catch (err) {
-        logger.error('RecorderService: poll error', String(err))
-      }
+      })()
     }, POLL_INTERVAL_MS)
   }
 
@@ -878,8 +897,8 @@ export class RecorderService {
    * Read FFmpeg's own segment list. It records exact start/end offsets, which
    * beats inferring timings from file modification times.
    */
-  private refreshSegments(): void {
-    for (const entry of readSegmentList(segmentListPath())) {
+  private async refreshSegments(): Promise<void> {
+    for (const entry of await readSegmentList(segmentListPath())) {
       if (this._knownSegments.has(entry.filename)) continue
       if (!existsSync(join(cacheDir(), entry.filename))) continue
 
@@ -927,7 +946,7 @@ export class RecorderService {
   }
 
   /** Drop segments that have aged out of the replay window */
-  private pruneSegments(settings: AppSettings): void {
+  private async pruneSegments(settings: AppSettings): Promise<void> {
     if (this._saveHolds > 0) return // a save is reading these files right now
 
     const keepMs =
@@ -941,7 +960,7 @@ export class RecorderService {
       this._knownSegments.delete(filename)
       this._indexDirty = true
       try {
-        rmSync(join(cacheDir(), filename), { force: true })
+        await rm(join(cacheDir(), filename), { force: true })
       } catch (err) {
         logger.debug('Could not prune segment', { filename, error: String(err) })
       }
@@ -995,14 +1014,14 @@ export class RecorderService {
     }
   }
 
-  private saveIndex(): void {
+  private async saveIndex(): Promise<void> {
     try {
       const index: SegmentIndex = {
         segments: [...this._knownSegments.values()].sort(
           (a, b) => a.startTimestamp - b.startTimestamp,
         ),
       }
-      writeFileSync(segmentIndexPath(), JSON.stringify(index), 'utf8')
+      await writeFile(segmentIndexPath(), JSON.stringify(index), 'utf8')
     } catch (err) {
       logger.warn('RecorderService: could not save index', String(err))
     }
@@ -1039,9 +1058,9 @@ export function parseSegmentList(csv: string): SegmentListEntry[] {
   return entries
 }
 
-function readSegmentList(path: string): SegmentListEntry[] {
+async function readSegmentList(path: string): Promise<SegmentListEntry[]> {
   try {
-    return parseSegmentList(readFileSync(path, 'utf8'))
+    return parseSegmentList(await readFile(path, 'utf8'))
   } catch {
     return []
   }
