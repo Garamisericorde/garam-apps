@@ -2091,6 +2091,10 @@ kbd {
  * square straddling a corner reads as a point rather than as the corner
  * itself.
  *
+ * They all grow INWARDS. Anything hanging outside the rectangle sits on the
+ * dimmed part of the frame, where the rectangle's own thin line runs on past
+ * it and the two read as edges that missed each other.
+ *
  * The accent, over a dark rim. It belongs to the app rather than to the
  * footage, which is what stops a handle being mistaken for something in the
  * frame, and the rim is what keeps it visible over a pale one.
@@ -2112,8 +2116,8 @@ kbd {
   cursor: ns-resize;
 }
 
-.crop-handle.is-n { top: -2px; }
-.crop-handle.is-s { bottom: -2px; }
+.crop-handle.is-n { top: 1px; }
+.crop-handle.is-s { bottom: 1px; }
 
 .crop-handle.is-e,
 .crop-handle.is-w {
@@ -2125,16 +2129,22 @@ kbd {
   cursor: ew-resize;
 }
 
-.crop-handle.is-w { left: -2px; }
-.crop-handle.is-e { right: -2px; }
+.crop-handle.is-w { left: 1px; }
+.crop-handle.is-e { right: 1px; }
 
-/* Corners: a bracket, drawn from two borders so the corner stays open */
+/*
+ * Corners: a bracket, drawn from two borders so the corner stays open.
+ *
+ * Flush with the rectangle's own outer edge rather than hanging past it. Set
+ * outside, the thin line of the rectangle ran on underneath and past the arms,
+ * which at the corner reads as two lines that missed each other.
+ */
 .crop-handle.is-nw,
 .crop-handle.is-ne,
 .crop-handle.is-sw,
 .crop-handle.is-se {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   background: transparent;
   box-shadow: none;
   border-style: solid;
@@ -2144,34 +2154,34 @@ kbd {
 }
 
 .crop-handle.is-nw {
-  top: -3px;
-  left: -3px;
-  border-top-width: 4px;
-  border-left-width: 4px;
+  top: 0;
+  left: 0;
+  border-top-width: 3px;
+  border-left-width: 3px;
   cursor: nwse-resize;
 }
 
 .crop-handle.is-ne {
-  top: -3px;
-  right: -3px;
-  border-top-width: 4px;
-  border-right-width: 4px;
+  top: 0;
+  right: 0;
+  border-top-width: 3px;
+  border-right-width: 3px;
   cursor: nesw-resize;
 }
 
 .crop-handle.is-sw {
-  bottom: -3px;
-  left: -3px;
-  border-bottom-width: 4px;
-  border-left-width: 4px;
+  bottom: 0;
+  left: 0;
+  border-bottom-width: 3px;
+  border-left-width: 3px;
   cursor: nesw-resize;
 }
 
 .crop-handle.is-se {
-  bottom: -3px;
-  right: -3px;
-  border-bottom-width: 4px;
-  border-right-width: 4px;
+  bottom: 0;
+  right: 0;
+  border-bottom-width: 3px;
+  border-right-width: 3px;
   cursor: nwse-resize;
 }
 
