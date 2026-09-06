@@ -2097,11 +2097,25 @@ kbd {
   background: var(--bg-surface);
 }
 
-.shortcut {
+/*
+ * One grid for every row, so a column means the same thing all the way down.
+ * Rows sizing themselves left the chips ragged, which turns a list you scan
+ * into three lines you read across.
+ */
+.shortcut-table {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: 1fr max-content max-content;
   align-items: center;
-  gap: 12px;
+  column-gap: 20px;
+  row-gap: 8px;
+}
+
+.shortcut-head {
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
 }
 
 .shortcut-label {
@@ -2113,6 +2127,7 @@ kbd {
 .shortcut-pad {
   display: inline-flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 4px;
 }
 

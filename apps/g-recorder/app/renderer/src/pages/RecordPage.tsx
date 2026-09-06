@@ -207,26 +207,32 @@ export default function RecordPage(): JSX.Element {
         </div>
 
         {/*
-          * Keys and buttons on one line each, because they are two ways to do
-          * the same thing. Drawn rather than printed: a shortcut is read at a
-          * glance in the middle of a game, and "Alt+Shift+F10" as running text
-          * has to be parsed.
+          * A real table: one grid for every row, so the keys of one action sit
+          * directly under the keys of the next. Each row sizing itself left
+          * the columns ragged, which is the difference between a list you can
+          * scan down and three lines you have to read across.
           */}
-        <Shortcut
-          label="Save clip from buffer"
-          keys={settings?.hotkeySaveReplay ?? null}
-          pad={settings?.padSaveReplay ?? null}
-        />
-        <Shortcut
-          label="Turn buffer on / off"
-          keys={settings?.hotkeyToggleRecording ?? null}
-          pad={settings?.padToggleRecording ?? null}
-        />
-        <Shortcut
-          label="Start / stop recording"
-          keys={settings?.hotkeyRecordToFile ?? null}
-          pad={settings?.padRecordToFile ?? null}
-        />
+        <div className="shortcut-table">
+          <span className="shortcut-head" />
+          <span className="shortcut-head">Keyboard</span>
+          <span className="shortcut-head">Controller</span>
+
+          <Shortcut
+            label="Save clip from buffer"
+            keys={settings?.hotkeySaveReplay ?? null}
+            pad={settings?.padSaveReplay ?? null}
+          />
+          <Shortcut
+            label="Turn buffer on / off"
+            keys={settings?.hotkeyToggleRecording ?? null}
+            pad={settings?.padToggleRecording ?? null}
+          />
+          <Shortcut
+            label="Start / stop recording"
+            keys={settings?.hotkeyRecordToFile ?? null}
+            pad={settings?.padRecordToFile ?? null}
+          />
+        </div>
 
         <p className="small faint" style={{ margin: 0 }}>
           {padConnected
@@ -294,7 +300,7 @@ function Shortcut({
   pad: string | null
 }): JSX.Element {
   return (
-    <div className="shortcut">
+    <>
       <span className="shortcut-label">{label}</span>
 
       <span className="shortcut-keys">
@@ -320,7 +326,7 @@ function Shortcut({
           <span className="small faint">No button</span>
         )}
       </span>
-    </div>
+    </>
   )
 }
 
