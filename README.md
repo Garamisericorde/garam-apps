@@ -1,13 +1,14 @@
 # garam-apps
 
-Three small Windows desktop apps that share one design system, one set of
-libraries and one build chain.
+Small Windows desktop apps that share one design system, one set of libraries
+and one build chain. Three are released; a fourth is being built.
 
 | | |
 |---|---|
 | **G-Snap** | Screen capture and annotation, in the shape of Lightshot. Press PrintScreen, drag a region, draw on it, copy or save. |
 | **G-Recorder** | Always-on instant replay. Keeps the last few minutes in a rolling buffer; one hotkey writes them to an MP4. Plus simple IN/OUT trimming. |
 | **G-Note** | Notes: rich text, sticky notes and freehand drawing. |
+| **G-Vector** | A small vector editor: pen, gradients and smart guides that work. **In progress** — no release yet. |
 
 Windows 10 and 11, x64. Free, and free to do anything with — see
 [License](#license).
@@ -55,7 +56,8 @@ garam-apps/
 ├── apps/
 │   ├── g-snap/
 │   ├── g-recorder/
-│   └── g-note/
+│   ├── g-note/
+│   └── g-vector/
 ├── installer/
 │   └── bootstrapper/  Garam Setup
 └── tools/
@@ -78,7 +80,8 @@ One `node_modules`, one lockfile, Electron downloaded once.
 npm run dev:snap
 ```
 
-`dev:recorder` and `dev:note` for the others. To produce an installer:
+`dev:recorder`, `dev:note` and `dev:vector` for the others. To produce an
+installer:
 
 ```bash
 npm run package -w g-snap

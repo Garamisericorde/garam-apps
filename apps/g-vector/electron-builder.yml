@@ -1,0 +1,41 @@
+appId: com.garam.g-vector
+productName: G-Vector
+copyright: Copyright (c) 2026 Garam
+
+directories:
+  output: release
+  buildResources: resources
+
+files:
+  - out/**/*
+  - package.json
+
+# The window icon is read from disk at runtime through resourcePath(), which
+# points at process.resourcesPath in a packaged app. `files` only covers what
+# goes INTO app.asar, so without this the icon never ships.
+extraResources:
+  - from: resources/icons
+    to: icons
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: resources/icons/icon.ico
+  artifactName: ${productName}-${version}-setup.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: G-Vector
+  deleteAppDataOnUninstall: false
+
+publish:
+  provider: github
+  owner: YOUR_GITHUB_USERNAME
+  repo: garam-apps
+  releaseType: release

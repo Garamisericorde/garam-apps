@@ -11,16 +11,18 @@
     "dev:snap": "npm run dev -w g-snap",
     "dev:note": "npm run dev -w g-note",
     "dev:recorder": "npm run dev -w g-recorder",
+    "dev:vector": "npm run dev -w g-vector",
     "build:snap": "npm run build -w g-snap",
     "package:snap": "npm run package -w g-snap",
     "package:note": "npm run package -w g-note",
     "package:recorder": "npm run package -w g-recorder",
+    "package:vector": "npm run package -w g-vector",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint .",
     "format": "prettier --write .",
     "catalog": "node tools/release/build-catalog.mjs",
     "clean": "node tools/release/clean.mjs",
-    "package:all": "npm run package:snap && npm run package:recorder && npm run package:note"
+    "package:all": "npm run package:snap && npm run package:recorder && npm run package:note && npm run package:vector"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",

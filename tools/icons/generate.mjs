@@ -217,6 +217,34 @@ const GLYPHS = {
     }
     return false
   },
+
+  /**
+   * g-vector: the G with a bezier anchor at the lower right.
+   *
+   * A filled square with a short handle arm running off it — the mark you see a
+   * thousand times an hour in a path editor. Drawn as a square rather than a
+   * pen nib because a nib's taper is three pixels of grey at 32px, while a
+   * square with a straight arm still reads as an anchor point.
+   */
+  node(x, y, s, small) {
+    if (small) return gMark(x, y, s, { radius: 0.33, weight: 0.108 })
+    if (gMark(x, y, s)) return true
+
+    const cx = s * 0.735
+    const cy = s * 0.735
+    const half = s * 0.058
+
+    // The anchor itself.
+    if (Math.abs(x - cx) <= half && Math.abs(y - cy) <= half) return true
+
+    // Its handle arm, up and to the right at 45 degrees, ending in a dot.
+    const t = s * 0.032
+    const along = (x - cx + (cy - y)) / Math.SQRT2 // distance along the arm
+    const across = (x - cx - (cy - y)) / Math.SQRT2 // distance off the arm
+    const reach = s * 0.155
+    if (along >= half && along <= reach && Math.abs(across) <= t / 2) return true
+    return Math.hypot(x - (cx + reach / Math.SQRT2), y - (cy - reach / Math.SQRT2)) <= s * 0.042
+  },
 }
 
 /**

@@ -1,0 +1,668 @@
+/*
+ * G-Vector styles.
+ *
+ * Colours, spacing and typography come from @garam/theme — the one place the
+ * whole family is themed. Nothing below contains a raw hex value; the few
+ * editor-specific names are aliases onto tokens, so the chrome follows the
+ * accent wherever it moves.
+ *
+ * The theme sheets are imported from main.tsx, not with an @import here. This
+ * file loads last, and an @import inside it would re-declare the base tokens
+ * AFTER accent-violet.css had overridden them — putting the crimson accent back
+ * on an app that had already chosen violet.
+ */
+
+:root {
+  /* The guide colour. A point on the accent ramp, bright enough to read over
+     both a white artboard and a dark shape sitting on it. */
+  --gv-guide: var(--accent-hover);
+  --gv-handle: var(--accent);
+  /* Anchor points are drawn ON the artboard, not on a panel, so they need a
+     colour that does not belong to the chrome behind them. */
+  --gv-anchor-fill: var(--text-on-accent);
+  /* The desk the artboard sits on. Darker than the panels, so the page reads
+     as a lit object rather than as another panel. */
+  --gv-desk: var(--bg);
+  --gv-rail-width: 44px;
+  --gv-inspector-width: 244px;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: var(--bg-surface);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--fs-md);
+  overflow: hidden;
+}
+
+/* ── Shell ────────────────────────────────────────────────────────────────── */
+
+.gv-app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.gv-body {
+  display: grid;
+  grid-template-columns: var(--gv-rail-width) 1fr var(--gv-inspector-width);
+  flex: 1;
+  min-height: 0;
+}
+
+.gv-rail {
+  border-right: 1px solid var(--border);
+  background: var(--bg-surface);
+  padding: 6px 4px;
+  gap: 2px;
+  align-items: center;
+}
+
+/* ── Canvas ───────────────────────────────────────────────────────────────── */
+
+.gv-canvas {
+  position: relative;
+  overflow: hidden;
+  background: var(--gv-desk);
+  outline: none;
+  /* The pointer state machine owns every gesture here; letting the browser
+     start a text selection or a native drag on top of that produces ghost
+     drags that survive pointerup. */
+  user-select: none;
+  touch-action: none;
+}
+
+.gv-scene,
+.gv-overlay {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+.gv-overlay {
+  /* Chrome must never eat a click meant for the artwork underneath. */
+  pointer-events: none;
+}
+
+/*
+ * The page's drop shadow, on an element of its own behind the scene.
+ *
+ * NOT a filter on the SVG rect: the scene repaints as a unit, so a filter
+ * inside it is re-blurred on every frame of every drag. This element only
+ * changes when the view pans or zooms, so the compositor caches the blur and a
+ * drag costs nothing for it.
+ */
+.gv-paper {
+  position: absolute;
+  pointer-events: none;
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.45);
+}
+
+.gv-grid line {
+  stroke: var(--border);
+  opacity: 0.55;
+}
+
+/* ── Selection chrome ─────────────────────────────────────────────────────── */
+
+.gv-hover {
+  fill: none;
+  stroke: var(--gv-handle);
+  stroke-width: 1;
+  opacity: 0.65;
+}
+
+.gv-frame {
+  fill: none;
+  stroke: var(--gv-handle);
+  stroke-width: 1;
+}
+
+.gv-handle {
+  fill: var(--bg-surface);
+  stroke: var(--gv-handle);
+  stroke-width: 1.5;
+}
+
+.gv-marquee {
+  fill: var(--accent-soft);
+  stroke: var(--gv-handle);
+  stroke-width: 1;
+}
+
+
+/* ── Layers ─────────────────────────────────────────────────────────────── */
+
+.gv-layers {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  border-top: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+
+.gv-layers__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 6px 4px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.gv-layers__actions {
+  display: flex;
+  gap: 2px;
+}
+
+.gv-layers__title {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.gv-layers__list {
+  overflow-y: auto;
+  padding-bottom: 6px;
+  /* The rows own every gesture inside the list; a native text selection
+     dragging along behind a reorder makes both look broken. */
+  user-select: none;
+}
+
+/* ── Rows ──────────────────────────────────────────────────────────────── */
+
+.gv-layer-row,
+.gv-layer {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  height: 26px;
+  cursor: default;
+  color: var(--text-muted);
+}
+
+.gv-layer-row {
+  padding: 0 4px 0 2px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+/* The layer being drawn on. A left bar rather than a fill, so it stays legible
+   next to the selection highlight on the object rows below it. */
+.gv-layer-row.is-active {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.gv-layer-row.is-active .gv-layers__name--layer {
+  color: var(--accent);
+  font-weight: var(--fw-semibold);
+}
+
+/* An object row sits under its layer, indented to say so. */
+.gv-layer {
+  padding: 0 8px 0 22px;
+}
+
+.gv-layer:hover,
+.gv-layer-row:hover {
+  background: var(--bg-hover);
+}
+
+.gv-layer.is-selected {
+  background: var(--bg-active);
+  color: var(--text);
+}
+
+/* A hidden row still has to be readable enough to turn back on. */
+.gv-layer.is-hidden,
+.gv-layer-row.is-hidden {
+  opacity: 0.45;
+}
+
+.gv-layer.is-locked .gv-layers__name,
+.gv-layer-row.is-locked .gv-layers__name {
+  font-style: italic;
+}
+
+/* Where a dragged row would land. */
+.gv-layer.is-drop,
+.gv-layer-row.is-drop {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.gv-layers__twist {
+  width: 16px;
+  height: 20px;
+  flex: none;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0;
+}
+
+.gv-layers__twist span {
+  display: inline-block;
+  transition: transform 0.12s ease;
+}
+
+.gv-layers__twist span.is-open {
+  transform: rotate(90deg);
+}
+
+.gv-layers__flag {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.65;
+}
+
+.gv-layers__flag:hover {
+  opacity: 1;
+  background: var(--bg-elevated);
+}
+
+.gv-layers__delete:disabled {
+  opacity: 0.2;
+  cursor: default;
+}
+
+.gv-layers__delete:disabled:hover {
+  background: transparent;
+}
+
+.gv-layers__glyph {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  flex: none;
+  opacity: 0.8;
+}
+
+.gv-layers__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-sm);
+  padding-left: 4px;
+}
+
+.gv-layers__opacity {
+  width: 34px;
+  flex: none;
+  font: inherit;
+  font-size: var(--fs-xs);
+  text-align: right;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 1px 2px;
+  /* The spinner arrows eat a third of a field this narrow. */
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.gv-layers__opacity::-webkit-outer-spin-button,
+.gv-layers__opacity::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.gv-layers__opacity:hover,
+.gv-layers__opacity:focus {
+  border-color: var(--border-strong);
+  background: var(--bg-inset);
+  color: var(--text);
+  outline: none;
+}
+
+.gv-layers__rename {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: var(--fs-sm);
+  color: var(--text);
+  background: var(--bg-inset);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 1px 4px;
+  margin-left: 2px;
+}
+
+.gv-layers__empty {
+  margin: 0;
+  padding: 4px 8px 6px 34px;
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+}
+
+/* ── Path editing ─────────────────────────────────────────────────────────── */
+
+.gv-path__outline {
+  fill: none;
+  stroke: var(--gv-handle);
+  stroke-width: 1;
+}
+
+.gv-path__handles line {
+  stroke: var(--gv-handle);
+  stroke-width: 1;
+  opacity: 0.75;
+}
+
+.gv-path__handles circle {
+  fill: var(--gv-handle);
+}
+
+/*
+ * An anchor sits on the artboard, which is the user's own colour and usually
+ * pale — so an unselected point is filled light and outlined in the accent,
+ * and a selected one inverts. Filling it with a panel colour would make it
+ * disappear on a dark artboard.
+ */
+.gv-anchor {
+  fill: var(--gv-anchor-fill);
+  stroke: var(--gv-handle);
+  stroke-width: 1.5;
+}
+
+.gv-anchor.is-selected {
+  fill: var(--gv-handle);
+  stroke: var(--gv-anchor-fill);
+}
+
+/* The ring on the point the next click would close on, or remove. */
+.gv-anchor-mark {
+  fill: none;
+  stroke: var(--gv-guide);
+  stroke-width: 1.5;
+}
+
+.gv-pen-ghost {
+  fill: none;
+  stroke: var(--gv-guide);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+/* ── Smart guides ─────────────────────────────────────────────────────────── */
+
+.gv-guide line {
+  stroke: var(--gv-guide);
+  stroke-width: 1;
+  /*
+   * shape-rendering: crispEdges keeps the line one pixel wide instead of two
+   * grey ones. A guide that is visibly softer than the edge it is aligning to
+   * reads as an approximation, which is the opposite of what it is claiming.
+   */
+  shape-rendering: crispEdges;
+}
+
+/* A centre line is the stronger claim of the two, so it is drawn solid while
+   an edge match stays dashed. The difference is readable at a glance without
+   needing a second colour. */
+.gv-guide--edge line {
+  stroke-dasharray: 4 3;
+}
+
+.gv-spacing line {
+  stroke: var(--gv-guide);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.gv-chip rect {
+  fill: var(--gv-guide);
+}
+
+.gv-chip text {
+  fill: var(--text-on-accent);
+  font-size: var(--fs-xs);
+  font-family: var(--font);
+}
+
+.gv-chip--readout rect {
+  fill: var(--bg-badge);
+}
+
+/*
+ * A measurement that LATCHED onto something, rather than one that merely reads
+ * that way. Same shape, accent fill: the difference has to be visible without
+ * reading the number.
+ */
+.gv-chip--match rect {
+  fill: var(--gv-guide);
+}
+
+/* ── Inspector ────────────────────────────────────────────────────────────── */
+
+/*
+ * The right column: properties on top, layers filling whatever is left.
+ *
+ * The inspector is only as tall as it needs to be — it is a form, and a form
+ * stretched down a 900px window is mostly empty space. Capping it also stops a
+ * long selection pushing the layers list off the bottom entirely.
+ */
+.gv-side {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-left: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+
+.gv-inspector {
+  flex: 0 1 auto;
+  max-height: 60%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.gv-inspector__head {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.gv-inspector__title {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+}
+
+.gv-inspector__empty {
+  padding: 16px 12px;
+  color: var(--text-muted);
+}
+
+.gv-inspector__hint {
+  margin-top: 8px;
+  color: var(--text-faint);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+
+.gv-inspector__hint kbd {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  padding: 1px 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  background: var(--bg-inset);
+}
+
+.gv-group {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.gv-group__title {
+  margin: 0 0 8px;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.gv-grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.gv-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding-left: 7px;
+}
+
+.gv-cell__label {
+  color: var(--text-faint);
+  font-size: var(--fs-sm);
+  width: 12px;
+  flex: none;
+}
+
+.gv-number {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 1;
+}
+
+.gv-number .g-input {
+  border: none;
+  background: transparent;
+  padding: 5px 6px 5px 0;
+  min-width: 0;
+  width: 100%;
+}
+
+.gv-number .g-input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.gv-cell:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-ring);
+}
+
+.gv-number__suffix {
+  color: var(--text-faint);
+  font-size: var(--fs-sm);
+  padding-right: 7px;
+}
+
+.gv-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gv-row .gv-number {
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding-left: 7px;
+}
+
+.gv-row__value {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+}
+
+.gv-arrange {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+.gv-arrange button {
+  font: inherit;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 5px 6px;
+  cursor: pointer;
+}
+
+.gv-arrange button:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+/* ── Status ───────────────────────────────────────────────────────────────── */
+
+.gv-status {
+  border-top: 1px solid var(--border);
+  background: var(--bg-surface);
+  padding: 4px 10px;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  gap: 10px;
+}
+
+.gv-status__flag {
+  color: var(--text-faint);
+}
+
+.gv-status__flag.is-on {
+  color: var(--accent);
+}
+
+.gv-zoom {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.gv-zoom button {
+  font: inherit;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  padding: 3px 7px;
+  cursor: pointer;
+  min-width: 24px;
+}
+
+.gv-zoom button:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.gv-zoom__value {
+  font-variant-numeric: tabular-nums;
+  min-width: 52px;
+}
