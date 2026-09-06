@@ -239,9 +239,11 @@ Two causes, and the first was ours:
   Borderless windowed avoids it, and restarting the capture does not help:
   the same wall is still there and each restart is a real hole in the buffer.
 
-The ratio is read from `-progress` (`dup_frames` against `frame`), not from
-FFmpeg's stderr string — the string only appears at fixed milestones and says
-nothing about how bad it is. Over 40% duplicates, the user is told once.
+The ratio is read from `-progress` (`dup_frames` against `frame`) and **logged,
+never shown**. Desktop Duplication only delivers a frame when the screen
+changes, so an idle desktop is legitimately 100% duplicates: nothing here can
+tell "the capture cannot keep up" from "nothing is happening", and a warning
+that fires whenever the machine is quiet teaches people to ignore it.
 
 ## Stability requirements
 - FFmpeg processes must be managed robustly:

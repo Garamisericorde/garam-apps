@@ -158,9 +158,8 @@ export class RecorderService {
   /** Set while a replay is being written, to keep pruning off the used files */
   private _saveHolds = 0
 
-  /** Told once per capture run, so the same freeze is not reported repeatedly */
+  /** Logged once per capture run, rather than on every progress report */
   private _warnedAboutDuplicates = false
-  private _onWarning: ((message: string) => void) | null = null
 
   /** Manual (non-buffer) recording state */
   private _manualProcess: ChildProcess | null = null
@@ -762,42 +761,31 @@ export class RecorderService {
    * makes a counter that stops a reliable sign that the input died, and is the
    * only thing the stall watchdog needs.
    */
-  /** Something the user should hear about, without it being an error */
-  onWarning(handler: (message: string) => void): void {
-    this._onWarning = handler
-  }
-
   /**
-   * Notice when the desktop stops sending new frames.
+   * Note how much of the capture is repeated frames.
    *
-   * FFmpeg duplicates the last frame when the source cannot keep up, to hold
-   * the output at a constant rate. The frame counter goes on rising the whole
-   * time, so the stall watchdog cannot see it: as far as that is concerned the
-   * capture is healthy, while the recording is a frozen picture.
+   * FFmpeg duplicates the last frame when the source has nothing new, to hold
+   * the output at a constant rate. That is worth knowing when diagnosing a
+   * recording that plays back frozen, and it is why this is logged.
    *
-   * Measured from `-progress` rather than from the stderr string, because the
-   * string only appears at fixed milestones and says nothing about how bad it
-   * is. `dup_frames` against the frame count is the ratio itself, and a
-   * recording made of more repeats than pictures is worth saying out loud: the
-   * cause is one the user can do something about.
+   * It is NOT shown to the user, and must not be: Desktop Duplication only
+   * delivers a frame when the screen changes, so an idle desktop is legitimately
+   * 100% duplicates. Nothing here can tell "the capture cannot keep up" from
+   * "nothing is happening", and a warning that fires whenever the machine is
+   * quiet teaches people to ignore it.
    */
-  private checkDuplicateRatio(frames: number, duplicated: number): void {
-    if (this._warnedAboutDuplicates) return
-    // Long enough in that a slow start cannot trip it.
-    if (frames < 600) return
+  private noteDuplicateRatio(frames: number, duplicated: number): void {
+    if (this._warnedAboutDuplicates || frames < 600) return
 
     const ratio = duplicated / frames
     if (ratio < 0.4) return
 
     this._warnedAboutDuplicates = true
-    logger.warn('RecorderService: the desktop is not keeping up with the capture', {
+    logger.info('RecorderService: much of the capture is repeated frames', {
       frames,
       duplicated,
-      realFps: Math.round(((frames - duplicated) / frames) * 60),
+      newFramesPerSecond: Math.round(((frames - duplicated) / frames) * 60),
     })
-    // Short enough to fit the overlay, which is where it will be read: this
-    // happens while the game is in the foreground, never while the app is.
-    this._onWarning?.('The desktop is not keeping up. Try borderless windowed.')
   }
 
   private trackProgress(proc: ChildProcess): void {
@@ -828,7 +816,7 @@ export class RecorderService {
       this._sawProgress = true
 
       const duplicated = /^dup_frames=\s*(\d+)/m.exec(report)
-      if (duplicated) this.checkDuplicateRatio(frames, Number(duplicated[1]))
+      if (duplicated) this.noteDuplicateRatio(frames, Number(duplicated[1]))
     })
   }
 
