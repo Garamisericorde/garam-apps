@@ -2102,6 +2102,13 @@ kbd {
  * Rows sizing themselves left the chips ragged, which turns a list you scan
  * into three lines you read across.
  */
+/* The table and the standing numbers, side by side */
+.shortcuts-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+}
+
 .shortcut-table {
   display: grid;
   /*
@@ -2112,16 +2119,50 @@ kbd {
   grid-template-columns: max-content max-content max-content;
   justify-content: start;
   align-items: center;
-  column-gap: 24px;
-  row-gap: 6px;
+  flex: 0 0 auto;
+}
+
+/*
+ * The rules live on the cells, not between them.
+ *
+ * A grid gap would break every line into three, so the spacing is padding
+ * inside each cell instead and the border runs the width of the table.
+ */
+.shortcut-table > * {
+  padding: 7px 24px 7px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.shortcut-table > *:nth-last-child(-n + 3) {
+  border-bottom: none;
 }
 
 .shortcut-head {
+  padding-top: 0;
   font-size: 10.5px;
   font-weight: 650;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-faint);
+  border-bottom-color: var(--border-strong);
+}
+
+/*
+ * The standing numbers, ruled off from the table rather than boxed. A second
+ * card for two lines was mostly border.
+ */
+.capture-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-left: 24px;
+  border-left: 1px solid var(--border);
+  align-self: stretch;
+}
+
+.capture-stats .fact {
+  padding: 0;
+  background: transparent;
 }
 
 .shortcut-label {

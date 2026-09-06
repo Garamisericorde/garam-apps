@@ -212,6 +212,7 @@ export default function RecordPage(): JSX.Element {
           * the columns ragged, which is the difference between a list you can
           * scan down and three lines you have to read across.
           */}
+        <div className="shortcuts-body">
         <div className="shortcut-table">
           <span className="shortcut-head" />
           <span className="shortcut-head">Keyboard</span>
@@ -234,22 +235,21 @@ export default function RecordPage(): JSX.Element {
           />
         </div>
 
-        <p className="small faint" style={{ margin: 0 }}>
-          {padConnected
-            ? 'Controller connected.'
-            : 'No controller connected. Bindings are kept and work as soon as one is.'}
-        </p>
-      </section>
+        {/*
+          * The two standing numbers, beside the shortcuts rather than in a
+          * card of their own. They are the same kind of thing — what the
+          * recorder is set to right now — and a second card for two lines was
+          * mostly border.
+          */}
+        <div className="capture-stats">
+          <Fact
+            label="Replay length"
+            value={settings ? `${settings.replayLengthMinutes} min` : '...'}
+          />
 
-      <section className="capture-facts">
-        <Fact
-          label="Replay length"
-          value={settings ? `${settings.replayLengthMinutes} min` : '...'}
-        />
-
-        {/* A number you cannot act on is just a number: the cache is the one
-            thing on this page that grows without limit, so it gets a button. */}
-        <div className="fact">
+          {/* A number you cannot act on is just a number: the cache is the one
+              thing on this page that grows without limit, so it gets a button. */}
+          <div className="fact">
           <span className="fact-label">Cache on disk</span>
           <div className="row" style={{ gap: 8 }}>
             <span className="fact-value">
@@ -271,9 +271,17 @@ export default function RecordPage(): JSX.Element {
               }
             >
               {busy === 'clear' ? 'Clearing…' : 'Clear'}
-            </button>
+              </button>
+            </div>
           </div>
         </div>
+        </div>
+
+        <p className="small faint" style={{ margin: 0 }}>
+          {padConnected
+            ? 'Controller connected.'
+            : 'No controller connected. Bindings are kept and work as soon as one is.'}
+        </p>
       </section>
     </div>
   )
