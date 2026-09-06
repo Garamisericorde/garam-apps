@@ -193,19 +193,22 @@ export default function RecordPage(): JSX.Element {
         <Fact
           label="Save clip from buffer"
           value={settings?.hotkeySaveReplay ?? 'Not bound'}
-          pad={padConnected ? settings?.padSaveReplay : null}
+          pad={settings?.padSaveReplay ?? null}
+          padConnected={padConnected}
           mono
         />
         <Fact
           label="Turn buffer on / off"
           value={settings?.hotkeyToggleRecording ?? 'Not bound'}
-          pad={padConnected ? settings?.padToggleRecording : null}
+          pad={settings?.padToggleRecording ?? null}
+          padConnected={padConnected}
           mono
         />
         <Fact
           label="Start / stop recording"
           value={settings?.hotkeyRecordToFile ?? 'Not bound'}
-          pad={padConnected ? settings?.padRecordToFile : null}
+          pad={settings?.padRecordToFile ?? null}
+          padConnected={padConnected}
           mono
         />
         <Fact
@@ -249,19 +252,33 @@ function Fact({
   label,
   value,
   pad,
+  padConnected = false,
   mono,
 }: {
   label: string
   value: string
-  /** The same action on a controller, shown only when one is plugged in */
+  /**
+   * The same action on a controller.
+   *
+   * null means a pad is plugged in and this action has no button on it, which
+   * is worth showing: with only the bound ones drawn, the rows without a badge
+   * read as "controllers do not do that" rather than "you have not set it".
+   */
   pad?: string | null
+  /** Whether a controller is there at all, which is what decides if pad shows */
+  padConnected?: boolean
   mono?: boolean
 }): JSX.Element {
   return (
     <div className="fact">
       <span className="fact-label">{label}</span>
       <span className={`fact-value${mono ? ' mono' : ''}`}>{value}</span>
-      {pad && <span className="fact-pad mono">{pad}</span>}
+      {padConnected &&
+        (pad ? (
+          <span className="fact-pad mono">{pad}</span>
+        ) : (
+          <span className="fact-pad is-unbound">No button · set one in Settings</span>
+        ))}
     </div>
   )
 }

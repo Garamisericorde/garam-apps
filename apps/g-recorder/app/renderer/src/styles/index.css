@@ -1819,6 +1819,17 @@ kbd {
   box-shadow: 0 0 6px var(--accent);
 }
 
+/*
+ * An action with no button on the pad, shown rather than left blank: a row
+ * without a badge otherwise reads as "the controller cannot do this".
+ */
+.fact-pad.is-unbound {
+  background: transparent;
+  color: var(--text-faint);
+  padding-left: 0;
+  font-size: 11px;
+}
+
 /* The controller binding under the key it stands in for */
 .fact-pad {
   display: inline-flex;
