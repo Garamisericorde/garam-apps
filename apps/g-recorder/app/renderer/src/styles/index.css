@@ -1079,7 +1079,9 @@ kbd {
   border-radius: var(--radius);
 }
 
-.capture-card::before {
+/* One rule for both cards on this page, so the pair cannot drift apart. */
+.capture-card::before,
+.shortcuts::before {
   content: '';
   position: absolute;
   inset: 0 0 auto 0;
@@ -2103,10 +2105,13 @@ kbd {
 /* ── Shortcuts ───────────────────────────────────────────────────────────── */
 
 .shortcuts {
+  position: relative;
+  /* So the hairline is clipped to the rounded corners rather than crossing them */
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 14px 16px;
+  padding: 16px;
   border-radius: var(--radius);
   border: 1px solid var(--border);
   background: var(--bg-surface);
