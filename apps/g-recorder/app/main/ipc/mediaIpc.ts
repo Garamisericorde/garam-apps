@@ -1,6 +1,6 @@
 import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
-import { existsSync, readdirSync, statSync } from 'fs'
-import { basename, extname, join } from 'path'
+import { existsSync, statSync } from 'fs'
+import { basename } from 'path'
 import type { LibraryItem, MediaInfo, ThumbnailStrip } from '../../shared/types'
 import {
   buildPosterFrame,
@@ -8,9 +8,9 @@ import {
   buildWaveform,
   probeMedia,
 } from '../ffmpeg/MediaProbe'
-import { SettingsStore } from '../settings/SettingsStore'
 import { registerClipFile } from '../protocol/clipProtocol'
-import { hide, listHidden, unhideAll } from '../settings/HiddenClips'
+import { addToLibrary, listLibrary, removeFromLibrary } from '../settings/ClipLibrary'
+import { SettingsStore } from '../settings/SettingsStore'
 import { logger } from '../logging/logger'
 
 export interface OpenedClip {
@@ -21,34 +21,15 @@ export interface OpenedClip {
 
 const VIDEO_EXTENSIONS = ['mp4', 'mkv', 'mov', 'webm', 'avi', 'm4v']
 
-/**
- * Clips opened from outside the output folder, most recent first.
- *
- * Held in memory rather than written to disk: it is a convenience for the
- * session you are in, and a file of "videos this app once touched" is a
- * privacy footprint nobody asked for.
- */
-const recentlyOpened: string[] = []
-const MAX_RECENT = 20
-
-function forget(clipPath: string): void {
-  const index = recentlyOpened.indexOf(clipPath)
-  if (index !== -1) recentlyOpened.splice(index, 1)
-}
-
-function remember(clipPath: string): void {
-  const index = recentlyOpened.indexOf(clipPath)
-  if (index !== -1) recentlyOpened.splice(index, 1)
-  recentlyOpened.unshift(clipPath)
-  recentlyOpened.length = Math.min(recentlyOpened.length, MAX_RECENT)
-}
-
 export function registerMediaIpc(getMainWindow: () => BrowserWindow | null): void {
   /** Native "open video" dialog */
   ipcMain.handle('media:openFile', async (): Promise<OpenedClip | null> => {
     const window = getMainWindow()
     const options = {
       title: 'Open a video',
+      // Where the recorder writes, since that is where the clip being looked
+      // for almost always is.
+      defaultPath: SettingsStore.getInstance().get().outputPath,
       properties: ['openFile' as const],
       filters: [
         { name: 'Video', extensions: VIDEO_EXTENSIONS },
@@ -89,71 +70,31 @@ export function registerMediaIpc(getMainWindow: () => BrowserWindow | null): voi
   )
 
   /**
-   * The clips this app has produced, newest first.
+   * The clips in the editor's list, most recently added first.
    *
-   * Read from the output folder rather than kept as a list the user curates:
-   * everything the recorder saves lands there already, so a separate library
-   * would only be a second place for the same files to be missing from.
+   * What the user put there, not what is in the output folder. Reading the
+   * folder meant every replay saved mid-game appeared in the editor unasked,
+   * and the list became a record of everything ever recorded rather than of
+   * what is being worked on.
    *
-   * Deliberately metadata-only — no probing, no thumbnails. A folder with a
-   * hundred replays would otherwise spawn a hundred FFmpeg processes before the
-   * panel could paint; posters are fetched per item, as they come into view.
+   * Deliberately metadata-only, no probing or thumbnails: a long list would
+   * otherwise spawn an FFmpeg process per entry before the panel could paint.
+   * Posters are fetched per item, as they come into view.
    */
   ipcMain.handle('media:library', async (): Promise<LibraryItem[]> => {
-    const hidden = await listHidden()
-    const dir = SettingsStore.getInstance().get().outputPath
-    const items = new Map<string, LibraryItem>()
+    const items: LibraryItem[] = []
 
-    // Clips opened from elsewhere belong in the list too. Without them,
-    // importing a video appears to do nothing: it loads into the editor and
-    // the panel beside it still says the library is empty.
-    for (const path of recentlyOpened) {
-      if (!existsSync(path)) continue
+    for (const path of await listLibrary()) {
       try {
         const stats = statSync(path)
-        items.set(path, {
-          path,
-          name: basename(path),
-          sizeBytes: stats.size,
-          modifiedAt: stats.mtimeMs,
-        })
+        items.push({ path, name: basename(path), sizeBytes: stats.size, modifiedAt: stats.mtimeMs })
       } catch {
-        // Gone between the check and the stat; it simply does not appear.
+        // Gone between the existence check and the stat; it simply does not
+        // appear, and the next read drops it for good.
       }
     }
 
-    if (!existsSync(dir)) {
-      for (const path of hidden) items.delete(path)
-      return [...items.values()].sort((a, b) => b.modifiedAt - a.modifiedAt)
-    }
-
-    try {
-      readdirSync(dir)
-        .filter((name) => VIDEO_EXTENSIONS.includes(extname(name).slice(1).toLowerCase()))
-        .map((name) => {
-          const path = join(dir, name)
-          const stats = statSync(path)
-          return {
-            path,
-            name: basename(name),
-            sizeBytes: stats.size,
-            modifiedAt: stats.mtimeMs,
-          }
-        })
-        .forEach((item) => items.set(item.path, item))
-    } catch (err) {
-      logger.warn('Could not read the clip library', String(err))
-    }
-
-    for (const path of hidden) items.delete(path)
-    return [...items.values()].sort((a, b) => b.modifiedAt - a.modifiedAt)
-  })
-
-  /** How many clips are hidden, so the list can offer to bring them back */
-  ipcMain.handle('media:hiddenCount', async (): Promise<number> => (await listHidden()).length)
-
-  ipcMain.handle('media:unhideAll', async (): Promise<void> => {
-    await unhideAll()
+    return items
   })
 
   ipcMain.handle(
@@ -189,8 +130,7 @@ export function registerMediaIpc(getMainWindow: () => BrowserWindow | null): voi
    * "open" is one misclick away from destroying a recording.
    */
   ipcMain.handle('media:forget', async (_event, filePath: string): Promise<void> => {
-    forget(filePath)
-    await hide(filePath)
+    await removeFromLibrary(filePath)
   })
 
   /** Open Explorer with the file selected */
@@ -205,9 +145,9 @@ async function loadClip(clipPath: string): Promise<OpenedClip> {
   const info = await probeMedia(clipPath)
   logger.info('Clip opened', { clipPath, duration: info.durationSeconds })
 
-  // Every route in — the dialog, a drop, the library — comes through here, so
-  // this is the one place that has to remember what was opened.
-  remember(clipPath)
+  // Every route in (the dialog, a drop, the list itself) comes through here,
+  // so this is the one place that has to put it in the list.
+  await addToLibrary(clipPath)
 
   return { clipPath, clipUrl: registerClipFile(clipPath), info }
 }

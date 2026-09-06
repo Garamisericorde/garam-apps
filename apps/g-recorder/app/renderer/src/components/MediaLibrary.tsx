@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import type { LibraryItem } from '../../../shared/types'
 import { formatBytes } from '../../../shared/time'
 import ContextMenu from './ContextMenu'
@@ -36,8 +36,6 @@ export default function MediaLibrary({
 }: MediaLibraryProps): JSX.Element {
   const [items, setItems] = useState<LibraryItem[]>([])
   const [loading, setLoading] = useState(true)
-  /** Clips taken out of the list, which is the only way one can be missing */
-  const [hiddenCount, setHiddenCount] = useState(0)
   const posterRequests = useRef(new Set<string>())
   /*
    * The rows the user has picked.
@@ -62,7 +60,6 @@ export default function MediaLibrary({
           poster: previous.find((p) => p.path === item.path)?.poster,
         })),
       )
-      setHiddenCount(await window.api.media.hiddenCount())
     } finally {
       setLoading(false)
     }
@@ -146,6 +143,16 @@ export default function MediaLibrary({
    * picked. A row outside replaces it, because acting on rows the user cannot
    * see the selection of is how files get deleted by accident.
    */
+  /** Opening the menu is the same act wherever the row is */
+  const openMenu = useCallback(
+    (path: string, at: MenuPosition): void => {
+      setMenu({ at, paths: menuTargets(path) })
+    },
+    // menuTargets is declared below; it only reads state through setters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [picked],
+  )
+
   const menuTargets = useCallback(
     (path: string): string[] => {
       if (picked.includes(path)) return picked
@@ -237,50 +244,16 @@ export default function MediaLibrary({
         )}
 
         {items.map((item) => (
-          <button
+          <LibraryRow
             key={item.path}
-            className={`library-item${item.path === activePath ? ' is-active' : ''}${
-              picked.includes(item.path) ? ' is-picked' : ''
-            }`}
-            onClick={(event) => pick(item.path, event)}
-            onDoubleClick={() => onOpen(item.path)}
-            // Dragging onto the stage is the same act as clicking; the drop
-            // target reads this back rather than the file, which the renderer
-            // is not allowed to construct.
-            draggable
-            onDragStart={(event) => {
-              event.dataTransfer.setData('application/x-grecorder-clip', item.path)
-              event.dataTransfer.effectAllowed = 'copy'
-            }}
-            title={
-              item.path === activePath
-                ? `${item.path} (showing in the preview)`
-                : `${item.path} - double click to add it to the timeline`
-            }
-            onContextMenu={(event) => {
-              event.preventDefault()
-              setMenu({ at: { x: event.clientX, y: event.clientY }, paths: menuTargets(item.path) })
-            }}
-          >
-            <span className="library-thumb">
-              {item.poster ? <img src={item.poster} alt="" draggable={false} /> : null}
-            </span>
-            <span className="library-meta">
-              <span className="library-name">{item.name}</span>
-              <span className="small faint">{formatBytes(item.sizeBytes)}</span>
-            </span>
-          </button>
+            item={item}
+            isActive={item.path === activePath}
+            isPicked={picked.includes(item.path)}
+            onPick={pick}
+            onOpen={onOpen}
+            onMenu={openMenu}
+          />
         ))}
-        {hiddenCount > 0 && (
-          <button
-            className="btn btn-ghost small"
-            onClick={() => void window.api.media.unhideAll().then(refresh)}
-          >
-            {/* A clip taken out of the list is otherwise gone for good, with the
-                file still sitting there and no way to reach it from here. */}
-            Show {hiddenCount} hidden clip{hiddenCount === 1 ? '' : 's'}
-          </button>
-        )}
       </div>
 
       <ContextMenu
@@ -291,3 +264,61 @@ export default function MediaLibrary({
     </aside>
   )
 }
+
+
+/**
+ * One row of the list.
+ *
+ * Its own memoised component so that picking a clip repaints the two rows
+ * whose state changed rather than all of them. Every row holds a poster as a
+ * base64 data URI, which is a string of a few hundred kilobytes: re-rendering
+ * nine of those on every click is what made selecting one feel late.
+ */
+const LibraryRow = memo(function LibraryRow({
+  item,
+  isActive,
+  isPicked,
+  onPick,
+  onOpen,
+  onMenu,
+}: {
+  item: LibraryItem
+  isActive: boolean
+  isPicked: boolean
+  onPick: (path: string, event: React.MouseEvent) => void
+  onOpen: (path: string) => void
+  onMenu: (path: string, at: MenuPosition) => void
+}): JSX.Element {
+  return (
+    <button
+      className={`library-item${isActive ? ' is-active' : ''}${isPicked ? ' is-picked' : ''}`}
+      onClick={(event) => onPick(item.path, event)}
+      onDoubleClick={() => onOpen(item.path)}
+      // Dragging onto the timeline is the same act as double clicking; the drop
+      // target reads this back rather than the file, which the renderer is not
+      // allowed to construct.
+      draggable
+      onDragStart={(event) => {
+        event.dataTransfer.setData('application/x-grecorder-clip', item.path)
+        event.dataTransfer.effectAllowed = 'copy'
+      }}
+      title={
+        isActive
+          ? `${item.path} (showing in the preview)`
+          : `${item.path} - double click to add it to the timeline`
+      }
+      onContextMenu={(event) => {
+        event.preventDefault()
+        onMenu(item.path, { x: event.clientX, y: event.clientY })
+      }}
+    >
+      <span className="library-thumb">
+        {item.poster ? <img src={item.poster} alt="" draggable={false} /> : null}
+      </span>
+      <span className="library-meta">
+        <span className="library-name">{item.name}</span>
+        <span className="small faint">{formatBytes(item.sizeBytes)}</span>
+      </span>
+    </button>
+  )
+})

@@ -131,8 +131,6 @@ export const api = {
 
     /** Take a clip out of the list. The file itself is never touched. */
     forget: (filePath: string): Promise<void> => ipcRenderer.invoke('media:forget', filePath),
-    hiddenCount: (): Promise<number> => ipcRenderer.invoke('media:hiddenCount'),
-    unhideAll: (): Promise<void> => ipcRenderer.invoke('media:unhideAll'),
 
     /**
      * Resolve the absolute path of a dropped File. Reading `File.path`
