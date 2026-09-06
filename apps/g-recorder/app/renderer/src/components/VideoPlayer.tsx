@@ -19,6 +19,8 @@ interface VideoPlayerProps {
   onDurationChange: (seconds: number) => void
   onPlayingChange: (playing: boolean) => void
   onError: (message: string) => void
+  /** Set by the editor to show a crop: the element is moved and scaled */
+  style?: React.CSSProperties
 }
 
 /**
@@ -29,7 +31,7 @@ interface VideoPlayerProps {
  * handles feel like a real selection rather than two disconnected numbers.
  */
 const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function VideoPlayer(
-  { src, inPoint, outPoint, onTimeUpdate, onDurationChange, onPlayingChange, onError },
+  { src, inPoint, outPoint, onTimeUpdate, onDurationChange, onPlayingChange, onError, style },
   ref,
 ) {
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -152,6 +154,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
   return (
     <video
       ref={videoRef}
+      style={style}
       playsInline
       onLoadedMetadata={(event) => {
         const video = event.currentTarget

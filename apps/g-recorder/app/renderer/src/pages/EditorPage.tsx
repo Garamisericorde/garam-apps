@@ -151,6 +151,8 @@ export default function EditorPage(): JSX.Element {
    */
   const [crop, setCrop] = useState<FrameCrop>(FULL_FRAME)
   const [cropping, setCropping] = useState(false)
+  /* While drawing, the whole frame has to be visible to draw on. */
+  const showCrop = isCropped(crop) && !cropping
   const [dragOver, setDragOver] = useState<'stage' | 'timeline' | null>(null)
   /** Where an incoming clip would land, drawn while it is over the lanes */
   const [pendingDrop, setPendingDrop] = useState<PendingDrop | null>(null)
@@ -798,6 +800,25 @@ export default function EditorPage(): JSX.Element {
           {...stageDrop}
         >
           {activeItem && activeSource ? (
+            /*
+             * The crop is shown, not merely recorded for the export.
+             *
+             * The picture is scaled up inside a box the shape of the crop, so
+             * the kept region exactly fills it. Anything else means drawing a
+             * rectangle and then having to imagine the result.
+             */
+            <div
+              className={showCrop ? 'stage-crop' : undefined}
+              style={
+                showCrop
+                  ? {
+                      aspectRatio: `${crop.width * (activeSource.info.width || 16)} / ${
+                        crop.height * (activeSource.info.height || 9)
+                      }`,
+                    }
+                  : undefined
+              }
+            >
             <VideoPlayer
               ref={playerRef}
               src={activeSource.url}
@@ -807,7 +828,18 @@ export default function EditorPage(): JSX.Element {
               onDurationChange={() => undefined}
               onPlayingChange={setIsPlaying}
               onError={setError}
+              style={
+                showCrop
+                  ? {
+                      width: `${100 / crop.width}%`,
+                      height: `${100 / crop.height}%`,
+                      left: `${(-crop.x / crop.width) * 100}%`,
+                      top: `${(-crop.y / crop.height) * 100}%`,
+                    }
+                  : undefined
+              }
             />
+            </div>
           ) : null}
 
           {cropping && activeSource && (
