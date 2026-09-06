@@ -2056,7 +2056,7 @@ kbd {
 
 .crop-rect {
   position: absolute;
-  border: 1px solid rgb(255 255 255 / 0.85);
+  border: 1px solid var(--accent);
   box-shadow: 0 0 0 1px rgb(0 0 0 / 0.5);
   cursor: move;
 }
@@ -2091,13 +2091,13 @@ kbd {
  * square straddling a corner reads as a point rather than as the corner
  * itself.
  *
- * White with a dark rim, not the accent: these sit on arbitrary footage, and
- * white over a thin black outline is the one pair that survives any frame
- * behind it.
+ * The accent, over a dark rim. It belongs to the app rather than to the
+ * footage, which is what stops a handle being mistaken for something in the
+ * frame, and the rim is what keeps it visible over a pale one.
  */
 .crop-handle {
   position: absolute;
-  background: #fff;
+  background: var(--accent);
   box-shadow: 0 0 0 1px rgb(0 0 0 / 0.65);
 }
 
@@ -2138,9 +2138,9 @@ kbd {
   background: transparent;
   box-shadow: none;
   border-style: solid;
-  border-color: #fff;
+  border-color: var(--accent);
   border-width: 0;
-  filter: drop-shadow(0 0 1px rgb(0 0 0 / 0.9));
+  filter: drop-shadow(0 0 1.5px rgb(0 0 0 / 0.95));
 }
 
 .crop-handle.is-nw {
