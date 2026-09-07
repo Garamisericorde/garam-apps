@@ -45,3 +45,9 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: G-Recorder
+  # The finish-page launch is off because build/installer.nsh starts the app
+  # itself. That checkbox does not exist in a silent install, which is how
+  # Garam Setup installs, and the app's first run is what registers
+  # launch-at-startup and starts the replay buffer.
+  runAfterFinish: false
+  include: build/installer.nsh
