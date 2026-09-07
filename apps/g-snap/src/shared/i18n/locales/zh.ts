@@ -80,7 +80,7 @@ export const zh: Messages = {
   'shortcut.ctrlDrag': '松开鼠标即复制到剪贴板并关闭',
   'shortcut.shiftDrag': '矩形和椭圆保持正方；直线和箭头吸附到 45°',
   'shortcut.altDrag': '以起点为中心生成正方形或圆形',
-  'shortcut.esc': '清除选区 / 关闭截图层',
+  'shortcut.esc': '取消截图并关闭截图层',
   'shortcut.enter': '复制到剪贴板',
   'shortcut.ctrlC': '复制到剪贴板',
   'shortcut.ctrlS': '保存',

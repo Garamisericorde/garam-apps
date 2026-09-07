@@ -22,6 +22,10 @@ export interface TitleBarProps {
  *
  * `.g-drag` supplies `-webkit-app-region: drag`, so any clickable element
  * inside must carry `.g-no-drag` or it will not receive clicks.
+ *
+ * The free slot is NOT one of those. It stretches across the whole middle of
+ * the bar, so marking the slot itself as no-drag left almost nothing to grab
+ * the window by — the stylesheet opts out its children instead.
  */
 export function TitleBar({
   title,
@@ -38,7 +42,7 @@ export function TitleBar({
     <header className={cx('g-titlebar', 'g-drag', className)}>
       {icon && <span className="g-titlebar__icon">{icon}</span>}
       <span className="g-titlebar__title">{title}</span>
-      <div className="g-titlebar__slot g-no-drag">{children}</div>
+      <div className="g-titlebar__slot">{children}</div>
       {!hideControls && (
         <div className="g-titlebar__controls g-no-drag">
           <button className="g-winbtn" aria-label="Minimize" onClick={onMinimize}>

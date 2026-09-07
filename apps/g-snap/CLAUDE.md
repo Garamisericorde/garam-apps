@@ -199,6 +199,11 @@ centre, which is the gesture for ringing something you are pointing at: cursor
 on the target, Alt, pull outwards. Under Shift the LARGER of the two travels
 wins; taking the smaller one makes the corner lag behind the pointer.
 
+Shift means the same thing for the freehand tools: the pen and the highlighter
+collapse to a straight segment from where the stroke began, snapped to the same
+45 degree steps. Releasing Shift carries on freehand from that end point. One
+gesture, one meaning, everywhere.
+
 Both are re-applied on keydown/keyup, not only on mouse move, because both are
 routinely pressed after the drag has started and without the mouse moving —
 otherwise the key looks dead. Alt's keydown is `preventDefault`ed: on Windows a
@@ -262,6 +267,43 @@ picker they cannot use.
 
 Default is English, NOT the system locale. A wrong guess is worse than a
 predictable default, and the picker is the first row in Settings.
+
+## The text tool and the one-millisecond textarea
+
+Text is edited in an HTML `<textarea>` laid over the canvas, and for a while it
+did not work AT ALL — click, type, nothing. The cause only showed up on a
+millisecond timeline:
+
+```
+mousedown on CANVAS
+focusin  on TEXTAREA     the box mounts and the effect focuses it
+textarea ADDED
+focusout on TEXTAREA     0.1 ms later
+textarea REMOVED         onBlur -> commitText -> empty -> draft cleared
+mouseup
+```
+
+A mousedown moves focus, and the browser does that AFTER the React handler
+returns — by which point the textarea has mounted and focused itself. Focus went
+straight back to the canvas, the `onBlur` committed an empty draft, and the box
+was removed again. Total lifetime: about one millisecond.
+
+`e.evt.preventDefault()` on the mousedown that starts the text is the fix: it
+suppresses the browser's focus move. Do not "fix" this by delaying the focus or
+by special-casing an empty blur — those hide the cause and break differently.
+
+The lesson generalises: anything that mounts a focusable element from a
+mousedown is racing the browser's own focus handling and will lose.
+
+## Esc abandons the capture
+
+Esc closes the overlay outright. It used to clear the selection and leave the
+frozen screen up, which reads as the app ignoring you — the screen is still
+covered and nothing says why.
+
+The one exception is an open text box: Esc dismisses just the box, because that
+is what every editor does and losing a whole capture to a dismissed text field
+would be worse.
 
 ## Konva
 

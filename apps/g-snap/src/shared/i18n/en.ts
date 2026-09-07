@@ -97,7 +97,7 @@ export const en = {
   'shortcut.ctrlDrag': 'Copy to clipboard and close as soon as you release',
   'shortcut.shiftDrag': 'Rectangle and ellipse stay square; line and arrow snap to 45°',
   'shortcut.altDrag': 'A square or circle grown from the point you started on',
-  'shortcut.esc': 'Clear the selection / close the overlay',
+  'shortcut.esc': 'Cancel the capture and close the overlay',
   'shortcut.enter': 'Copy to clipboard',
   'shortcut.ctrlC': 'Copy to clipboard',
   'shortcut.ctrlS': 'Save',

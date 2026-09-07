@@ -84,7 +84,7 @@ export const pt: Messages = {
   'shortcut.ctrlDrag': 'Copiar para a área de transferência e fechar ao soltar',
   'shortcut.shiftDrag': 'Retângulo e elipse ficam quadrados; linha e seta travam em 45°',
   'shortcut.altDrag': 'Um quadrado ou círculo que cresce a partir do ponto inicial',
-  'shortcut.esc': 'Limpar a seleção / fechar a camada',
+  'shortcut.esc': 'Cancelar a captura e fechar a camada',
   'shortcut.enter': 'Copiar para a área de transferência',
   'shortcut.ctrlC': 'Copiar para a área de transferência',
   'shortcut.ctrlS': 'Salvar',

@@ -333,13 +333,17 @@ export function OverlayApp() {
 
       if (e.key === 'Escape') {
         e.preventDefault()
-        if (s.textDraft) {
-          s.cancelText()
-        } else if (s.selection) {
-          s.resetSelection()
-        } else {
-          cancel()
-        }
+
+        // Esc means "forget this screenshot", so it closes. It used to clear
+        // the selection and leave the frozen screen sitting there, which reads
+        // as the app ignoring you — the screen is still covered and nothing
+        // says why.
+        //
+        // A text box is the one exception: it is a sub-mode, and Esc dismissing
+        // just the box is what every editor does. Losing the whole capture
+        // because you dismissed a text field would be worse.
+        if (s.textDraft) s.cancelText()
+        else cancel()
         return
       }
 
@@ -494,6 +498,13 @@ export function OverlayApp() {
 
       if (inside && s.tool !== 'none') {
         if (s.tool === 'text') {
+          // A mousedown moves focus, and the browser does that AFTER this
+          // handler returns — by which point React has already mounted the
+          // textarea and focused it. Focus then went straight back to the
+          // canvas, the textarea's onBlur committed an empty draft, and the box
+          // was removed again. Measured lifetime: about one millisecond, which
+          // is why the text tool looked like it did nothing at all.
+          e.evt.preventDefault()
           s.startText(p.x, p.y)
           return
         }
@@ -863,6 +874,14 @@ function extendShape(shape: Shape, start: Point, p: Point, mods: Modifiers): Sha
   switch (shape.type) {
     case 'pen':
     case 'marker': {
+      if (mods.shift) {
+        // Straight from where the stroke began, snapped to 45 degrees — the
+        // same constraint the line tool uses, so the gesture means one thing
+        // everywhere. Releasing Shift carries on freehand from that end point.
+        const end = segmentTo(start, p, mods)
+        return { ...shape, points: [start.x, start.y, end.x, end.y] }
+      }
+
       const points = appendPoint(shape.points, p)
       // Unchanged array means the sample was too close to be worth keeping;
       // returning the same shape skips the re-render as well.

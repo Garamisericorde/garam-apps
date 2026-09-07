@@ -445,6 +445,16 @@
   user-select: none;
 }
 
+/*
+ * Belt and braces for the popup list. `color-scheme` already puts it in dark
+ * mode; naming the colours as well keeps the list on the app's own surfaces
+ * rather than the browser's idea of dark grey.
+ */
+.g-select option {
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
 .g-input:hover,
 .g-select:hover {
   border-color: var(--border-strong);

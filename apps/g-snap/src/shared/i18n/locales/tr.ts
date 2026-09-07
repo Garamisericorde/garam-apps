@@ -80,7 +80,7 @@ export const tr: Messages = {
   'shortcut.ctrlDrag': 'Bıraktığın anda panoya kopyala ve kapat',
   'shortcut.shiftDrag': 'Dikdörtgen ve elips kare kalır; çizgi ve ok 45°ye oturur',
   'shortcut.altDrag': 'Başladığın noktadan büyüyen bir kare veya daire',
-  'shortcut.esc': 'Seçimi temizle / katmanı kapat',
+  'shortcut.esc': 'Ekran görüntüsünü iptal et ve katmanı kapat',
   'shortcut.enter': 'Panoya kopyala',
   'shortcut.ctrlC': 'Panoya kopyala',
   'shortcut.ctrlS': 'Kaydet',

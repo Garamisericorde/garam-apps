@@ -68,7 +68,11 @@ let current: LocaleId = DEFAULT_LOCALE
  * new dictionary.
  */
 export function setLocale(id: LocaleId): void {
-  current = id
+  // settings.json is a plain file a person can edit, and an id with no
+  // dictionary would make every lookup below throw on `undefined[key]` — during
+  // startup, while the tray menu is being built, which is the worst place for
+  // an app to fall over. A typo in a JSON file is not worth a crash.
+  current = isLocaleId(id) && DICTIONARIES[id] ? id : DEFAULT_LOCALE
 }
 
 export function getLocale(): LocaleId {
@@ -80,7 +84,7 @@ export function t(key: MessageKey, params?: Record<string, string | number>): st
   // Fall back to English for a key a translator has not reached yet. The type
   // system stops that happening, but a partially-written locale should degrade
   // to readable English rather than to the raw key.
-  const message = DICTIONARIES[current][key] ?? en[key]
+  const message = (DICTIONARIES[current] ?? en)[key] ?? en[key]
   if (!params) return message
 
   return message.replace(/\{(\w+)\}/g, (whole, name: string) =>

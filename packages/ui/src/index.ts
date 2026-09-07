@@ -26,3 +26,5 @@ export { Modal, type ModalProps } from './components/Modal'
 export { Kbd } from './components/Kbd'
 export { Spinner } from './components/Spinner'
 export { Badge, type BadgeTone } from './components/Badge'
+
+export { useCurrentSection, type CurrentSectionOptions } from './hooks/useCurrentSection'

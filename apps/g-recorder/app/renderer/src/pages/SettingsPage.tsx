@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCurrentSection } from '@garam/ui'
 import type {
   AppSettings,
   AudioDevices,
@@ -593,48 +594,31 @@ function sectionId(title: string): string {
 /**
  * Jump to a section, and say which one you are in.
  *
- * The page is long enough that finding a section means scrolling and reading
- * headings, which is the work this removes. Which one is current is read from
- * where the sections actually are rather than from the last button pressed:
- * scrolling by hand has to move it too, or the bar starts lying.
+ * The marker used to be driven by an IntersectionObserver, and it lit up the
+ * wrong section: the observer's callback only receives the entries that
+ * CHANGED, so "the topmost entry" is the topmost of whatever happened to move,
+ * not the topmost of what is on screen. Clicking Diagnostics scrolled there and
+ * left Hotkeys highlighted. It also rooted the observer at the viewport while
+ * the thing that actually scrolls is `.page`.
+ *
+ * useCurrentSection reads positions instead, and knows that the bottom of the
+ * scroll is the last section no matter what the geometry says.
  */
 function SettingsNav(): JSX.Element {
-  const [current, setCurrent] = useState(SECTIONS[0])
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        // The topmost heading that is on screen, not merely the last one to
-        // cross the line: scrolling up must move the marker back.
-        const visible = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0]
-
-        const title = SECTIONS.find((section) => sectionId(section) === visible?.target.id)
-        if (title) setCurrent(title)
-      },
-      { rootMargin: '-52px 0px -60% 0px' },
-    )
-
-    for (const section of SECTIONS) {
-      const element = document.getElementById(sectionId(section))
-      if (element) observer.observe(element)
-    }
-
-    return () => observer.disconnect()
-  }, [])
+  const { current, select } = useCurrentSection({ ids: SECTIONS.map(sectionId), offset: 52 })
 
   return (
     <nav className="settings-nav">
       {SECTIONS.map((section) => (
         <button
           key={section}
-          className={current === section ? 'is-current' : ''}
-          onClick={() =>
+          className={current === sectionId(section) ? 'is-current' : ''}
+          onClick={() => {
+            select(sectionId(section))
             document
               .getElementById(sectionId(section))
               ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-          }
+          }}
         >
           {section}
         </button>

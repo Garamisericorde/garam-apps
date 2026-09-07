@@ -12,6 +12,7 @@ import {
   Slider,
   Switch,
   TitleBar,
+  useCurrentSection,
 } from '@garam/ui'
 import type { HotkeyStatus, SnapSettings, ToastMessage } from '@shared/types'
 import { HotkeyInput } from './HotkeyInput'
@@ -119,7 +120,9 @@ export function SettingsApp() {
         </header>
         <div className="snap-settings__rule" />
 
-        <Panel title={t('settings.shortcuts')} description={t('settings.shortcutsDesc')}>
+        <SettingsNav />
+
+        <Panel id={sectionId('shortcuts')} title={t('settings.shortcuts')} description={t('settings.shortcutsDesc')}>
           <Field
             label={t('settings.selectRegion')}
             hint={t('settings.selectRegionHint')}
@@ -155,7 +158,7 @@ export function SettingsApp() {
           </Field>
         </Panel>
 
-        <Panel title={t('settings.saving')}>
+        <Panel id={sectionId('saving')} title={t('settings.saving')}>
           <Field label={t('settings.saveFolder')} inline>
             <div className="snap-settings__path">
               <Input readOnly value={values.saveDirectory} title={values.saveDirectory} />
@@ -205,7 +208,7 @@ export function SettingsApp() {
           )}
         </Panel>
 
-        <Panel title={t('settings.behaviour')}>
+        <Panel id={sectionId('behaviour')} title={t('settings.behaviour')}>
           <Field label={t('settings.language')} hint={t('settings.languageHint')} inline>
             <Select
               value={values.language}
@@ -247,7 +250,7 @@ export function SettingsApp() {
           </Field>
         </Panel>
 
-        <Panel title={t('settings.annotationDefaults')}>
+        <Panel id={sectionId('annotation')} title={t('settings.annotationDefaults')}>
           <Field label={t('settings.penColor')} inline>
             <ColorPicker
               value={values.defaultColor}
@@ -268,6 +271,7 @@ export function SettingsApp() {
         </Panel>
 
         <Panel
+          id={sectionId('overlay')}
           title={t('settings.overlayShortcuts')}
           description={t('settings.overlayShortcutsDesc')}
         >
@@ -281,7 +285,7 @@ export function SettingsApp() {
           </div>
         </Panel>
 
-        <Panel title={t('settings.about')}>
+        <Panel id={sectionId('about')} title={t('settings.about')}>
           <div className="snap-settings__about-actions">
             <Button
               size="sm"
@@ -318,6 +322,61 @@ export function SettingsApp() {
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * The sections, in the order the page lays them out.
+ *
+ * The id is a fixed slug, NOT a slug of the title: the titles are translated,
+ * so deriving ids from them would change every anchor with the language — and
+ * a Chinese or Russian title slugifies to nothing at all.
+ */
+const SECTIONS: Array<{ id: string; label: MessageKey }> = [
+  { id: 'shortcuts', label: 'settings.shortcuts' },
+  { id: 'saving', label: 'settings.saving' },
+  { id: 'behaviour', label: 'settings.behaviour' },
+  { id: 'annotation', label: 'settings.annotationDefaults' },
+  { id: 'overlay', label: 'settings.overlayShortcuts' },
+  { id: 'about', label: 'settings.about' },
+]
+
+const sectionId = (id: string): string => `snap-section-${id}`
+
+/** Matches the sticky bar in settings.css, so a jump clears it. */
+const NAV_HEIGHT = 52
+
+/**
+ * Jump to a section, and say which one you are in.
+ *
+ * Which one is current comes from where the sections ACTUALLY are — see
+ * useCurrentSection for why the obvious IntersectionObserver version highlights
+ * the wrong one.
+ */
+function SettingsNav() {
+  const { current, select } = useCurrentSection({
+    ids: SECTIONS.map((section) => sectionId(section.id)),
+    offset: NAV_HEIGHT,
+  })
+
+  return (
+    <nav className="snap-settings__nav">
+      {SECTIONS.map((section) => (
+        <button
+          key={section.id}
+          type="button"
+          className={current === sectionId(section.id) ? 'is-current' : ''}
+          onClick={() => {
+            select(sectionId(section.id))
+            document
+              .getElementById(sectionId(section.id))
+              ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }}
+        >
+          {t(section.label)}
+        </button>
+      ))}
+    </nav>
   )
 }
 

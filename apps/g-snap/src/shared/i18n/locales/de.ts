@@ -82,7 +82,7 @@ export const de: Messages = {
   'shortcut.ctrlDrag': 'Beim Loslassen kopieren und schließen',
   'shortcut.shiftDrag': 'Rechteck und Ellipse bleiben quadratisch; Linie und Pfeil rasten auf 45° ein',
   'shortcut.altDrag': 'Ein Quadrat oder Kreis, der vom Startpunkt aus wächst',
-  'shortcut.esc': 'Auswahl aufheben / Oberfläche schließen',
+  'shortcut.esc': 'Die Aufnahme verwerfen und die Oberfläche schließen',
   'shortcut.enter': 'In die Zwischenablage kopieren',
   'shortcut.ctrlC': 'In die Zwischenablage kopieren',
   'shortcut.ctrlS': 'Speichern',

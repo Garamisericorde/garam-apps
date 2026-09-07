@@ -221,8 +221,23 @@ if (!gotLock) {
   })
 }
 
-app.on('before-quit', () => {
+/** Set once the settings have been written, so the second quit goes through. */
+let settingsFlushed = false
+
+app.on('before-quit', (event) => {
   hotkeys?.dispose()
+
+  // A setting changed in the last 200 ms is still sitting in the store's
+  // debounce timer. Quitting without waiting drops it, and losing the change
+  // you just made is indistinguishable from the app not saving settings at all.
+  //
+  // before-quit does not await, so the quit has to be held and re-issued.
+  if (settingsFlushed || !settings) return
+  event.preventDefault()
+  void settings.flush().finally(() => {
+    settingsFlushed = true
+    app.quit()
+  })
 })
 
 // Never swallow unhandled errors silently.

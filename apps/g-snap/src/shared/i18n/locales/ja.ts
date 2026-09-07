@@ -82,7 +82,7 @@ export const ja: Messages = {
   'shortcut.ctrlDrag': '離した瞬間にクリップボードへコピーして閉じる',
   'shortcut.shiftDrag': '四角形と楕円は正方形のまま、直線と矢印は 45° に吸着',
   'shortcut.altDrag': '始点を中心に広がる正方形または円',
-  'shortcut.esc': '選択を解除 / オーバーレイを閉じる',
+  'shortcut.esc': 'キャプチャをやめてオーバーレイを閉じる',
   'shortcut.enter': 'クリップボードにコピー',
   'shortcut.ctrlC': 'クリップボードにコピー',
   'shortcut.ctrlS': '保存',

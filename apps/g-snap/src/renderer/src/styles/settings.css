@@ -100,6 +100,58 @@
   );
 }
 
+/* ── Section navigation ───────────────────────────────────────────────── */
+
+/*
+ * Sticky, so the way back to another section is always one click away rather
+ * than a scroll and a read. It bleeds to the window edges by cancelling the
+ * body's padding, then puts it back — a bar that stops short of the edge looks
+ * like a mistake.
+ */
+.snap-settings__nav {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  margin: 0 calc(var(--sp-5) * -1);
+  padding: var(--sp-2) var(--sp-5);
+  /* Panels scroll underneath, so this needs a ground of its own. */
+  background: var(--bg);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.snap-settings__nav button {
+  padding: 5px var(--sp-3);
+  border-radius: var(--radius-full);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text-muted);
+  white-space: nowrap;
+  transition:
+    color var(--t-fast),
+    background var(--t-fast);
+}
+
+.snap-settings__nav button:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.snap-settings__nav button.is-current {
+  color: var(--text-on-accent);
+  background: var(--accent-gradient);
+}
+
+/*
+ * Jumping to a section must not park it underneath the sticky bar, which is
+ * what scroll-into-view does on its own.
+ */
+.snap-settings__body > .g-panel {
+  scroll-margin-top: 52px;
+}
+
 /* Save-folder row: a long path plus the Browse button */
 .snap-settings__path {
   display: flex;

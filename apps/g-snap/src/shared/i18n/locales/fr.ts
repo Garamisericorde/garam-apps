@@ -84,7 +84,7 @@ export const fr: Messages = {
   'shortcut.ctrlDrag': 'Copier dans le presse-papiers et fermer au relâchement',
   'shortcut.shiftDrag': 'Rectangle et ellipse restent carrés ; ligne et flèche s’alignent sur 45°',
   'shortcut.altDrag': 'Un carré ou un cercle qui grandit depuis le point de départ',
-  'shortcut.esc': 'Effacer la sélection / fermer la surface',
+  'shortcut.esc': 'Abandonner la capture et fermer la surface',
   'shortcut.enter': 'Copier dans le presse-papiers',
   'shortcut.ctrlC': 'Copier dans le presse-papiers',
   'shortcut.ctrlS': 'Enregistrer',

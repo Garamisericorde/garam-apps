@@ -83,7 +83,7 @@ export const es: Messages = {
   'shortcut.ctrlDrag': 'Copiar al portapapeles y cerrar al soltar',
   'shortcut.shiftDrag': 'Rectángulo y elipse se mantienen cuadrados; línea y flecha se ajustan a 45°',
   'shortcut.altDrag': 'Un cuadrado o círculo que crece desde el punto de inicio',
-  'shortcut.esc': 'Borrar la selección / cerrar la capa',
+  'shortcut.esc': 'Cancelar la captura y cerrar la capa',
   'shortcut.enter': 'Copiar al portapapeles',
   'shortcut.ctrlC': 'Copiar al portapapeles',
   'shortcut.ctrlS': 'Guardar',

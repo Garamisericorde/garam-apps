@@ -7,6 +7,17 @@
  */
 
 :root {
+  /*
+   * Tell the browser these apps are dark.
+   *
+   * Without this the parts Chromium draws ITSELF stay in light mode, because it
+   * has no way to know: a <select> popup came up grey with near-black text on
+   * top of a black window, and scrollbars came up white. Those are OS-drawn
+   * surfaces — no amount of CSS on the element reaches inside them, and this
+   * one line is the only thing that does.
+   */
+  color-scheme: dark;
+
   /* ── Surfaces ─────────────────────────────────────────────────────────── */
   --bg: #14142a;              /* app background (darkest) */
   --bg-surface: #1a1a2e;      /* panel, sidebar, toolbar */
