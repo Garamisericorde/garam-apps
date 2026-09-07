@@ -53,11 +53,11 @@ describe('sanitizeSettings', () => {
     const { settings, warnings } = sanitizeSettings({
       fps: 30,
       replayLengthSeconds: 'ten',
-      outputPath: 'D:\Clips',
+      outputPath: 'D:\\Clips',
     })
 
     expect(settings.fps).toBe(30)
-    expect(settings.outputPath).toBe('D:\Clips')
+    expect(settings.outputPath).toBe('D:\\Clips')
     expect(settings.replayLengthSeconds).toBe(DEFAULT_SETTINGS.replayLengthSeconds)
     expect(warnings).toHaveLength(1)
   })
