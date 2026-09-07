@@ -422,31 +422,34 @@ input:focus {
   padding: 10px 14px;
   border-radius: var(--radius-sm);
   font-size: 13px;
+  line-height: 1.45;
   border: 1px solid transparent;
+  /*
+   * The border and the tint say what kind of banner this is; the text is just
+   * text. Setting the words in the same colour as the border made an info
+   * banner deep violet on deep violet, which is a sentence nobody can read.
+   */
+  color: var(--text);
 }
 
 .banner-error {
   background: var(--danger-soft);
   border-color: var(--danger);
-  color: var(--danger);
 }
 
 .banner-warning {
   background: var(--warning-soft);
   border-color: var(--warning);
-  color: var(--warning);
 }
 
 .banner-info {
   background: var(--accent-soft);
   border-color: var(--accent);
-  color: var(--accent);
 }
 
 .banner-success {
   background: var(--success-soft);
   border-color: var(--success);
-  color: var(--success);
 }
 
 .pill {
@@ -1251,7 +1254,9 @@ kbd {
 }
 
 .zoom-btn.is-on {
-  color: var(--accent);
+  /* The lighter end of the ramp: --accent is a fill colour, and an icon drawn
+     in it over --accent-soft is dark on dark. */
+  color: var(--accent-hover);
   background: var(--accent-soft);
 }
 
