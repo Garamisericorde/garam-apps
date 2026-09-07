@@ -9,6 +9,7 @@ import {
   linkItems,
   linkedWith,
   moveItem,
+  previewAudio,
   removeItem,
   setItemGain,
   sourcePaths,
@@ -287,5 +288,58 @@ describe('linked clips', () => {
 
     // Both pairs end up in one group: four items, not two.
     expect(linkedWith(joined, 'video', second.video[0].id)).toHaveLength(4)
+  })
+})
+
+describe('what the preview is allowed to be heard doing', () => {
+  it('plays the clip at full volume while its audio is under it', () => {
+    const timeline = single()
+    expect(previewAudio(timeline, timeline.video[0], 2)).toEqual({ muted: false, volume: 1 })
+  })
+
+  it('goes silent once the audio under the clip is removed', () => {
+    // The complaint this covers: removing the audio clip and still hearing it.
+    const timeline = single()
+    const silent = removeItem(timeline, 'audio', timeline.audio[0].id)
+
+    expect(previewAudio(silent, silent.video[0], 2).muted).toBe(true)
+  })
+
+  it('follows the clip gain, as far as an element can be turned up', () => {
+    const timeline = single()
+    const quiet = setItemGain(timeline, 'audio', timeline.audio[0].id, 0.4)
+    expect(previewAudio(quiet, quiet.video[0], 2).volume).toBeCloseTo(0.4)
+
+    const loud = setItemGain(timeline, 'audio', timeline.audio[0].id, MAX_GAIN)
+    expect(previewAudio(loud, loud.video[0], 2).volume).toBe(1)
+  })
+
+  it('goes silent where the audio has been dragged out of sync', () => {
+    // One element cannot play a picture and a sound from different moments, so
+    // the honest preview of an offset track is no track.
+    const timeline = single()
+    const loose = unlinkItem(timeline, 'audio', timeline.audio[0].id)
+    const moved = moveItem(loose, 'audio', loose.audio[0].id, 3)
+
+    expect(previewAudio(moved, moved.video[0], 5).muted).toBe(true)
+  })
+
+  it('goes silent in a gap on the audio lane', () => {
+    const timeline = appendClip(single(), { path: 'b.mp4', durationSeconds: 5, hasAudio: true })
+    const gap = removeItem(timeline, 'audio', timeline.audio[0].id)
+
+    expect(previewAudio(gap, gap.video[0], 2).muted).toBe(true)
+    // The second clip still has its own audio, and is unaffected.
+    expect(previewAudio(gap, gap.video[1], 11).muted).toBe(false)
+  })
+
+  it('will not play one clip under the picture of another', () => {
+    const timeline = appendClip(single(), { path: 'b.mp4', durationSeconds: 5, hasAudio: true })
+    // The second clip's audio, moved to where the first clip's picture is.
+    const loose = unlinkItem(timeline, 'audio', timeline.audio[1].id)
+    const overlapping = removeItem(loose, 'audio', loose.audio[0].id)
+    const moved = moveItem(overlapping, 'audio', overlapping.audio[0].id, 0)
+
+    expect(previewAudio(moved, moved.video[0], 2).muted).toBe(true)
   })
 })

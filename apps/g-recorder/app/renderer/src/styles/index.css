@@ -603,6 +603,13 @@ input:focus {
   box-shadow: inset 0 0 0 2px var(--accent-soft);
 }
 
+/* The clips panel takes a dropped file too, and says so the same way */
+.library.drag-over {
+  box-shadow: inset 0 0 0 2px var(--accent-soft);
+  outline: 1px dashed var(--accent);
+  outline-offset: -6px;
+}
+
 .transport {
   /*
    * The play button sits on the centre line of the picture above it, and

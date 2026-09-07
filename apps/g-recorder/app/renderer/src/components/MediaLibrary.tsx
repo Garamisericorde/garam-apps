@@ -14,6 +14,11 @@ interface MediaLibraryProps {
   onImport: () => void
   /** Called when a clip leaves the list, so the editor can let go of it */
   onRemoved: (clipPath: string) => void
+  /**
+   * A file dropped on the panel. Handled by the editor rather than here, so a
+   * clip dragged in from a folder arrives the same way wherever it is dropped.
+   */
+  onDropFile: (event: React.DragEvent) => void
 }
 
 /**
@@ -33,6 +38,7 @@ export default function MediaLibrary({
   onOpen,
   onImport,
   onRemoved,
+  onDropFile,
 }: MediaLibraryProps): JSX.Element {
   const [items, setItems] = useState<LibraryItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -49,6 +55,16 @@ export default function MediaLibrary({
   /** Where a shift-click measures its range from */
   const anchor = useRef<string | null>(null)
   const [menu, setMenu] = useState<{ at: MenuPosition; paths: string[] } | null>(null)
+  /** Whether a file from outside is hovering over the panel */
+  const [dragOver, setDragOver] = useState(false)
+
+  /*
+   * The panel is the third place a video can be dropped, alongside the picture
+   * and the timeline. A clip dragged out of this list is not: dropping one back
+   * where it came from is not a request for anything.
+   */
+  const isOurs = (transfer: DataTransfer): boolean =>
+    transfer.types.includes('application/x-grecorder-clip')
 
   const refresh = useCallback(async () => {
     try {
@@ -215,7 +231,22 @@ export default function MediaLibrary({
   )
 
   return (
-    <aside className="library">
+    <aside
+      className={`library${dragOver ? ' drag-over' : ''}`}
+      onDragOver={(event) => {
+        if (isOurs(event.dataTransfer)) return
+        event.preventDefault()
+        // Explorer defaults to "link"; without this the cursor says no.
+        event.dataTransfer.dropEffect = 'copy'
+        setDragOver(true)
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(event) => {
+        setDragOver(false)
+        if (isOurs(event.dataTransfer)) return
+        onDropFile(event)
+      }}
+    >
       <div className="library-head">
         <span className="section-title" style={{ margin: 0 }}>
           Clips

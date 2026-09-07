@@ -137,8 +137,18 @@ export const api = {
     /**
      * Resolve the absolute path of a dropped File. Reading `File.path`
      * directly is deprecated in Electron, so this goes through webUtils.
+     *
+     * Never throws: a drop carrying something that is not a real file on disk
+     * would otherwise take the whole drop handler down with it, and the caller
+     * has a URL to fall back on.
      */
-    pathForFile: (file: File): string => webUtils.getPathForFile(file),
+    pathForFile: (file: File): string => {
+      try {
+        return webUtils.getPathForFile(file)
+      } catch {
+        return ''
+      }
+    },
   },
 
   settings: {

@@ -10,6 +10,7 @@ import {
   itemEnd,
   linkItems,
   moveItem,
+  previewAudio,
   removeItem,
   setItemGain,
   unlinkItem,
@@ -32,6 +33,7 @@ import type { TimelineView } from '../components/timelineView'
 import CropOverlay, { FULL_FRAME, isCropped } from '../components/CropOverlay'
 import PresetPicker from '../components/PresetPicker'
 import MediaLibrary from '../components/MediaLibrary'
+import { carriesFile, droppedPath } from '../lib/droppedPath'
 import type { ExportControl } from '../components/PresetPicker'
 import { DEFAULT_EDITOR_KEYS } from '../../../shared/hotkeyDefaults'
 import { emptyHistory, record, redo, undo } from '../state/history'
@@ -318,6 +320,12 @@ export default function EditorPage(): JSX.Element {
   )
   const activeSource = activeItem ? sources[activeItem.path] : undefined
 
+  /* What the audio lane says should be heard right now — see previewAudio */
+  const sound = useMemo(
+    () => previewAudio(timeline, activeItem, playhead),
+    [activeItem, playhead, timeline],
+  )
+
   /*
    * A seek waiting for the player to be told which clip it is showing.
    *
@@ -597,11 +605,17 @@ export default function EditorPage(): JSX.Element {
         return
       }
 
-      const file = event.dataTransfer.files[0]
-      if (!file) return
+      if (!carriesFile(event.dataTransfer)) return
 
-      const path = window.api.media.pathForFile(file)
-      if (path) void addClip(path, at)
+      const path = droppedPath(event.dataTransfer)
+      if (!path) {
+        // Silence here read as the drop having missed. It did not: the drop
+        // landed and carried nothing this app could open.
+        setError('That drop carried no file. Drag a video file in from a folder.')
+        return
+      }
+
+      void addClip(path, at)
     },
     [addClip],
   )
@@ -713,6 +727,7 @@ export default function EditorPage(): JSX.Element {
         activePath={activeItem?.path ?? null}
         onOpen={(clipPath) => void addClip(clipPath)}
         onImport={() => void handleImport()}
+        onDropFile={(event) => handleDrop(event)}
         onRemoved={(removed) => {
           // A file that is gone cannot stay on the timeline — the editor would
           // be holding a picture of something that no longer exists.
@@ -828,6 +843,8 @@ export default function EditorPage(): JSX.Element {
               onDurationChange={() => undefined}
               onPlayingChange={setIsPlaying}
               onError={setError}
+              muted={sound.muted}
+              volume={sound.volume}
               style={
                 showCrop
                   ? {

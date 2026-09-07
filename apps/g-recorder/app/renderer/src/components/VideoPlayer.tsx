@@ -19,6 +19,10 @@ interface VideoPlayerProps {
   onDurationChange: (seconds: number) => void
   onPlayingChange: (playing: boolean) => void
   onError: (message: string) => void
+  /** Silence the preview — what the audio lane says when there is nothing under the clip */
+  muted?: boolean
+  /** 0 to 1, from the clip's gain */
+  volume?: number
   /** Set by the editor to show a crop: the element is moved and scaled */
   style?: React.CSSProperties
 }
@@ -31,7 +35,18 @@ interface VideoPlayerProps {
  * handles feel like a real selection rather than two disconnected numbers.
  */
 const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function VideoPlayer(
-  { src, inPoint, outPoint, onTimeUpdate, onDurationChange, onPlayingChange, onError, style },
+  {
+    src,
+    inPoint,
+    outPoint,
+    onTimeUpdate,
+    onDurationChange,
+    onPlayingChange,
+    onError,
+    muted = false,
+    volume = 1,
+    style,
+  },
   ref,
 ) {
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -96,6 +111,19 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
     video.src = src
     video.load()
   }, [src])
+
+  /*
+   * Set on the element rather than written as attributes: `volume` has no
+   * attribute at all, and `muted` as one is only the initial value — React
+   * would stop changing it after the first render.
+   */
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+
+    video.muted = muted
+    video.volume = Math.min(Math.max(volume, 0), 1)
+  }, [muted, volume, src])
 
   useImperativeHandle(
     ref,

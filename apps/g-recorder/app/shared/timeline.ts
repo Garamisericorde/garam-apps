@@ -262,6 +262,42 @@ export function removeItem(timeline: Timeline, lane: LaneId, id: string): Timeli
   return { ...timeline, [lane]: timeline[lane].filter((item) => item.id !== id) }
 }
 
+/** How far apart two source positions can be and still count as the same moment */
+const SYNC_TOLERANCE_SECONDS = 0.05
+
+/**
+ * What the preview should be heard doing at a moment on the timeline.
+ *
+ * The preview is a single video element playing the picture's own file, so the
+ * only sound it can make is that file's track. Playing it whenever the picture
+ * plays made the audio lane a lie: deleting the sound under a clip left the
+ * sound exactly where it was.
+ *
+ * So it is heard only when the audio lane says the same thing the element can
+ * say — the same file, at the same moment, at the gain the clip carries. Audio
+ * that has been removed, dragged out of sync, or that belongs to another file
+ * cannot be reproduced by this element at all, and silence is a truer preview
+ * of it than the wrong track at the wrong time.
+ */
+export function previewAudio(
+  timeline: Timeline,
+  video: TimelineItem | null,
+  time: number,
+): { muted: boolean; volume: number } {
+  const silent = { muted: true, volume: 1 }
+  if (!video) return silent
+
+  const audio = itemAt(timeline, 'audio', time)
+  if (!audio || audio.path !== video.path) return silent
+
+  const drift = Math.abs(sourceTimeAt(audio, time) - sourceTimeAt(video, time))
+  if (drift > SYNC_TOLERANCE_SECONDS) return silent
+
+  // An element cannot be turned up past its source, so a boosted clip previews
+  // at full and gains the rest on the export.
+  return { muted: false, volume: Math.min(itemGain(audio), 1) }
+}
+
 /**
  * Move an item along its lane.
  *
