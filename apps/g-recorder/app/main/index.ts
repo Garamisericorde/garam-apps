@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, nativeImage, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, nativeImage, shell } from 'electron'
 import { join, resolve } from 'path'
 import { existsSync, rmSync } from 'fs'
 import { electronApp, is } from '@electron-toolkit/utils'
@@ -6,6 +6,7 @@ import { violetSurfaces } from '@garam/theme'
 import { logger } from './logging/logger'
 import { registerSystemAudioHandler } from './audio/SystemAudioBridge'
 import { localTimestamp } from '../shared/time'
+import type { CloseChoice, CloseRequest } from '../shared/types'
 import { SettingsStore } from './settings/SettingsStore'
 import { FfmpegManager } from './ffmpeg/FfmpegManager'
 import { RecorderService } from './ffmpeg/RecorderService'
@@ -267,24 +268,14 @@ function createTray(): void {
 async function confirmClose(): Promise<void> {
   const recorder = RecorderService.getInstance()
   const status = recorder.getStatus()
-  const window = mainWindow
 
-  if (status.isManualRecording && window) {
-    const { response } = await dialog.showMessageBox(window, {
-      type: 'question',
-      buttons: ['Save and close', 'Discard and close', 'Cancel'],
-      defaultId: 0,
-      cancelId: 2,
-      title: 'Recording in progress',
-      message: 'A recording is still running.',
-      detail: 'Closing G-Recorder stops it. Keep what has been recorded so far?',
-    })
-
-    if (response === 2) return
+  if (status.isManualRecording) {
+    const choice = await askAboutClosing({ kind: 'recording' })
+    if (choice === 'cancel') return
 
     try {
       const outputPath = await recorder.stopManualRecording()
-      if (response === 1 && outputPath) {
+      if (choice === 'discard' && outputPath) {
         // "Discard" has to mean it. Leaving the file behind would be the app
         // deciding it knew better than the button that was pressed.
         rmSync(outputPath, { force: true })
@@ -300,21 +291,53 @@ async function confirmClose(): Promise<void> {
     return
   }
 
-  if (status.isRecording && window) {
-    const { response } = await dialog.showMessageBox(window, {
-      type: 'question',
-      buttons: ['Close', 'Cancel'],
-      defaultId: 1,
-      cancelId: 1,
-      title: 'Instant replay is on',
-      message: 'Closing stops the replay buffer.',
-      detail: 'Whatever it is holding is discarded. Minimize instead to leave it running.',
-    })
-
-    if (response === 1) return
+  if (status.isRecording) {
+    if ((await askAboutClosing({ kind: 'buffer' })) === 'cancel') return
   }
 
   await quit()
+}
+
+/**
+ * Put the question to the renderer, in the app's own dressing.
+ *
+ * A native message box is the one place a themed app suddenly looks like
+ * something else, and it would appear on the way out, over a window the user
+ * has been looking at all evening.
+ *
+ * Falls back to closing rather than hanging: a renderer that cannot answer (no
+ * window, a crashed page) must not leave the app impossible to quit. The
+ * timeout is the same reasoning.
+ */
+async function askAboutClosing(request: CloseRequest): Promise<CloseChoice> {
+  const window = mainWindow
+  if (!window || window.isDestroyed()) return 'close'
+
+  // The question is on that window, so it has to be in front of the user.
+  if (!window.isVisible()) window.show()
+  if (window.isMinimized()) window.restore()
+  window.focus()
+
+  return new Promise<CloseChoice>((resolve) => {
+    let settled = false
+
+    const finish = (choice: CloseChoice): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      ipcMain.removeListener('app:closeChoice', onChoice)
+      resolve(choice)
+    }
+
+    const onChoice = (_event: unknown, choice: CloseChoice): void => finish(choice)
+    const timer = setTimeout(() => {
+      logger.warn('Close confirmation went unanswered; closing anyway')
+      finish('close')
+    }, 30_000)
+
+    ipcMain.on('app:closeChoice', onChoice)
+    window.webContents.send('app:confirmClose', request)
+  })
 }
 
 function toggleMainWindow(): void {

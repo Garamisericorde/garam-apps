@@ -2351,3 +2351,11 @@ kbd {
   border-color: var(--accent);
   color: var(--accent-hover);
 }
+
+/*
+ * The close button's question. Narrower than the export dialog, which is a
+ * panel of settings; this is one sentence and three answers.
+ */
+.modal.confirm {
+  width: min(440px, 100%);
+}

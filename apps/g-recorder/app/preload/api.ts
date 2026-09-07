@@ -1,6 +1,8 @@
 import { ipcRenderer, webUtils } from 'electron'
 import type {
   AppSettings,
+  CloseChoice,
+  CloseRequest,
   AudioDevices,
   DisplayInfo,
   EncoderCapabilities,
@@ -198,6 +200,14 @@ export const api = {
     /** Background failures worth showing the user */
     onNotice: (callback: (notice: Notice) => void): (() => void) =>
       subscribe('app:notice', callback),
+
+    /**
+     * The close button, asking. The main process is blocked on the answer, so
+     * whatever shows this has to send one.
+     */
+    onConfirmClose: (callback: (request: CloseRequest) => void): (() => void) =>
+      subscribe('app:confirmClose', callback),
+    respondToClose: (choice: CloseChoice): void => ipcRenderer.send('app:closeChoice', choice),
 
     /** Hotkeys that did not register, with the reason for each */
     onHotkeyConflict: (callback: (failures: HotkeyFailure[]) => void): (() => void) =>

@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import type { HotkeyFailure } from '@shared/types'
-import type { FfmpegStatus } from '../../shared/types'
+import type { CloseRequest, FfmpegStatus } from '../../shared/types'
 import EditorPage from './pages/EditorPage'
 import RecordPage from './pages/RecordPage'
 import SettingsPage from './pages/SettingsPage'
 import OverlayPage from './pages/OverlayPage'
 import FfmpegBanner from './components/FfmpegBanner'
+import ConfirmClose from './components/ConfirmClose'
 import { startSystemAudioCapture, stopSystemAudioCapture } from './audio/systemAudio'
 
 interface Notice {
@@ -21,6 +22,8 @@ export default function App(): JSX.Element {
 
   const [ffmpeg, setFfmpeg] = useState<FfmpegStatus | null>(null)
   const [notice, setNotice] = useState<Notice | null>(null)
+  /** The close button's question, while it waits for an answer */
+  const [closeRequest, setCloseRequest] = useState<CloseRequest | null>(null)
   const [hotkeyConflicts, setHotkeyConflicts] = useState<HotkeyFailure[]>([])
 
   // The overlay is a separate window that shares this bundle — it needs none
@@ -34,6 +37,7 @@ export default function App(): JSX.Element {
       window.api.app.onNavigate((route) => navigate(route)),
       window.api.app.onNotice(setNotice),
       window.api.app.onHotkeyConflict(setHotkeyConflicts),
+      window.api.app.onConfirmClose(setCloseRequest),
     ]
 
     return () => unsubscribers.forEach((unsubscribe) => unsubscribe())
@@ -120,6 +124,16 @@ export default function App(): JSX.Element {
                 Dismiss
               </button>
             </div>
+          )}
+
+          {closeRequest && (
+            <ConfirmClose
+              request={closeRequest}
+              onChoose={(choice) => {
+                setCloseRequest(null)
+                window.api.app.respondToClose(choice)
+              }}
+            />
           )}
 
           {notice && (

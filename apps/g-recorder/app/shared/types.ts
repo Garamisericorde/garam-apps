@@ -330,3 +330,11 @@ export interface PadStatus {
   /** Why the native layer is unavailable, when it is */
   reason: string | null
 }
+
+/** What the close button is interrupting, so the question can name it */
+export interface CloseRequest {
+  kind: 'recording' | 'buffer'
+}
+
+/** What the user answered. Every way out of the dialog sends one of these. */
+export type CloseChoice = 'save' | 'discard' | 'close' | 'cancel'
