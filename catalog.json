@@ -1,21 +1,21 @@
 {
   "schemaVersion": 1,
-  "publishedAt": "2026-09-06T23:39:35.864Z",
+  "publishedAt": "2026-09-07T01:00:54.933Z",
   "apps": [
     {
       "id": "g-snap",
       "name": "G-Snap",
       "description": "Screen capture, annotation and quick sharing",
-      "version": "0.1.1",
-      "sizeBytes": 83635981,
+      "version": "0.1.2",
+      "sizeBytes": 83637505,
       "default": true,
       "requires": [
         "webview2:false"
       ],
       "installer": {
-        "fileName": "G-Snap-0.1.1-setup.exe",
-        "url": "https://github.com/Garamisericorde/garam-apps/releases/download/g-snap-v0.1.1/G-Snap-0.1.1-setup.exe",
-        "sha256": "84da6638b96e804891e4029e40983b08fa0575caaa9f2bab905d500cf46f44d2",
+        "fileName": "G-Snap-0.1.2-setup.exe",
+        "url": "https://github.com/Garamisericorde/garam-apps/releases/download/g-snap-v0.1.2/G-Snap-0.1.2-setup.exe",
+        "sha256": "166cc31e35fbc341158b2a8337ead1f7b0616db88301260ea4103d64957807fa",
         "silentArgs": [
           "/S"
         ]
@@ -25,14 +25,14 @@
       "id": "g-recorder",
       "name": "G-Recorder",
       "description": "Instant replay recording and simple video trimming",
-      "version": "0.1.1",
-      "sizeBytes": 83646137,
+      "version": "0.1.2",
+      "sizeBytes": 83652062,
       "default": false,
       "requires": [],
       "installer": {
-        "fileName": "G-Recorder-0.1.1-setup.exe",
-        "url": "https://github.com/Garamisericorde/garam-apps/releases/download/g-recorder-v0.1.1/G-Recorder-0.1.1-setup.exe",
-        "sha256": "c384718c841429bdba2ddabd5c426353d79a5accafa4ed1f8813ddc553100af2",
+        "fileName": "G-Recorder-0.1.2-setup.exe",
+        "url": "https://github.com/Garamisericorde/garam-apps/releases/download/g-recorder-v0.1.2/G-Recorder-0.1.2-setup.exe",
+        "sha256": "6309a70ba4465dcd6a7a12ad4eaf26ab06c419c8d46e2308968e41d091cafd24",
         "silentArgs": [
           "/S"
         ]
