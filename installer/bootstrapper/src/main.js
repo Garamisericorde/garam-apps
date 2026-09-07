@@ -69,7 +69,7 @@ function viewPicker() {
       .filter((a) => selected.has(a.id))
       .reduce((sum, a) => sum + a.sizeBytes, 0)
     total.textContent = selected.size
-      ? `${selected.size} app(s)  ·  ${mb(bytes)} to download`
+      ? `${selected.size} ${selected.size === 1 ? 'app' : 'apps'}  ·  ${mb(bytes)} to download`
       : 'Nothing selected'
     install.disabled = selected.size === 0
   }
@@ -193,6 +193,15 @@ function button(text, variant, onClick) {
   return el
 }
 
+/**
+ * A download size, in the MB people see everywhere else.
+ *
+ * The decimal is not decoration. Rounded to a whole number every app in the
+ * catalog came out "80 MB" — they are 79.8, 79.8 and 80.2 MiB — so the column
+ * looked like a placeholder nobody had filled in, and the total looked invented.
+ * Windows Explorer and GitHub both divide by 1024 and call it MB; matching them
+ * means the number here equals the one in the browser's download list.
+ */
 function mb(bytes) {
-  return `${(bytes / 1048576).toFixed(0)} MB`
+  return `${(bytes / 1048576).toFixed(1)} MB`
 }

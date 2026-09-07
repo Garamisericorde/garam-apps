@@ -1,6 +1,6 @@
 [package]
 name = "garam-setup"
-version = "0.1.0"
+version = "0.1.1"
 description = "Small downloader-style installer for the Garam apps"
 edition = "2021"
 rust-version = "1.70"

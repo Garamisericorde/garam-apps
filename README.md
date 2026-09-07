@@ -16,8 +16,8 @@ Windows 10 and 11, x64. Free, and free to do anything with — see
 ## Install
 
 **One setup for everything:** download
-[Garam-Setup-0.1.0.exe](https://github.com/Garamisericorde/garam-apps/releases/download/setup-v0.1.0/Garam-Setup-0.1.0.exe)
-(3.8 MB), run it, and tick the apps you want.
+[Garam-Setup-0.1.1.exe](https://github.com/Garamisericorde/garam-apps/releases/download/setup-v0.1.1/Garam-Setup-0.1.1.exe)
+(3.9 MB), run it, and tick the apps you want.
 
 It is that small because it carries no apps of its own. It reads
 [`catalog.json`](catalog.json), downloads only what you selected, verifies each

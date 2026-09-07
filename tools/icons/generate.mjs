@@ -5,6 +5,9 @@
  * a rounded square in the accent color with a simple white glyph. There is
  * no external rasterizer; it draws itself with 4x supersampling.
  *
+ * Glyphs: `crop` (g-snap), `record` (g-recorder), `note` (g-note),
+ * `node` (g-vector), `download` (Garam Setup).
+ *
  * `accent` is either a flat hex string or a two-stop gradient
  * `{ from, to }`, which runs diagonally from the top-left corner.
  *
@@ -244,6 +247,38 @@ const GLYPHS = {
     const reach = s * 0.155
     if (along >= half && along <= reach && Math.abs(across) <= t / 2) return true
     return Math.hypot(x - (cx + reach / Math.SQRT2), y - (cy - reach / Math.SQRT2)) <= s * 0.042
+  },
+
+  /**
+   * Garam Setup: the G with a download arrow at the lower right.
+   *
+   * The setup is not one of the apps, but it is the front door to them, so it
+   * keeps the family's G and takes the one mark nobody has to learn.
+   *
+   * Two parts, not three: the obvious third — a bar under the arrow, the tray
+   * it lands in — is what makes the symbol unmistakable at poster size and
+   * three grey pixels at 32, which is the size this icon actually lives at in a
+   * taskbar. A shaft with a solid head beside a G reads as a download without
+   * it.
+   */
+  download(x, y, s, small) {
+    if (small) return gMark(x, y, s, { radius: 0.33, weight: 0.108 })
+    if (gMark(x, y, s)) return true
+
+    // Everything here sits clear of the G's ring, whose outer edge is 0.27s
+    // from the centre. The first attempt started the shaft at 0.6s, which is
+    // 0.255s out along this diagonal — inside the stroke — and the arrow fused
+    // into the G as a blob. The nearest corner below is 0.318s out.
+    const cx = s * 0.775
+
+    // Shaft.
+    if (Math.abs(x - cx) <= s * 0.028 && y >= s * 0.7 && y <= s * 0.78) return true
+
+    // Head: a triangle narrowing to its point at the bottom.
+    const top = s * 0.76
+    const tip = s * 0.87
+    if (y < top || y > tip) return false
+    return Math.abs(x - cx) <= s * 0.088 * ((tip - y) / (tip - top))
   },
 }
 

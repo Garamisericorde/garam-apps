@@ -5,14 +5,14 @@ A small downloader-style installer. It does not embed the apps; it reads
 it silently.
 
 **Status: shipped.** Built and published as
-[Garam Setup 0.1.0](https://github.com/Garamisericorde/garam-apps/releases/tag/setup-v0.1.0)
-— a 3.8 MB standalone exe, verified against the live catalog.
+[Garam Setup 0.1.1](https://github.com/Garamisericorde/garam-apps/releases/tag/setup-v0.1.1)
+— a 3.9 MB standalone exe, verified against the live catalog.
 
 ## Why this design
 
 | | One big setup | This approach |
 |---|---|---|
-| Size | ~250 MB (all three apps embedded) | 3.8 MB |
+| Size | ~250 MB (all three apps embedded) | 3.9 MB |
 | Shipping a new version | Republish the setup | Just update `catalog.json` |
 | User wants one app | Downloads everything | Downloads only what they picked |
 
@@ -85,6 +85,17 @@ gh release create setup-vX.Y.Z Garam-Setup-X.Y.Z.exe --title "Garam Setup X.Y.Z"
 
 This only has to be repeated when the setup ITSELF changes. New app versions
 reach users through `catalog.json`, which the setup reads at run time.
+
+## Icons
+
+`npm run icons` regenerates `src-tauri/icons/` from `tools/icons/generate.mjs`,
+with the same blue-purple plate as the apps and a `download` glyph of its own.
+
+The output path is worth a glance if you ever move this script: it was once
+`new URL('./src-tauri/icons/', import.meta.url)`, which resolves against the
+SCRIPT, so it wrote to `scripts/src-tauri/icons/` — a directory nothing reads.
+Every run reported success while the icon compiled into the binary stayed the
+crimson one from the first build, and that shipped.
 
 ## Theme
 
