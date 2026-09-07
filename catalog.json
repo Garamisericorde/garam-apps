@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "publishedAt": "2026-09-07T11:55:54.931Z",
+  "publishedAt": "2026-09-07T20:14:13.961Z",
   "apps": [
     {
       "id": "g-snap",
@@ -25,14 +25,14 @@
       "id": "g-recorder",
       "name": "G-Recorder",
       "description": "Instant replay recording and simple video trimming",
-      "version": "0.1.4",
-      "sizeBytes": 83654420,
+      "version": "0.1.5",
+      "sizeBytes": 83656124,
       "default": false,
       "requires": [],
       "installer": {
-        "fileName": "G-Recorder-0.1.4-setup.exe",
-        "url": "https://github.com/Garamisericorde/garam-apps/releases/download/g-recorder-v0.1.4/G-Recorder-0.1.4-setup.exe",
-        "sha256": "a951f7073c33af14c45ef2ad09d10da853057802120abba36513d62ffe95b1da",
+        "fileName": "G-Recorder-0.1.5-setup.exe",
+        "url": "https://github.com/Garamisericorde/garam-apps/releases/download/g-recorder-v0.1.5/G-Recorder-0.1.5-setup.exe",
+        "sha256": "b9416aec91f0aa425a921b279525a30b831d17ea00de9badb9cd12cb49f5f585",
         "silentArgs": [
           "/S"
         ]
