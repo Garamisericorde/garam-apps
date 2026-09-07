@@ -4,15 +4,15 @@ A small downloader-style installer. It does not embed the apps; it reads
 `catalog.json`, downloads whatever the user selected, verifies it and installs
 it silently.
 
-**Status: the UI half is built and verified against the real catalog; the Rust
-half has never been compiled.** Rust is installed, but on Windows rustup alone
-cannot link — see Prerequisites.
+**Status: shipped.** Built and published as
+[Garam Setup 0.1.0](https://github.com/Garamisericorde/garam-apps/releases/tag/setup-v0.1.0)
+— a 3.8 MB standalone exe, verified against the live catalog.
 
 ## Why this design
 
 | | One big setup | This approach |
 |---|---|---|
-| Size | ~250 MB (all three apps embedded) | ~3-5 MB |
+| Size | ~250 MB (all three apps embedded) | 3.8 MB |
 | Shipping a new version | Republish the setup | Just update `catalog.json` |
 | User wants one app | Downloads everything | Downloads only what they picked |
 
@@ -73,6 +73,18 @@ Without the variable it falls back to that same URL, compiled into
 **Ship `src-tauri/target/release/Garam Setup.exe`** — the single portable
 executable. The NSIS bundle beside it is an installer FOR the setup, which is
 not what anyone wants; it is a byproduct of the bundle config.
+
+## Publish
+
+Copy it out under a name without spaces, so the download URL needs no escaping,
+and attach it to its own release:
+
+```bash
+gh release create setup-vX.Y.Z Garam-Setup-X.Y.Z.exe --title "Garam Setup X.Y.Z"
+```
+
+This only has to be repeated when the setup ITSELF changes. New app versions
+reach users through `catalog.json`, which the setup reads at run time.
 
 ## Theme
 

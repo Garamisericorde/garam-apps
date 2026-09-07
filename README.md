@@ -15,14 +15,22 @@ Windows 10 and 11, x64. Free, and free to do anything with — see
 
 ## Install
 
-Each app has its own installer, and they are **fully independent** — installing
-one never requires the others. Grab whichever you want from
-[Releases](https://github.com/Garamisericorde/garam-apps/releases).
+**One setup for everything:** download
+[Garam-Setup-0.1.0.exe](https://github.com/Garamisericorde/garam-apps/releases/download/setup-v0.1.0/Garam-Setup-0.1.0.exe)
+(3.8 MB), run it, and tick the apps you want.
 
-There is also **Garam Setup**, a ~3.6 MB downloader: run it, tick the apps you
-want, and it fetches and installs only those. It verifies every download's
-SHA-256 against [`catalog.json`](catalog.json) before running it, so a corrupted
-or tampered installer is never executed.
+It is that small because it carries no apps of its own. It reads
+[`catalog.json`](catalog.json), downloads only what you selected, verifies each
+download's SHA-256 against the catalog — a mismatch aborts the install, so a
+corrupted or tampered installer is never executed — and then runs it silently.
+The versions come from the catalog at run time, so the same setup keeps
+installing the current releases without being republished. It asks for
+administrator once at the start, because a silent installer cannot raise its own
+privileges; that single prompt covers every app it installs.
+
+Each app also has its own installer, and they are **fully independent** —
+installing one never requires the others. Grab whichever you want from
+[Releases](https://github.com/Garamisericorde/garam-apps/releases).
 
 ## G-Snap
 
