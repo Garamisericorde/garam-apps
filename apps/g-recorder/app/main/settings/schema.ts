@@ -4,9 +4,9 @@ import { sanitizeNamePattern } from '../../shared/exportNaming'
 import {
   ALLOWED_FPS,
   DEFAULT_SETTINGS,
-  MAX_REPLAY_MINUTES,
+  MAX_REPLAY_SECONDS,
   MAX_SEGMENT_DURATION_SECONDS,
-  MIN_REPLAY_MINUTES,
+  MIN_REPLAY_SECONDS,
   MIN_SEGMENT_DURATION_SECONDS,
 } from './defaults'
 
@@ -25,10 +25,10 @@ const ENCODERS: AppSettings['encoder'][] = ['auto', 'nvenc', 'qsv', 'amf', 'x264
 const VALIDATORS: {
   [K in keyof AppSettings]: (value: unknown) => string | null
 } = {
-  replayLengthMinutes: (v) =>
-    isNumberInRange(v, MIN_REPLAY_MINUTES, MAX_REPLAY_MINUTES)
+  replayLengthSeconds: (v) =>
+    isNumberInRange(v, MIN_REPLAY_SECONDS, MAX_REPLAY_SECONDS)
       ? null
-      : `replayLengthMinutes must be ${MIN_REPLAY_MINUTES}–${MAX_REPLAY_MINUTES}`,
+      : `replayLengthSeconds must be ${MIN_REPLAY_SECONDS}-${MAX_REPLAY_SECONDS}`,
 
   segmentDurationSeconds: (v) =>
     isNumberInRange(v, MIN_SEGMENT_DURATION_SECONDS, MAX_SEGMENT_DURATION_SECONDS)
@@ -177,6 +177,15 @@ function migrateLegacyKeys(record: Record<string, unknown>): Record<string, unkn
     migrated.systemAudioDevice = migrated.audioDevice
   }
   delete migrated.audioDevice
+
+  // v0.1.1: the replay length was whole minutes, which cannot say 30 seconds
+  if (
+    migrated.replayLengthSeconds === undefined &&
+    typeof migrated.replayLengthMinutes === 'number'
+  ) {
+    migrated.replayLengthSeconds = migrated.replayLengthMinutes * 60
+  }
+  delete migrated.replayLengthMinutes
 
   return migrated
 }

@@ -9,7 +9,7 @@ import { logger } from '../logging/logger'
 import { localTimestamp } from '../../shared/time'
 
 export interface SaveReplayOptions {
-  /** Seconds of footage to include; defaults to settings.replayLengthMinutes * 60 */
+  /** Seconds of footage to include; defaults to settings.replayLengthSeconds */
   durationSeconds?: number
 }
 
@@ -38,7 +38,7 @@ export async function runSaveReplay(opts: SaveReplayOptions = {}): Promise<SaveR
   try {
     const settings = SettingsStore.getInstance().get()
     const ffmpegPath = FfmpegManager.getInstance().path
-    const durationSeconds = opts.durationSeconds ?? settings.replayLengthMinutes * 60
+    const durationSeconds = opts.durationSeconds ?? settings.replayLengthSeconds
 
     const { concatPath, coveredSeconds } = await recorder.prepareReplayConcat(durationSeconds)
 

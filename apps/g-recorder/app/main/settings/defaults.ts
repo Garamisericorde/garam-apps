@@ -2,6 +2,11 @@ import { app } from 'electron'
 import { join } from 'path'
 import type { AppSettings } from '../../shared/types'
 import { ALLOWED_FPS } from '../../shared/presets'
+import {
+  MAX_REPLAY_SECONDS,
+  MIN_REPLAY_SECONDS,
+  REPLAY_PRESET_SECONDS,
+} from '../../shared/replay'
 import { DEFAULT_NAME_PATTERN } from '../../shared/exportNaming'
 import {
   DEFAULT_EDITOR_KEYS,
@@ -16,7 +21,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
    * enough that the cache is a couple of hundred megabytes rather than a
    * gigabyte being rewritten all evening.
    */
-  replayLengthMinutes: 2,
+  replayLengthSeconds: 120,
   segmentDurationSeconds: 2,
   fps: 60,
   resolution: '1080p',
@@ -56,8 +61,7 @@ export { ALLOWED_FPS }
 
 export const MIN_SEGMENT_DURATION_SECONDS = 1
 export const MAX_SEGMENT_DURATION_SECONDS = 10
-export const MIN_REPLAY_MINUTES = 1
-export const MAX_REPLAY_MINUTES = 60
+export { MIN_REPLAY_SECONDS, MAX_REPLAY_SECONDS, REPLAY_PRESET_SECONDS }
 
 /** Keyframe cadence, in seconds — matches the segment length for clean cuts */
 export const KEYFRAME_INTERVAL_SECONDS = 2

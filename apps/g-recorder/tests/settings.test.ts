@@ -28,9 +28,10 @@ describe('validateSettings', () => {
   })
 
   it('rejects a replay length outside the supported range', () => {
-    expect(validateSettings({ replayLengthMinutes: 0 }).valid).toBe(false)
-    expect(validateSettings({ replayLengthMinutes: 999 }).valid).toBe(false)
-    expect(validateSettings({ replayLengthMinutes: 30 }).valid).toBe(true)
+    expect(validateSettings({ replayLengthSeconds: 5 }).valid).toBe(false)
+    expect(validateSettings({ replayLengthSeconds: 3600 }).valid).toBe(false)
+    expect(validateSettings({ replayLengthSeconds: 30 }).valid).toBe(true)
+    expect(validateSettings({ replayLengthSeconds: 600 }).valid).toBe(true)
   })
 
   it('rejects an empty output path', () => {
@@ -51,14 +52,28 @@ describe('sanitizeSettings', () => {
   it('keeps good fields and resets only the bad ones', () => {
     const { settings, warnings } = sanitizeSettings({
       fps: 30,
-      replayLengthMinutes: 'ten',
-      outputPath: 'D:\\Clips',
+      replayLengthSeconds: 'ten',
+      outputPath: 'D:\Clips',
     })
 
     expect(settings.fps).toBe(30)
-    expect(settings.outputPath).toBe('D:\\Clips')
-    expect(settings.replayLengthMinutes).toBe(DEFAULT_SETTINGS.replayLengthMinutes)
+    expect(settings.outputPath).toBe('D:\Clips')
+    expect(settings.replayLengthSeconds).toBe(DEFAULT_SETTINGS.replayLengthSeconds)
     expect(warnings).toHaveLength(1)
+  })
+
+  it('migrates a replay length written in minutes', () => {
+    // Settings files from before the unit changed still say 3 minutes, and a
+    // buffer that silently became three seconds would be a buffer with nothing
+    // in it.
+    const { settings } = sanitizeSettings({ replayLengthMinutes: 3 })
+    expect(settings.replayLengthSeconds).toBe(180)
+    expect(settings).not.toHaveProperty('replayLengthMinutes')
+  })
+
+  it('lets an explicit seconds value win over the old field', () => {
+    const { settings } = sanitizeSettings({ replayLengthMinutes: 3, replayLengthSeconds: 45 })
+    expect(settings.replayLengthSeconds).toBe(45)
   })
 
   it('migrates the v0.1 audioDevice field to systemAudioDevice', () => {

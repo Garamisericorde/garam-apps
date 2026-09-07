@@ -14,6 +14,11 @@ import {
   DEFAULT_PAD_BINDINGS,
 } from '../../../shared/hotkeyDefaults'
 import { ALLOWED_FPS } from '../../../shared/presets'
+import {
+  MAX_REPLAY_SECONDS,
+  MIN_REPLAY_SECONDS,
+  REPLAY_PRESET_SECONDS,
+} from '../../../shared/replay'
 import { sanitizeNamePattern } from '../../../shared/exportNaming'
 import { formatBytes } from '../../../shared/time'
 import { resolutionHeight } from '../../../shared/presets'
@@ -117,11 +122,15 @@ export default function SettingsPage(): JSX.Element {
 
       {/* ── Recording ── */}
       <Section title="Recording">
-        <Field label="Replay length" hint="How much footage the buffer keeps">
-          <Select
-            value={settings.replayLengthMinutes}
-            onChange={(value) => void save({ replayLengthMinutes: Number(value) })}
-            options={[1, 2, 3, 5, 10, 15, 30].map((m) => ({ value: m, label: `${m} min` }))}
+        <Field
+          label="Replay length"
+          hint={`How much footage the buffer keeps, ${MIN_REPLAY_SECONDS} seconds to ${
+            MAX_REPLAY_SECONDS / 60
+          } minutes`}
+        >
+          <ReplayLengthField
+            value={settings.replayLengthSeconds}
+            onChange={(seconds) => void save({ replayLengthSeconds: seconds })}
           />
         </Field>
 
@@ -477,6 +486,89 @@ export default function SettingsPage(): JSX.Element {
       </Section>
     </div>
   )
+}
+
+/**
+ * How much footage the buffer keeps.
+ *
+ * A menu of the lengths people actually pick, plus "Custom" for the one they
+ * had in mind. The two are one control rather than a menu and a stray box: a
+ * number that contradicts the menu beside it is a setting nobody can read.
+ *
+ * The typed value is only saved once it is a number in range and the field is
+ * left, so a half-typed "1" does not briefly become a one-second buffer.
+ */
+function ReplayLengthField({
+  value,
+  onChange,
+}: {
+  value: number
+  onChange: (seconds: number) => void
+}): JSX.Element {
+  const preset = (REPLAY_PRESET_SECONDS as readonly number[]).includes(value)
+  const [custom, setCustom] = useState(!preset)
+  const [draft, setDraft] = useState(String(value))
+
+  useEffect(() => setDraft(String(value)), [value])
+
+  const commit = (): void => {
+    const seconds = Math.round(Number(draft))
+    if (!Number.isFinite(seconds) || seconds < MIN_REPLAY_SECONDS || seconds > MAX_REPLAY_SECONDS) {
+      setDraft(String(value))
+      return
+    }
+    if (seconds !== value) onChange(seconds)
+  }
+
+  return (
+    <div className="row" style={{ gap: 8 }}>
+      <Select
+        value={custom ? 'custom' : String(value)}
+        onChange={(next) => {
+          if (next === 'custom') {
+            setCustom(true)
+            return
+          }
+          setCustom(false)
+          onChange(Number(next))
+        }}
+        options={[
+          ...REPLAY_PRESET_SECONDS.map((seconds) => ({
+            value: String(seconds),
+            label: formatReplayLength(seconds),
+          })),
+          { value: 'custom', label: 'Custom…' },
+        ]}
+      />
+
+      {custom && (
+        <div className="row" style={{ gap: 6 }}>
+          <input
+            type="number"
+            min={MIN_REPLAY_SECONDS}
+            max={MAX_REPLAY_SECONDS}
+            step={1}
+            style={{ minWidth: 90 }}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={commit}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') event.currentTarget.blur()
+            }}
+          />
+          <span className="small faint">seconds</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** "30 sec" under a minute, whole minutes above it, and "2 min 30 sec" between */
+function formatReplayLength(seconds: number): string {
+  if (seconds < 60) return `${seconds} sec`
+  const minutes = Math.floor(seconds / 60)
+  const rest = seconds % 60
+  return rest === 0 ? `${minutes} min` : `${minutes} min ${rest} sec`
 }
 
 // ── Sub-components ───────────────────────────────────────────────────────────

@@ -12,7 +12,13 @@ export type EncoderType = 'nvenc' | 'qsv' | 'amf' | 'x264'
 
 export interface AppSettings {
   // ── Capture ──
-  replayLengthMinutes: number
+  /**
+   * How much footage the buffer keeps, in seconds.
+   *
+   * Seconds rather than minutes because the useful range starts below one: a
+   * thirty-second buffer is the right size for a clip nobody is going to trim.
+   */
+  replayLengthSeconds: number
   segmentDurationSeconds: number
   fps: number
   resolution: Resolution

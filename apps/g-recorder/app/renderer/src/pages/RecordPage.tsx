@@ -94,7 +94,7 @@ export default function RecordPage(): JSX.Element {
   const buffering = status?.isRecording ?? false
   const recording = status?.isManualRecording ?? false
   const buffered = status?.bufferSeconds ?? 0
-  const replayLength = (settings?.replayLengthMinutes ?? 5) * 60
+  const replayLength = settings?.replayLengthSeconds ?? 120
   const fill = replayLength > 0 ? Math.min(buffered / replayLength, 1) : 0
 
   const state = recording ? 'Recording to file' : buffering ? 'Instant replay on' : 'Not recording'
@@ -244,7 +244,7 @@ export default function RecordPage(): JSX.Element {
         <div className="capture-stats">
           <Fact
             label="Replay length"
-            value={settings ? `${settings.replayLengthMinutes} min` : '...'}
+            value={settings ? formatClock(settings.replayLengthSeconds) : '...'}
           />
 
           {/* A number you cannot act on is just a number: the cache is the one

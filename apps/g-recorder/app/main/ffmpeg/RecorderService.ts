@@ -950,7 +950,7 @@ export class RecorderService {
     if (this._saveHolds > 0) return // a save is reading these files right now
 
     const keepMs =
-      (settings.replayLengthMinutes * 60 +
+      (settings.replayLengthSeconds +
         settings.segmentDurationSeconds * PRUNE_BUFFER_SEGMENTS) *
       1000
     const cutoff = Date.now() - keepMs
@@ -973,7 +973,7 @@ export class RecorderService {
     )
     const bufferSeconds = Math.min(
       sorted.reduce((total, s) => total + s.durationSeconds, 0),
-      settings.replayLengthMinutes * 60,
+      settings.replayLengthSeconds,
     )
 
     this.emit({
