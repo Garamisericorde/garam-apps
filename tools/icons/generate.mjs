@@ -5,7 +5,7 @@
  * a rounded square in the accent color with a simple white glyph. There is
  * no external rasterizer; it draws itself with 4x supersampling.
  *
- * Glyphs: `crop` (g-snap), `record` (g-recorder), `note` (g-note),
+ * Glyphs: `camera` (g-snap), `record` (g-recorder), `note` (g-note),
  * `node` (g-vector), `download` (Garam Setup).
  *
  * `accent` is either a flat hex string or a two-stop gradient
@@ -14,7 +14,7 @@
  * Usage:
  *   import { buildIcons } from '../../tools/icons/generate.mjs'
  *   await buildIcons({ outDir, accent: '#e94560', glyph: 'note' })
- *   await buildIcons({ outDir, accent: { from: '#2563eb', to: '#9333ea' }, glyph: 'crop' })
+ *   await buildIcons({ outDir, accent: { from: '#2563eb', to: '#9333ea' }, glyph: 'camera' })
  */
 import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
@@ -169,53 +169,75 @@ function gMark(x, y, s, { radius = 0.27, weight = 0.085 } = {}) {
  * the G — measured by eye on a magnified render — so every glyph drops it there
  * and draws a bigger, heavier G instead. Detail that cannot resolve is not
  * detail, it is noise.
+ *
+ * Two rules, both learned by rendering it wrong first:
+ *
+ * 1. **Stay off the G.** Its ring reaches 0.27s from the centre, and every mark
+ *    here once sat partly inside that: the record dot grew out of the G like a
+ *    tumour, the note lines ran into its crossbar. Nothing reads as deliberate
+ *    once it touches the letter. Marks live past ~0.30s, in the corner, and
+ *    must also stay inside the plate — whose rounded corner cuts in hard at
+ *    exactly the same place, so both ends need checking.
+ * 2. **Be one solid silhouette.** 32px is the smallest size that still draws a
+ *    mark, and the corner it lives in is about 6px across. Anything with
+ *    internal structure at that size — a lens hole, a pair of hairlines, a
+ *    bracket — comes out as grey mush. Detail may resolve at 48 and up; the
+ *    shape has to work before it does.
  */
 const GLYPHS = {
-  /** g-snap: the G inside crop corners — a screenshot selection frame. */
-  crop(x, y, s, small) {
+  /**
+   * g-snap: the G with a camera at the lower right.
+   *
+   * This was four crop brackets around the edge of the plate. They said
+   * "selection" clearly enough at 256px, but they crowded the plate's own
+   * rounded corners and, at the size a taskbar actually draws, dissolved into
+   * flecks in the corners that looked like rendering artifacts. A camera is one
+   * silhouette, survives the downscale, and needs no explaining.
+   *
+   * Solid on purpose: a lens hole would be two grey pixels at 32px and would
+   * hollow out the only shape doing the work.
+   */
+  camera(x, y, s, small) {
     if (small) return gMark(x, y, s, { radius: 0.33, weight: 0.108 })
     if (gMark(x, y, s)) return true
 
-    const t = s * 0.065 // bracket thickness
-    const m = s * 0.155 // distance from the edge
-    const arm = s * 0.135 // length of each corner arm
-    const lo = m
-    const hi = s - m
+    // Body.
+    if (x >= s * 0.672 && x <= s * 0.878 && y >= s * 0.742 && y <= s * 0.872) return true
 
-    const hBar = (edgeY, fromX, toX) =>
-      Math.abs(y - edgeY) <= t / 2 && x >= fromX && x <= toX
-    const vBar = (edgeX, fromY, toY) =>
-      Math.abs(x - edgeX) <= t / 2 && y >= fromY && y <= toY
-
-    return (
-      hBar(lo, lo, lo + arm) ||
-      vBar(lo, lo, lo + arm) ||
-      hBar(lo, hi - arm, hi) ||
-      vBar(hi, lo, lo + arm) ||
-      hBar(hi, lo, lo + arm) ||
-      vBar(lo, hi - arm, hi) ||
-      hBar(hi, hi - arm, hi) ||
-      vBar(hi, hi - arm, hi)
-    )
+    // Viewfinder hump, left of centre — centred it reads as a monitor.
+    return x >= s * 0.715 && x <= s * 0.795 && y >= s * 0.706 && y <= s * 0.742
   },
 
-  /** g-recorder: the G with a record dot at the lower right. */
+  /**
+   * g-recorder: the G with a record dot at the lower right.
+   *
+   * The dot was centred at 0.735s with a radius of 0.105s, which put its inner
+   * edge 0.227s from the centre — inside the G's ring. It read as a blister on
+   * the letter rather than a record light. Slightly smaller, slightly further
+   * out, and it separates.
+   */
   record(x, y, s, small) {
     if (small) return gMark(x, y, s, { radius: 0.33, weight: 0.108 })
     if (gMark(x, y, s)) return true
-    return Math.hypot(x - s * 0.735, y - s * 0.735) <= s * 0.105
+    return Math.hypot(x - s * 0.79, y - s * 0.79) <= s * 0.095
   },
 
-  /** g-note: the G with text lines at the lower right. */
+  /**
+   * g-note: the G with text lines at the lower right.
+   *
+   * They used to start at 0.6s, which ran the top line straight into the G's
+   * crossbar and made the letter look like it had a tail. Moved out and made
+   * heavier; the ragged right edge is what says "text" rather than "equals".
+   */
   note(x, y, s, small) {
     if (small) return gMark(x, y, s, { radius: 0.33, weight: 0.108 })
     if (gMark(x, y, s)) return true
 
-    const t = s * 0.055
-    const left = s * 0.6
+    const t = s * 0.05
+    const left = s * 0.7
     for (let i = 0; i < 2; i++) {
-      const lineY = s * 0.7 + i * s * 0.11
-      const right = s * (i === 1 ? 0.79 : 0.87)
+      const lineY = s * (i === 0 ? 0.76 : 0.855)
+      const right = s * (i === 0 ? 0.895 : 0.82)
       if (Math.abs(y - lineY) <= t / 2 && x >= left && x <= right) return true
     }
     return false
@@ -233,9 +255,9 @@ const GLYPHS = {
     if (small) return gMark(x, y, s, { radius: 0.33, weight: 0.108 })
     if (gMark(x, y, s)) return true
 
-    const cx = s * 0.735
-    const cy = s * 0.735
-    const half = s * 0.058
+    const cx = s * 0.79
+    const cy = s * 0.79
+    const half = s * 0.052
 
     // The anchor itself.
     if (Math.abs(x - cx) <= half && Math.abs(y - cy) <= half) return true
@@ -244,7 +266,7 @@ const GLYPHS = {
     const t = s * 0.032
     const along = (x - cx + (cy - y)) / Math.SQRT2 // distance along the arm
     const across = (x - cx - (cy - y)) / Math.SQRT2 // distance off the arm
-    const reach = s * 0.155
+    const reach = s * 0.13
     if (along >= half && along <= reach && Math.abs(across) <= t / 2) return true
     return Math.hypot(x - (cx + reach / Math.SQRT2), y - (cy - reach / Math.SQRT2)) <= s * 0.042
   },
@@ -300,7 +322,7 @@ const GLYPHS = {
 function renderIcon(size, accentSpec, glyphName) {
   const S = size * SS
   const { from, to } = normalizeAccent(accentSpec)
-  const glyph = GLYPHS[glyphName] ?? GLYPHS.crop
+  const glyph = GLYPHS[glyphName] ?? GLYPHS.camera
 
   // Below this the secondary mark cannot resolve, so the glyph simplifies.
   const small = size <= 24

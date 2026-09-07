@@ -12,7 +12,7 @@ const result = await buildIcons({
   outDir: join(here, '..', 'resources', 'icons'),
   // Blue -> purple, so g-snap reads as its own app next to the crimson siblings.
   accent: { from: '#2563eb', to: '#9333ea' },
-  glyph: 'crop',
+  glyph: 'camera',
 })
 
 console.log(`Icons written -> ${result.outDir}`)

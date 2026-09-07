@@ -1,6 +1,6 @@
 {
   "name": "g-note",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Note taking with rich text, sticky notes and freehand drawing",
   "main": "out/main/index.js",
   "scripts": {
