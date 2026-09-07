@@ -5,7 +5,7 @@
  * a rounded square in the accent color with a simple white glyph. There is
  * no external rasterizer; it draws itself with 4x supersampling.
  *
- * Glyphs: `camera` (g-snap), `record` (g-recorder), `note` (g-note),
+ * Glyphs: `crop` (g-snap), `record` (g-recorder), `note` (g-note),
  * `node` (g-vector), `download` (Garam Setup).
  *
  * `accent` is either a flat hex string or a two-stop gradient
@@ -14,7 +14,7 @@
  * Usage:
  *   import { buildIcons } from '../../tools/icons/generate.mjs'
  *   await buildIcons({ outDir, accent: '#e94560', glyph: 'note' })
- *   await buildIcons({ outDir, accent: { from: '#2563eb', to: '#9333ea' }, glyph: 'camera' })
+ *   await buildIcons({ outDir, accent: { from: '#2563eb', to: '#9333ea' }, glyph: 'crop' })
  */
 import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
@@ -186,26 +186,48 @@ function gMark(x, y, s, { radius = 0.27, weight = 0.085 } = {}) {
  */
 const GLYPHS = {
   /**
-   * g-snap: the G with a camera at the lower right.
+   * g-snap: the G inside four corner brackets — a selection frame.
    *
-   * This was four crop brackets around the edge of the plate. They said
-   * "selection" clearly enough at 256px, but they crowded the plate's own
-   * rounded corners and, at the size a taskbar actually draws, dissolved into
-   * flecks in the corners that looked like rendering artifacts. A camera is one
-   * silhouette, survives the downscale, and needs no explaining.
+   * The one mark here that is not a small shape in the corner, because a
+   * screenshot tool's symbol is the frame you drag, and a frame has to surround
+   * something to be a frame.
    *
-   * Solid on purpose: a lens hole would be two grey pixels at 32px and would
-   * hollow out the only shape doing the work.
+   * It shipped once and came back: the first version sat 0.155s from the edge
+   * with 0.065s arms, which crowded the plate's own rounded corners and, at
+   * 32px, left four two-pixel flecks that read as rendering dirt. Pulled in to
+   * 0.185s and thickened to 0.078s — 2.5px at 32 rather than 2.1 — so each
+   * corner survives as a corner. The brackets are still dropped below that,
+   * where nothing this fine can resolve at all.
    */
-  camera(x, y, s, small) {
+  crop(x, y, s, small) {
     if (small) return gMark(x, y, s, { radius: 0.33, weight: 0.108 })
     if (gMark(x, y, s)) return true
 
-    // Body.
-    if (x >= s * 0.672 && x <= s * 0.878 && y >= s * 0.742 && y <= s * 0.872) return true
+    const t = s * 0.078 // bracket thickness
+    const m = s * 0.168 // distance from the edge
+    const arm = s * 0.145 // length of each corner arm
+    const lo = m
+    const hi = s - m
 
-    // Viewfinder hump, left of centre — centred it reads as a monitor.
-    return x >= s * 0.715 && x <= s * 0.795 && y >= s * 0.706 && y <= s * 0.742
+    const hBar = (edgeY, fromX, toX) =>
+      Math.abs(y - edgeY) <= t / 2 && x >= fromX - t / 2 && x <= toX + t / 2
+    const vBar = (edgeX, fromY, toY) =>
+      Math.abs(x - edgeX) <= t / 2 && y >= fromY - t / 2 && y <= toY + t / 2
+
+    return (
+      // top-left
+      hBar(lo, lo, lo + arm) ||
+      vBar(lo, lo, lo + arm) ||
+      // top-right
+      hBar(lo, hi - arm, hi) ||
+      vBar(hi, lo, lo + arm) ||
+      // bottom-left
+      hBar(hi, lo, lo + arm) ||
+      vBar(lo, hi - arm, hi) ||
+      // bottom-right
+      hBar(hi, hi - arm, hi) ||
+      vBar(hi, hi - arm, hi)
+    )
   },
 
   /**
@@ -322,7 +344,7 @@ const GLYPHS = {
 function renderIcon(size, accentSpec, glyphName) {
   const S = size * SS
   const { from, to } = normalizeAccent(accentSpec)
-  const glyph = GLYPHS[glyphName] ?? GLYPHS.camera
+  const glyph = GLYPHS[glyphName] ?? GLYPHS.crop
 
   // Below this the secondary mark cannot resolve, so the glyph simplifies.
   const small = size <= 24

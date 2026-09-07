@@ -143,11 +143,12 @@ All three apps write to `apps/<app>/release/`, which is what
 
 `tools/icons/generate.mjs` is a dependency-free PNG/ICO generator; every app and
 the setup share one visual language: a rounded square in the accent, the shared
-G, and one secondary mark saying what the app does — a camera, a record dot,
-text lines, a bezier anchor, a download arrow.
+G, and one mark saying what the app does — crop brackets, a record dot, text
+lines, a bezier anchor, a download arrow.
 Icons are not hand-edited — regenerate with `npm run icons -w <app>`.
 
-Two rules for that secondary mark, both learned by shipping it wrong:
+Most marks are a small shape in the lower-right corner, and two rules govern
+those, both learned by shipping them wrong:
 
 - **It must clear the G.** The ring reaches 0.27s from the centre and every mark
   once overlapped it, so they read as growths on the letter rather than as
@@ -156,6 +157,11 @@ Two rules for that secondary mark, both learned by shipping it wrong:
 - **It must be one solid silhouette.** 32px is the smallest size that still
   draws a mark (16 and 24 drop it for a heavier G), and the corner is ~6px
   across. Internal detail there is grey mush.
+
+g-snap's crop brackets are the deliberate exception: a frame has to surround
+something to be a frame, so they sit at the plate's four corners instead. That
+buys room, and they pay for it in weight — thin arms out there become flecks
+that read as rendering dirt, so they are 0.078s thick, which is 2.5px at 32.
 
 An icon script's `outDir` is worth one look before trusting it: the setup's
 resolved against the script rather than the project, so it wrote to a directory
