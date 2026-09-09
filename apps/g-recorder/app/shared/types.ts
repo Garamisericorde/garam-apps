@@ -2,6 +2,8 @@
 // Shared types used by main, preload, and renderer
 // ---------------------------------------------------------------------------
 
+import type { Timeline } from './timeline'
+
 export type Resolution = 'source' | '720p' | '1080p' | '1440p'
 
 /** User-facing encoder choice. 'auto' picks the best available at runtime. */
@@ -103,6 +105,18 @@ export interface RecorderStatus {
   oldestSegmentTime: number | null
   newestSegmentTime: number | null
   error: string | null
+}
+
+/**
+ * What the editor was in the middle of, kept between runs.
+ *
+ * Separate from settings: those are what the user chose about the app, this is
+ * their work in progress, and "reset to defaults" must never touch it.
+ */
+export interface EditorState {
+  timeline: Timeline
+  crop: FrameCrop | null
+  playhead: number
 }
 
 /** Aspect-ratio framing applied on export */

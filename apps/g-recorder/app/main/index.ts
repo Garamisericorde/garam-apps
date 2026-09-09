@@ -17,6 +17,7 @@ import { registerExportIpc } from './ipc/exportIpc'
 import { registerSettingsIpc } from './ipc/settingsIpc'
 import { registerMediaIpc } from './ipc/mediaIpc'
 import { registerGamepadIpc } from './ipc/gamepadIpc'
+import { registerEditorIpc } from './ipc/editorIpc'
 import { broadcast } from './ipc/broadcast'
 import { registerClipProtocolHandler, registerClipScheme } from './protocol/clipProtocol'
 import { TrayController } from './tray/TrayController'
@@ -66,6 +67,7 @@ async function start(): Promise<void> {
   registerSettingsIpc()
   registerMediaIpc(() => mainWindow)
   registerGamepadIpc(() => padHotkeys)
+  registerEditorIpc()
 
   createMainWindow()
   createTray()

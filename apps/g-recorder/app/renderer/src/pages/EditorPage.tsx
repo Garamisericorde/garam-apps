@@ -269,15 +269,14 @@ export default function EditorPage(): JSX.Element {
   // ── Sources ────────────────────────────────────────────────────────────────
 
   /**
-   * Load a file and put it on both lanes.
+   * Make a file playable: register it, read it, and start its strips.
    *
-   * Added rather than replacing what is there: a library that swapped the
-   * timeline out on every click would make a second clip impossible to reach.
+   * Separate from putting it on the timeline, because the two are not always
+   * the same act — restoring a saved arrangement needs every source it names
+   * without adding a single clip.
    */
-  const addClip = useCallback(async (clipPath: string, start?: number): Promise<void> => {
-    setError(null)
-
-    try {
+  const loadSource = useCallback(
+    async (clipPath: string): Promise<{ path: string; info: MediaInfo }> => {
       const opened = await window.api.media.loadPath(clipPath)
       const { info } = opened
 
@@ -291,18 +290,6 @@ export default function EditorPage(): JSX.Element {
           durationSeconds: info.durationSeconds,
         },
       }))
-
-      edit((previous) =>
-        appendClip(
-          previous,
-          {
-            path: opened.clipPath,
-            durationSeconds: info.durationSeconds,
-            hasAudio: info.hasAudio,
-          },
-          start,
-        ),
-      )
 
       // Both strips are nice-to-haves — never block the preview on them.
       setLoadingThumbnails(true)
@@ -318,10 +305,40 @@ export default function EditorPage(): JSX.Element {
           .then((waveform) => patchSource(setSources, opened.clipPath, { waveform }))
           .catch(() => undefined)
       }
+
+      return { path: opened.clipPath, info }
+    },
+    [],
+  )
+
+  /**
+   * Load a file and put it on both lanes.
+   *
+   * Added rather than replacing what is there: a library that swapped the
+   * timeline out on every click would make a second clip impossible to reach.
+   */
+  const addClip = useCallback(async (clipPath: string, start?: number): Promise<void> => {
+    setError(null)
+
+    try {
+      const opened = await loadSource(clipPath)
+      const { info } = opened
+
+      edit((previous) =>
+        appendClip(
+          previous,
+          {
+            path: opened.path,
+            durationSeconds: info.durationSeconds,
+            hasAudio: info.hasAudio,
+          },
+          start,
+        ),
+      )
     } catch (err) {
       setError(cleanError(err))
     }
-  }, [edit])
+  }, [edit, loadSource])
 
   const handleImport = useCallback(async () => {
     setBusy('open')
@@ -351,6 +368,81 @@ export default function EditorPage(): JSX.Element {
    * arranging gained a stranger on the end of it. Saving writes a file; the
    * list beside this picks it up, and adding it is a decision of its own.
    */
+
+  /*
+   * Pick the last arrangement back up.
+   *
+   * An edit is work, and every restart used to throw it away: closing the app,
+   * or installing an update, meant laying the same clips out again. What is
+   * stored is a few hundred bytes of positions, so every source it names has to
+   * be loaded again here — and any whose file has since gone is dropped rather
+   * than left on the timeline as a clip that cannot be shown.
+   */
+  const restored = useRef(false)
+  useEffect(() => {
+    if (restored.current) return
+    restored.current = true
+
+    void (async () => {
+      const saved = await window.api.editor.get().catch(() => null)
+      if (!saved) return
+
+      const paths = [
+        ...new Set([...saved.timeline.video, ...saved.timeline.audio].map((item) => item.path)),
+      ]
+      if (paths.length === 0) return
+
+      const alive = new Set<string>()
+      for (const path of paths) {
+        try {
+          const loaded = await loadSource(path)
+          alive.add(loaded.path)
+        } catch {
+          // The file has been moved or deleted since. Nothing to restore.
+        }
+      }
+
+      const keep = (items: TimelineItem[]): TimelineItem[] =>
+        items.filter((item) => alive.has(item.path))
+
+      setTimeline((previous) => {
+        // A clip opened on the way in beat the restore to it. What the user
+        // just asked for wins; the saved arrangement is not worth overwriting
+        // a deliberate act with.
+        if (previous.video.length > 0 || previous.audio.length > 0) return previous
+        return { video: keep(saved.timeline.video), audio: keep(saved.timeline.audio) }
+      })
+
+      if (saved.crop) setCrop(saved.crop)
+      if (saved.playhead > 0) setPlayhead(saved.playhead)
+    })()
+  }, [loadSource])
+
+  /*
+   * Write it back, a moment after it stops changing.
+   *
+   * Debounced because a drag reports every pointer move, and the playhead is
+   * read from a ref rather than depended on: it changes sixty times a second
+   * while playing, and waiting for that to settle would mean an edit made just
+   * before pressing play was never written at all.
+   */
+  const playheadRef = useRef(playhead)
+  playheadRef.current = playhead
+
+  useEffect(() => {
+    const save = (): void => {
+      void window.api.editor
+        .set({ timeline, crop: isCropped(crop) ? crop : null, playhead: playheadRef.current })
+        .catch(() => undefined)
+    }
+
+    const timer = setTimeout(save, SAVE_DELAY_MS)
+    // Leaving the page is the one moment the delay cannot be afforded.
+    return () => {
+      clearTimeout(timer)
+      save()
+    }
+  }, [timeline, crop])
 
   // Navigating in with a clip already chosen
   useEffect(() => {
@@ -1213,6 +1305,14 @@ const DROP_SNAP_PX = 10
  * purpose.
  */
 const PASTE_SNAP_SECONDS = 0.25
+
+/**
+ * How long the editor waits before writing the arrangement down.
+ *
+ * Long enough that a drag is one write rather than two hundred, short enough
+ * that it is always ahead of the user reaching for the close button.
+ */
+const SAVE_DELAY_MS = 600
 
 /**
  * Pull an incoming clip onto the nearest clip edge.

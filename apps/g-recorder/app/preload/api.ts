@@ -4,6 +4,7 @@ import type {
   CloseChoice,
   CloseRequest,
   AudioDevices,
+  EditorState,
   DisplayInfo,
   EncoderCapabilities,
   ExportOptions,
@@ -160,6 +161,17 @@ export const api = {
         return ''
       }
     },
+  },
+
+  /**
+   * What the editor was in the middle of, kept between runs.
+   *
+   * Separate from settings: those are what the user chose about the app, this
+   * is their work in progress.
+   */
+  editor: {
+    get: (): Promise<EditorState> => ipcRenderer.invoke('editor:get'),
+    set: (state: EditorState): Promise<void> => ipcRenderer.invoke('editor:set', state),
   },
 
   settings: {
