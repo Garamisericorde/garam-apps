@@ -38,8 +38,6 @@ interface VideoPlayerProps {
   onDurationChange: (seconds: number) => void
   onPlayingChange: (playing: boolean) => void
   onError: (message: string) => void
-  /** Play the trimmed range backwards */
-  reversed?: boolean
   /** Silence the preview — what the audio lane says when there is nothing under the clip */
   muted?: boolean
   /** 0 to 1, from the clip's gain */
@@ -52,13 +50,6 @@ interface VideoPlayerProps {
 type VideoElement = HTMLVideoElement & {
   requestVideoFrameCallback?: (callback: () => void) => number
 }
-
-/**
- * How often the backwards stand-in asks for a new frame, in milliseconds.
- *
- * See the loop below for why this is nowhere near the frame rate.
- */
-const REVERSE_SEEK_INTERVAL_MS = 125
 
 /**
  * Longest the outgoing picture stays up waiting for the incoming one.
@@ -98,7 +89,6 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
     onDurationChange,
     onPlayingChange,
     onError,
-    reversed = false,
     muted = false,
     volume = 1,
     style,
@@ -187,107 +177,11 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
 
   useEffect(() => stopTracking, [stopTracking])
 
-  // ── Backwards, the hard way ────────────────────────────────────────────────
-
-  /*
-   * This is the stand-in, used only until the editor has a reversed copy of the
-   * clip to play forwards instead. No video element can run in reverse on its
-   * own — `playbackRate` will not go negative and nothing decodes towards the
-   * head of a file — so the position is kept here and the element is seeked to
-   * it, which is the only way to show a frame earlier than the one on screen.
-   *
-   * It is deliberately slow. Every seek decodes from the previous keyframe, and
-   * asking sixty times a second brought the whole app to its knees on 1440p60
-   * footage. So the position moves with the wall clock, the clip takes the time
-   * it should, and the picture is refreshed a few times a second: enough to see
-   * where you are while the real copy is being made.
-   */
-  const reversing = useRef(false)
-  const reverseTarget = useRef(0)
-  const reverseFrame = useRef<number | null>(null)
-  const lastSeekAt = useRef(0)
-  const reversedRef = useRef(reversed)
-  reversedRef.current = reversed
-
-  const stopReverse = useCallback(() => {
-    if (reverseFrame.current !== null) {
-      cancelAnimationFrame(reverseFrame.current)
-      reverseFrame.current = null
-    }
-    if (!reversing.current) return
-    reversing.current = false
-    onPlayingChange(false)
-  }, [onPlayingChange])
-
-  const startReverse = useCallback(() => {
-    const video = live()
-    if (!video) return
-
-    video.pause()
-    stopTracking()
-
-    const { inPoint: start, outPoint: end } = boundsRef.current
-    // Reaching the head is this direction's version of reaching the end, so
-    // pressing play there starts the clip again from its tail.
-    const from = video.currentTime
-    reverseTarget.current = from <= start + 0.01 || from > end ? end : from
-
-    reversing.current = true
-    lastSeekAt.current = 0
-    onPlayingChange(true)
-
-    let last = performance.now()
-    const tick = (): void => {
-      const element = live()
-      if (!element || !reversing.current) return
-
-      const now = performance.now()
-      // A stalled frame must not be paid back all at once: a hidden window or a
-      // slow seek would otherwise jump the clip instead of resuming it.
-      const elapsed = Math.min((now - last) / 1000, 0.25)
-      last = now
-
-      const head = boundsRef.current.inPoint
-      reverseTarget.current -= elapsed
-
-      if (reverseTarget.current <= head) {
-        reverseTarget.current = head
-        element.currentTime = head
-        onTimeUpdate(head)
-        stopReverse()
-        return
-      }
-
-      /*
-       * Asked for at a fraction of the frame rate on purpose. Every one of
-       * these seeks decodes from the previous keyframe — up to a hundred and
-       * twenty frames of 1440p60 — so at sixty a second the machine has no
-       * chance and the whole app crawls. This is the stand-in shown only while
-       * the reversed copy is being built, so a few pictures a second is enough
-       * to see where you are.
-       */
-      if (!element.seeking && now - lastSeekAt.current >= REVERSE_SEEK_INTERVAL_MS) {
-        lastSeekAt.current = now
-        element.currentTime = reverseTarget.current
-      }
-
-      onTimeUpdate(reverseTarget.current)
-      reverseFrame.current = requestAnimationFrame(tick)
-    }
-
-    reverseFrame.current = requestAnimationFrame(tick)
-  }, [live, onPlayingChange, onTimeUpdate, stopReverse, stopTracking])
-
   // ── Swapping one clip for the next ─────────────────────────────────────────
 
   const startPlaying = useCallback(
     (video: VideoElement | null): void => {
       if (!video) return
-
-      if (reversedRef.current) {
-        startReverse()
-        return
-      }
 
       const { inPoint: start, outPoint: end } = boundsRef.current
       // Restart from IN when the playhead sits outside the selection
@@ -296,7 +190,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
       }
       void video.play().catch(() => undefined)
     },
-    [startReverse],
+    [],
   )
 
   /** Put the loaded element on screen and retire the one that was there */
@@ -409,11 +303,10 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
     loadStandby(preload.id, preload.src, preload.at)
   }, [loadStandby, preload, shown])
 
-  // Turning a clip round mid-play leaves the loop running the wrong way.
+  // A clip turned round mid-play is a different clip; it does not carry on.
   useEffect(() => {
-    stopReverse()
     live()?.pause()
-  }, [live, reversed, src, stopReverse])
+  }, [live, src])
 
   useEffect(() => applySound(live()), [applySound, live, muted, volume, shown])
 
@@ -442,18 +335,11 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
       },
       pause: () => {
         resumeOnSwap.current = false
-        stopReverse()
         live()?.pause()
       },
       togglePlay: () => {
         const video = live()
         if (!video) return
-
-        if (reversedRef.current) {
-          if (reversing.current) stopReverse()
-          else startReverse()
-          return
-        }
 
         if (swapping.current) {
           resumeOnSwap.current = !resumeOnSwap.current
@@ -466,11 +352,6 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
       seek: (seconds: number) => {
         const { video, slot } = target()
         if (!video) return
-
-        // A seek during backwards playback moves where it is playing from, not
-        // only what is on screen: without this the loop would pull the picture
-        // straight back to where it had got to.
-        reverseTarget.current = seconds
 
         if (video.readyState === 0) {
           pendingSeek.current[slot] = seconds
@@ -492,7 +373,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
       },
       currentTime: () => live()?.currentTime ?? 0,
     }),
-    [live, onTimeUpdate, startPlaying, startReverse, stopReverse, target],
+    [live, onTimeUpdate, startPlaying, target],
   )
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -517,11 +398,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
 
           const pending = pendingSeek.current[slot]
           pendingSeek.current[slot] = null
-          // Backwards, a clip opens on its last frame, not its first.
-          const opensAt = reversedRef.current
-            ? boundsRef.current.outPoint
-            : boundsRef.current.inPoint
-          video.currentTime = pending ?? opensAt
+          video.currentTime = pending ?? boundsRef.current.inPoint
         }}
         onLoadedData={() => {
           if (slot !== shownRef.current && swapping.current) swapWhenPainted()
@@ -546,10 +423,6 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
             return
           }
 
-          // While playing backwards the loop is already reporting the position
-          // it asked for. Reporting where the seek actually landed on top of
-          // that makes the playhead stutter between the two.
-          if (reversing.current) return
           onTimeUpdate(slots.current[slot]?.currentTime ?? 0)
         }}
         onError={(event) => {

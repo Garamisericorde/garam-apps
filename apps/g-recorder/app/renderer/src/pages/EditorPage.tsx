@@ -160,6 +160,15 @@ export default function EditorPage(): JSX.Element {
    */
   const [reversePreviews, setReversePreviews] = useState<Record<string, ReversePreview>>({})
   const [buildingPreview, setBuildingPreview] = useState(false)
+  /*
+   * Play was pressed on a clip whose reversed copy is not finished.
+   *
+   * There used to be a stand-in that ran the original backwards by seeking it,
+   * and it was worse than waiting: eight pictures a second, which reads as the
+   * clip suddenly speeding up rather than as something loading. So the request
+   * is held instead, and honoured the moment the copy lands.
+   */
+  const playWhenReady = useRef(false)
 
   /** Playhead, in timeline seconds */
   const [playhead, setPlayhead] = useState(0)
@@ -647,7 +656,11 @@ export default function EditorPage(): JSX.Element {
           // The player has already paused itself at this clip's end, so handing
           // over is not enough: without this, playback stopped at every cut.
           // Where the next clip begins depends on which way round it runs.
-          requestSeek(playerTimeFor(next, next.start), true)
+          // A reversed clip with no copy yet cannot be played at all, so the
+          // hand-over asks for it and waits rather than showing nothing.
+          const ready = !next.reversed || Boolean(previewFor(next))
+          playWhenReady.current = !ready
+          requestSeek(playerTimeFor(next, next.start), ready)
           return
         }
 
@@ -665,7 +678,16 @@ export default function EditorPage(): JSX.Element {
         }
       }
     },
-    [activeItem, activePreview, isPlaying, loop, playerTimeFor, requestSeek, timeline.video],
+    [
+      activeItem,
+      activePreview,
+      isPlaying,
+      loop,
+      playerTimeFor,
+      previewFor,
+      requestSeek,
+      timeline.video,
+    ],
   )
 
   /**
@@ -762,6 +784,30 @@ export default function EditorPage(): JSX.Element {
     },
     [edit, sources],
   )
+
+  /**
+   * Play, or ask to play once there is something to play.
+   *
+   * A reversed clip is only playable through its copy — nothing can run a
+   * video element backwards — so pressing play before the copy is written is a
+   * request, not a refusal.
+   */
+  const togglePlay = useCallback(() => {
+    if (activeItem?.reversed && !activePreview) {
+      playWhenReady.current = !playWhenReady.current
+      return
+    }
+
+    playWhenReady.current = false
+    playerRef.current?.togglePlay()
+  }, [activeItem, activePreview])
+
+  /* The copy has landed: honour the play that was waiting on it */
+  useEffect(() => {
+    if (!activePreview || !playWhenReady.current) return
+    playWhenReady.current = false
+    playerRef.current?.play()
+  }, [activePreview])
 
   const handleCloseGap = useCallback(
     (lane: LaneId, id: string) => {
@@ -891,7 +937,7 @@ export default function EditorPage(): JSX.Element {
 
       if (matches(event, keys.editorKeyPlayPause)) {
         event.preventDefault()
-        playerRef.current?.togglePlay()
+        togglePlay()
         return
       }
       if (matches(event, keys.editorKeyCutStart)) {
@@ -952,6 +998,7 @@ export default function EditorPage(): JSX.Element {
     handleTrim,
     keys,
     libraryPicks,
+    togglePlay,
     playhead,
     selected,
     toggleFullscreen,
@@ -1221,7 +1268,6 @@ export default function EditorPage(): JSX.Element {
               onDurationChange={() => undefined}
               onPlayingChange={setIsPlaying}
               onError={setError}
-              reversed={(activeItem.reversed ?? false) && !activePreview}
               muted={sound.muted}
               volume={sound.volume}
               style={
@@ -1243,8 +1289,10 @@ export default function EditorPage(): JSX.Element {
             * is done the preview is the slow stand-in. Saying so is the
             * difference between waiting and thinking it is broken.
             */}
-          {buildingPreview && !activePreview && (
-            <div className="stage-note">Preparing the reversed preview…</div>
+          {activeItem?.reversed && !activePreview && (
+            <div className="stage-note">
+              {buildingPreview ? 'Preparing the reversed preview…' : 'Preparing…'}
+            </div>
           )}
 
           {cropping && activeSource && (
@@ -1308,7 +1356,7 @@ export default function EditorPage(): JSX.Element {
           isPlaying={isPlaying}
           disabled={duration <= 0}
           canRemove={selected !== null}
-          onTogglePlay={() => playerRef.current?.togglePlay()}
+          onTogglePlay={togglePlay}
           onSplit={() => handleSplit(playhead)}
           onRemove={() => selected && handleRemove(selected.lane, selected.id)}
           onSeek={handleSeek}
