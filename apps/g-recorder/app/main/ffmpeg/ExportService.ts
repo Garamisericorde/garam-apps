@@ -102,7 +102,7 @@ export class ExportService {
 
     const args =
       options.format === 'gif'
-        ? this.buildGifArgs(options, info, outputPath)
+        ? buildGifArgs(options, info, outputPath)
         : await this.buildVideoArgs(options, info, outputPath, outputDuration)
 
     logger.info('ExportService: starting', {
@@ -244,28 +244,6 @@ export class ExportService {
     })
   }
 
-  private buildGifArgs(options: ExportOptions, info: MediaInfo, outputPath: string): string[] {
-    const framing = computeFraming(info, options.aspect, null)
-    const scale = Math.min(1, GIF_MAX_WIDTH / framing.outWidth)
-
-    // A GIF of a multi-clip timeline is out of scope; the first clip is what
-    // the format is ever used for here.
-    const first = options.timeline.video[0]
-    if (!first) throw new Error('There is no video on the timeline to make a GIF from')
-
-    return buildGifExportArgs({
-      clipPath: options.timeline.sources[first.input],
-      outputPath,
-      inPoint: first.sourceIn,
-      outPoint: first.sourceOut,
-      outWidth: toEvenSize(framing.outWidth * scale),
-      outHeight: toEvenSize(framing.outHeight * scale),
-      crop: framing.crop,
-      fps: GIF_FPS,
-      speed: options.speed,
-    })
-  }
-
   // ── Process handling ───────────────────────────────────────────────────────
 
   private runFfmpeg(
@@ -401,6 +379,41 @@ export interface Framing {
   crop: CropRect | null
   outWidth: number
   outHeight: number
+}
+
+/**
+ * The arguments for a GIF export.
+ *
+ * Out here rather than on the service because it decides framing, and framing
+ * is the thing that has been got wrong twice: the drawn crop was left out of
+ * this path entirely, so a GIF came back with everything the rectangle had cut
+ * away still in it — the one format where it matters most, since a GIF is small
+ * enough that half a screen of nothing is most of the file.
+ */
+export function buildGifArgs(
+  options: ExportOptions,
+  info: MediaInfo,
+  outputPath: string,
+): string[] {
+  const framing = computeFraming(info, options.aspect, null, options.crop)
+  const scale = Math.min(1, GIF_MAX_WIDTH / framing.outWidth)
+
+  // A GIF of a multi-clip timeline is out of scope; the first clip is what the
+  // format is ever used for here.
+  const first = options.timeline.video[0]
+  if (!first) throw new Error('There is no video on the timeline to make a GIF from')
+
+  return buildGifExportArgs({
+    clipPath: options.timeline.sources[first.input],
+    outputPath,
+    inPoint: first.sourceIn,
+    outPoint: first.sourceOut,
+    outWidth: toEvenSize(framing.outWidth * scale),
+    outHeight: toEvenSize(framing.outHeight * scale),
+    crop: framing.crop,
+    fps: GIF_FPS,
+    speed: options.speed,
+  })
 }
 
 /**

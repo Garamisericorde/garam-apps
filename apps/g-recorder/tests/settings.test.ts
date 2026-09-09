@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { sanitizeSettings, validateSettings } from '../app/main/settings/schema'
 import { DEFAULT_SETTINGS } from '../app/main/settings/defaults'
 import { clamp, formatBytes, formatDuration, formatTime, localTimestamp } from '../app/shared/time'
-import { computeFraming } from '../app/main/ffmpeg/ExportService'
+import { buildGifArgs, computeFraming } from '../app/main/ffmpeg/ExportService'
 import { getAspectRatio, getPreset, resolutionHeight } from '../app/shared/presets'
 
 describe('validateSettings', () => {
@@ -269,5 +269,67 @@ describe('a crop drawn on the preview', () => {
     const framing = computeFraming(info, 'source', 720, { x: 0, y: 0, width: 0.5, height: 1 })
     expect(framing.outHeight).toBe(720)
     expect(framing.outWidth).toBe(640)
+  })
+})
+
+describe('a GIF export', () => {
+  const info = {
+    path: 'a.mp4',
+    durationSeconds: 20,
+    width: 2560,
+    height: 1440,
+    fps: 60,
+    hasAudio: true,
+    sizeBytes: 0,
+  }
+
+  const options = {
+    presetId: 'balanced',
+    format: 'gif' as const,
+    aspect: 'source' as const,
+    speed: 1,
+    volume: 1,
+    effort: 'balanced' as const,
+    fileName: '',
+    directory: 'D:\\Out',
+    timeline: {
+      sources: ['a.mp4'],
+      video: [{ input: 0, start: 0, sourceIn: 1, sourceOut: 4 }],
+      audio: [{ input: 0, start: 0, sourceIn: 1, sourceOut: 4 }],
+      duration: 3,
+    },
+  }
+
+  const filterOf = (args: string[]): string => args[args.indexOf('-filter_complex') + 1] ?? ''
+
+  it('cuts where the crop was drawn', () => {
+    // It did not, and a GIF came back with everything the rectangle had cut
+    // away still in it — the one format where framing matters most, since a
+    // GIF is small enough that half a screen of nothing is most of the file.
+    const args = buildGifArgs(
+      { ...options, crop: { x: 0, y: 0.25, width: 1, height: 0.5 } },
+      info,
+      'out.gif',
+    )
+
+    expect(filterOf(args)).toContain('crop=2560:720:0:360')
+  })
+
+  it('sizes the picture from what is left, not from the whole frame', () => {
+    const args = buildGifArgs(
+      { ...options, crop: { x: 0, y: 0, width: 0.5, height: 1 } },
+      info,
+      'out.gif',
+    )
+
+    // What is left is 1280 wide; a GIF is capped at 640 across, and the height
+    // comes down by the same half, or the picture would be squashed.
+    expect(filterOf(args)).toContain('crop=1280:1440:0:0')
+    expect(filterOf(args)).toContain('scale=640:720')
+  })
+
+  it('leaves an uncropped export alone', () => {
+    const args = buildGifArgs(options, info, 'out.gif')
+    expect(filterOf(args)).not.toContain('crop=')
   })
 })

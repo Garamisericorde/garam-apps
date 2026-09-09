@@ -178,6 +178,8 @@ export default function EditorPage(): JSX.Element {
 
   const [keys, setKeys] = useState<EditorKeys>(DEFAULT_EDITOR_KEYS)
   const [snapEnabled, setSnapEnabled] = useState(true)
+  /** Whether reaching the end starts the timeline again */
+  const [loop, setLoop] = useState(false)
 
   const [exportControl, setExportControl] = useState<ExportControl | null>(null)
   const [exportOpen, setExportOpen] = useState(false)
@@ -647,10 +649,24 @@ export default function EditorPage(): JSX.Element {
           // over is not enough: without this, playback stopped at every cut.
           // Where the next clip begins depends on which way round it runs.
           requestSeek(playerTimeFor(next, next.start), true)
+          return
+        }
+
+        /*
+         * The end of the last clip, which is where the timeline stops — unless
+         * it is meant to go round again. Back to the first clip's start rather
+         * than to zero: a timeline that begins with a gap begins with black,
+         * and looping into it would read as the preview having lost its place.
+         */
+        const first = loop ? sortLane(timeline.video)[0] : undefined
+        if (first) {
+          setActiveId(first.id)
+          setPlayhead(first.start)
+          requestSeek(playerTimeFor(first, first.start), true)
         }
       }
     },
-    [activeItem, activePreview, isPlaying, playerTimeFor, requestSeek, timeline.video],
+    [activeItem, activePreview, isPlaying, loop, playerTimeFor, requestSeek, timeline.video],
   )
 
   /**
@@ -1294,6 +1310,8 @@ export default function EditorPage(): JSX.Element {
             void window.api.settings.set({ editorSnap: next })
           }}
           onToggleFullscreen={toggleFullscreen}
+          loop={loop}
+          onToggleLoop={() => setLoop((on) => !on)}
         />
 
         <PresetPicker

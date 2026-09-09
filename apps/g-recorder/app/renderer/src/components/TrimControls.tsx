@@ -23,6 +23,9 @@ interface TrimControlsProps {
   onToggleCrop: () => void
   onResetCrop: () => void
   onToggleFullscreen: () => void
+  /** Whether playback runs the timeline again when it reaches the end */
+  loop: boolean
+  onToggleLoop: () => void
   /* The timeline's zoom rides here rather than in a row of its own: it is
      three small controls, and a whole row of window height for them costs more
      of the clip than it is worth. */
@@ -54,6 +57,8 @@ export default function TrimControls({
   onToggleCrop,
   onResetCrop,
   onToggleFullscreen,
+  loop,
+  onToggleLoop,
   view,
   span,
   onViewChange,
@@ -156,6 +161,26 @@ export default function TrimControls({
       </div>
 
       <div className="transport-actions">
+        {/*
+          * Beside fullscreen rather than among the transport buttons: those are
+          * centred on the play button, and a sixth one there would push it off
+          * the centre line of the picture above it.
+          */}
+        <button
+          className={`transport-btn${loop ? ' is-on' : ''}`}
+          onClick={onToggleLoop}
+          disabled={disabled}
+          title={loop ? 'Stop looping' : 'Loop the whole timeline'}
+          aria-pressed={loop}
+        >
+          <svg viewBox="0 0 20 20" aria-hidden>
+            <path d="M6 5.5h8a3 3 0 0 1 3 3v1" />
+            <path d="M14.5 14.5h-8a3 3 0 0 1-3-3v-1" />
+            <path d="M14.6 3.4 16.7 5.5 14.6 7.6" />
+            <path d="M5.4 16.6 3.3 14.5 5.4 12.4" />
+          </svg>
+        </button>
+
         <button
           className="transport-btn"
           onClick={onToggleFullscreen}

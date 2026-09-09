@@ -733,6 +733,13 @@ input:focus {
   cursor: not-allowed;
 }
 
+/* A transport toggle that is on — the lighter end of the ramp, since --accent
+   is a fill colour and an icon drawn in it over --accent-soft is dark on dark. */
+.transport-btn.is-on {
+  color: var(--accent-hover);
+  background: var(--accent-soft);
+}
+
 .play-button svg {
   width: 20px;
   height: 20px;
