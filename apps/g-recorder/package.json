@@ -1,6 +1,6 @@
 {
   "name": "g-recorder",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "description": "Instant Replay + Trimmer for Windows",
   "main": "out/main/index.js",
   "author": "",
