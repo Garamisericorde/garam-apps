@@ -151,6 +151,57 @@ export function reverseItem(timeline: Timeline, lane: LaneId, id: string): Timel
   return { video: flip(timeline.video), audio: flip(timeline.audio) }
 }
 
+/**
+ * Follow a clip with a reversed copy of itself, so it plays out and back.
+ *
+ * The copy is a frame shorter at each end, and that is the whole point of
+ * having this rather than doing it by hand. `reverse` hands back the frames in
+ * the order it got them, so a plain copy placed after its twin opens on the
+ * very frame the twin just showed, and closes on the very frame the twin will
+ * open with when it comes round again. Both turnarounds then hold for two
+ * frames instead of one, which is exactly the hitch you see and cannot explain.
+ *
+ * Dropping one frame at each end costs a thirtieth of a second and makes the
+ * motion continuous through both joins.
+ */
+export function boomerang(
+  timeline: Timeline,
+  lane: LaneId,
+  id: string,
+  frameSeconds: number,
+): Timeline {
+  const group = linkedWith(timeline, lane, id)
+  const target = group.find((entry) => entry.lane === lane && entry.item.id === id)?.item
+  if (!target || !group.every((entry) => canReverse(entry.item))) return timeline
+
+  const frame = frameSeconds > 0 ? frameSeconds : 1 / 60
+  const at = itemEnd(target)
+  const link = group.length > 1 ? nextId('link') : undefined
+
+  const next: Timeline = { video: [...timeline.video], audio: [...timeline.audio] }
+
+  for (const entry of group) {
+    const source = entry.item
+    const sourceIn = source.sourceIn + frame
+    const sourceOut = source.sourceOut - frame
+    if (sourceOut - sourceIn < MIN_ITEM_SECONDS) return timeline
+
+    next[entry.lane].push({
+      ...source,
+      id: nextId(entry.lane[0] ?? 'i'),
+      // Every piece keeps its offset from the clip that was asked about, so a
+      // sound that ran behind its picture still does.
+      start: at + (source.start - target.start),
+      sourceIn,
+      sourceOut,
+      reversed: !source.reversed,
+      linkId: link,
+    })
+  }
+
+  return next
+}
+
 /** Items in play order, which is how both the preview and the exporter read a lane */
 export function sortLane(items: TimelineItem[]): TimelineItem[] {
   return [...items].sort((a, b) => a.start - b.start)

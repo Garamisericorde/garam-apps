@@ -3,6 +3,7 @@ import {
   EMPTY_TIMELINE,
   MAX_GAIN,
   appendClip,
+  boomerang,
   canReverse,
   closeGapBefore,
   copyItems,
@@ -13,6 +14,7 @@ import {
   itemGain,
   linkItems,
   linkedWith,
+  MIN_ITEM_SECONDS,
   MAX_REVERSE_SECONDS,
   moveItem,
   pasteItems,
@@ -615,5 +617,79 @@ describe('a gap left between two clips', () => {
 
     const closed = closeGapBefore(withSecond, 'video', withSecond.video[1].id)
     expect(closed.video[1].start).toBeCloseTo(6)
+  })
+})
+
+describe('a clip that plays out and back', () => {
+  const FRAME = 1 / 60
+
+  /** Ten seconds of a.mp4 at zero, with its sound */
+  function base(): Timeline {
+    return appendClip(EMPTY_TIMELINE, { path: 'a.mp4', durationSeconds: 10, hasAudio: true })
+  }
+
+  it('puts the reversed copy immediately after the original', () => {
+    const timeline = base()
+    const out = boomerang(timeline, 'video', timeline.video[0].id, FRAME)
+
+    expect(out.video).toHaveLength(2)
+    expect(out.video[1].start).toBeCloseTo(itemEnd(out.video[0]))
+    expect(out.video[1].reversed).toBe(true)
+  })
+
+  it('drops one frame at each end, which is the whole point', () => {
+    // A plain reversed copy opens on the frame its twin just showed and closes
+    // on the frame the twin opens with, so both turnarounds hold for two frames
+    // instead of one. That is the hitch you can see and cannot explain.
+    const timeline = base()
+    const copy = boomerang(timeline, 'video', timeline.video[0].id, FRAME).video[1]
+    const original = timeline.video[0]
+
+    expect(copy.sourceIn).toBeCloseTo(original.sourceIn + FRAME)
+    expect(copy.sourceOut).toBeCloseTo(original.sourceOut - FRAME)
+    expect(itemDuration(copy)).toBeCloseTo(itemDuration(original) - 2 * FRAME)
+  })
+
+  it('takes the sound along, tied to the picture it belongs to', () => {
+    const timeline = base()
+    const out = boomerang(timeline, 'video', timeline.video[0].id, FRAME)
+
+    expect(out.audio).toHaveLength(2)
+    expect(out.audio[1].reversed).toBe(true)
+    expect(out.audio[1].start).toBeCloseTo(out.video[1].start)
+    expect(out.audio[1].linkId).toBe(out.video[1].linkId)
+    // A pair of its own, or dragging the original would drag the copy.
+    expect(out.video[1].linkId).not.toBe(out.video[0].linkId)
+  })
+
+  it('follows a backwards clip with a forwards one', () => {
+    // Out and back is a direction change, whichever way the clip was already
+    // running.
+    const timeline = base()
+    const turned = reverseItem(timeline, 'video', timeline.video[0].id)
+    const out = boomerang(turned, 'video', turned.video[0].id, FRAME)
+
+    expect(turned.video[0].reversed).toBe(true)
+    expect(out.video[1].reversed).toBe(false)
+  })
+
+  it('refuses a clip with nothing left after the frames come off', () => {
+    const sliver = appendClip(EMPTY_TIMELINE, {
+      path: 'a.mp4',
+      durationSeconds: MIN_ITEM_SECONDS,
+      hasAudio: false,
+    })
+
+    expect(boomerang(sliver, 'video', sliver.video[0].id, FRAME)).toBe(sliver)
+  })
+
+  it('refuses a clip too long to reverse at all', () => {
+    const long = appendClip(EMPTY_TIMELINE, {
+      path: 'a.mp4',
+      durationSeconds: MAX_REVERSE_SECONDS + 5,
+      hasAudio: false,
+    })
+
+    expect(boomerang(long, 'video', long.video[0].id, FRAME)).toBe(long)
   })
 })

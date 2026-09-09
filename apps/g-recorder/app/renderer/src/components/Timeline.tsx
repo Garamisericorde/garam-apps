@@ -68,6 +68,8 @@ interface TimelineProps {
   onPaste: () => void
   /** Play a clip backwards, along with whatever is linked to it */
   onReverse: (lane: LaneId, id: string) => void
+  /** Follow a clip with a reversed copy of itself, so it plays out and back */
+  onBoomerang: (lane: LaneId, id: string) => void
   /** Pull a clip back onto the one before it, taking everything after with it */
   onCloseGap: (lane: LaneId, id: string) => void
   /** Whether anything has been copied yet, so the menu can leave Paste out */
@@ -127,6 +129,7 @@ export default function Timeline({
   onCopy,
   onPaste,
   onReverse,
+  onBoomerang,
   onCloseGap,
   canPaste,
   onViewChange,
@@ -432,6 +435,17 @@ export default function Timeline({
                   : `Reverse (only up to ${MAX_REVERSE_SECONDS} seconds)`,
                 disabled: !canReverse(menuTarget),
                 onSelect: () => onReverse(menu.target.lane, menu.target.id),
+              },
+              {
+                /*
+                 * The thing people actually reverse a clip for. Doing it by
+                 * hand — copy, paste, reverse — repeats a frame at both
+                 * turnarounds, because a reversed copy opens on the frame its
+                 * twin just showed. This one is a frame shorter at each end.
+                 */
+                label: 'Play out and back',
+                disabled: !canReverse(menuTarget),
+                onSelect: () => onBoomerang(menu.target.lane, menu.target.id),
               },
             ]
           : []),

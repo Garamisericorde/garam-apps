@@ -4,6 +4,7 @@ import type { AppSettings, FrameCrop, MediaInfo } from '../../../shared/types'
 import { formatBytes, formatTime } from '../../../shared/time'
 import {
   appendClip,
+  boomerang,
   closeGapBefore,
   copyItems,
   EMPTY_TIMELINE,
@@ -746,6 +747,22 @@ export default function EditorPage(): JSX.Element {
     [edit],
   )
 
+  /**
+   * Put a reversed copy of a clip right after it.
+   *
+   * The frame rate comes from the source, because the copy has to be exactly
+   * one frame shorter at each end: any other amount either repeats a frame at
+   * the turnaround or skips one.
+   */
+  const handleBoomerang = useCallback(
+    (lane: LaneId, id: string) => {
+      const item = latestTimeline.current[lane].find((entry) => entry.id === id)
+      const fps = item ? sources[item.path]?.info.fps : 0
+      edit((previous) => boomerang(previous, lane, id, 1 / (fps && fps > 0 ? fps : 60)))
+    },
+    [edit, sources],
+  )
+
   const handleCloseGap = useCallback(
     (lane: LaneId, id: string) => {
       edit((previous) => closeGapBefore(previous, lane, id))
@@ -1278,6 +1295,7 @@ export default function EditorPage(): JSX.Element {
             onCopy={handleCopy}
             onPaste={handlePaste}
             onReverse={handleReverse}
+            onBoomerang={handleBoomerang}
             onCloseGap={handleCloseGap}
             canPaste={clipboard !== null}
             onViewChange={setView}

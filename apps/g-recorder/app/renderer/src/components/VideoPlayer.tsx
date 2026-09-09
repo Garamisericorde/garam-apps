@@ -166,8 +166,14 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
 
       const { outPoint: end } = boundsRef.current
       if (end > 0 && video.currentTime >= end) {
+        /*
+         * Paused where it got to, not seeked back to the edge. Seeking to the
+         * out point shows the frame that starts at it — the first frame of what
+         * comes NEXT, which is a jerk forward at the end of every clip — and it
+         * is one more seek to wait out at the very moment the next clip is
+         * trying to take over.
+         */
         video.pause()
-        video.currentTime = end
         onTimeUpdate(end)
         return
       }
