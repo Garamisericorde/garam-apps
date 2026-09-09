@@ -573,6 +573,12 @@ input:focus {
  * The one that is loading. Transparent rather than hidden on purpose: a video
  * that is not rendered is not decoded either, so `display: none` here would
  * mean the clip never produces the frame the swap is waiting for.
+ *
+ * Stacking it underneath at full opacity was tried instead, on the theory that
+ * a transparent element is not composited and so starts cold. It made no
+ * measurable difference to the fiftieth of a second a media element takes to
+ * start playing, and it would let the covered clip show through the letterbox
+ * bars whenever two clips disagree about shape.
  */
 .stage video.is-standby {
   opacity: 0;

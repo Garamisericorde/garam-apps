@@ -119,8 +119,20 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
    * start instead. Held here and applied the moment the duration is known.
    */
   const pendingSeek = useRef<(number | null)[]>([null, null])
-  /** Which clip each element is holding, so a preloaded one can be recognised */
+  /*
+   * What each element is holding: the clip AND the file it is playing it from.
+   *
+   * Both, because they can disagree. A reversed clip is played from a copy that
+   * takes a second to write, so the clip after this one is first offered as its
+   * original file and only later as the copy — and keying on the clip alone
+   * meant the standby was never told about the swap. It sat holding the wrong
+   * file until the cut, and then loaded the right one from scratch at exactly
+   * the moment it was needed: measured, the picture stopped for a tenth of a
+   * second at every join, which is the hesitation that reads as the clip
+   * suddenly speeding up afterwards.
+   */
   const holds = useRef<(string | undefined)[]>([undefined, undefined])
+  const held = (id: string | undefined, source: string): string => `${id ?? ''}|${source}`
 
   // Keep the latest bounds available to the rAF loop without restarting it
   const boundsRef = useRef({ inPoint, outPoint })
@@ -128,6 +140,12 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
 
   const soundRef = useRef({ muted, volume })
   soundRef.current = { muted, volume }
+
+  // What is on screen, for the callbacks that run outside a render
+  const clipIdRef = useRef(clipId)
+  clipIdRef.current = clipId
+  const srcRef = useRef(src)
+  srcRef.current = src
 
   const applySound = useCallback((video: VideoElement | null): void => {
     if (!video) return
@@ -206,6 +224,8 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
     shownRef.current = 1 - shownRef.current
     setShown(shownRef.current)
     applySound(incoming)
+    // The element taking the screen is holding what the editor asked to show.
+    holds.current[shownRef.current] = held(clipIdRef.current, srcRef.current ?? '')
     holds.current[1 - shownRef.current] = undefined
 
     if (resumeOnSwap.current) {
@@ -241,7 +261,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
       if (!incoming) return
 
       const slot = 1 - shownRef.current
-      holds.current[slot] = id
+      holds.current[slot] = held(id, source)
       pendingSeek.current[slot] = at
       // Silent until it takes over, or both clips would be heard at once.
       incoming.muted = true
@@ -265,7 +285,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
 
     const slot = shownRef.current
     const showing = live()
-    if (showing && showing.currentSrc === src && holds.current[slot] === clipId) return
+    if (showing && showing.currentSrc === src && holds.current[slot] === held(clipId, src)) return
 
     /*
      * Already waiting in the wings, loaded and positioned before the cut came:
@@ -274,7 +294,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
      */
     const incoming = standby()
     const ready = incoming && incoming.readyState >= 2 && !incoming.seeking
-    if (ready && holds.current[1 - slot] === clipId && incoming.currentSrc === src) {
+    if (ready && holds.current[1 - slot] === held(clipId, src)) {
       swapping.current = true
       finishSwap()
       return
@@ -298,7 +318,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
    */
   useEffect(() => {
     if (swapping.current || !preload) return
-    if (holds.current[1 - shownRef.current] === preload.id) return
+    if (holds.current[1 - shownRef.current] === held(preload.id, preload.src)) return
 
     loadStandby(preload.id, preload.src, preload.at)
   }, [loadStandby, preload, shown])

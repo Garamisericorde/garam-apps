@@ -3,6 +3,7 @@ import { clamp } from '../../../shared/time'
 import {
   canReverse,
   gapBefore,
+  linkedWith,
   itemDuration,
   itemEnd,
   itemGain,
@@ -405,6 +406,17 @@ export default function Timeline({
     ? timeline[menu.target.lane].find((item) => item.id === menu.target.id)
     : undefined
 
+  /*
+   * Reversing takes the whole link group, so the menu has to ask about the
+   * whole group. Asking only about the clip under the cursor offered the action
+   * on a short picture whose sound was long, and choosing it did nothing at all.
+   */
+  const groupCanReverse = menu
+    ? linkedWith(timeline, menu.target.lane, menu.target.id).every((entry) =>
+        canReverse(entry.item),
+      )
+    : false
+
   const menuItems = menu
     ? [
         {
@@ -428,12 +440,12 @@ export default function Timeline({
                  * does not exist, and the way round it — cut a shorter piece
                  * first — is only obvious once you know what the limit is.
                  */
-                label: canReverse(menuTarget)
+                label: groupCanReverse
                   ? menuTarget.reversed
                     ? 'Play forwards again'
                     : 'Reverse'
                   : `Reverse (only up to ${MAX_REVERSE_SECONDS} seconds)`,
-                disabled: !canReverse(menuTarget),
+                disabled: !groupCanReverse,
                 onSelect: () => onReverse(menu.target.lane, menu.target.id),
               },
               {
@@ -444,7 +456,7 @@ export default function Timeline({
                  * twin just showed. This one is a frame shorter at each end.
                  */
                 label: 'Play out and back',
-                disabled: !canReverse(menuTarget),
+                disabled: !groupCanReverse,
                 onSelect: () => onBoomerang(menu.target.lane, menu.target.id),
               },
             ]
