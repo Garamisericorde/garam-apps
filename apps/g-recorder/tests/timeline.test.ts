@@ -4,9 +4,12 @@ import {
   MAX_GAIN,
   appendClip,
   canReverse,
+  closeGapBefore,
   copyItems,
+  gapBefore,
   itemAt,
   itemDuration,
+  itemEnd,
   itemGain,
   linkItems,
   linkedWith,
@@ -548,5 +551,69 @@ describe('a clip played backwards', () => {
   it('is heard when both lanes were turned round', () => {
     const turned = flipped()
     expect(previewAudio(turned, turned.video[0], 5).muted).toBe(false)
+  })
+})
+
+describe('a gap left between two clips', () => {
+  /** Two four-second clips with a tenth of a second of nothing between them */
+  function gapped(): Timeline {
+    const first = appendClip(EMPTY_TIMELINE, { path: 'a.mp4', durationSeconds: 4, hasAudio: true })
+    const second = appendClip(first, { path: 'b.mp4', durationSeconds: 4, hasAudio: true }, 4.1)
+    return second
+  }
+
+  it('is measured from whatever ended last on either lane', () => {
+    const timeline = gapped()
+    expect(gapBefore(timeline, 'video', timeline.video[1].id)).toBeCloseTo(0.1)
+    expect(gapBefore(timeline, 'video', timeline.video[0].id)).toBe(0)
+  })
+
+  it('closes, leaving the two clips touching', () => {
+    const timeline = gapped()
+    const closed = closeGapBefore(timeline, 'video', timeline.video[1].id)
+
+    expect(closed.video[1].start).toBeCloseTo(4)
+    expect(itemEnd(closed.video[0])).toBeCloseTo(closed.video[1].start)
+    expect(gapBefore(closed, 'video', closed.video[1].id)).toBe(0)
+  })
+
+  it('takes the sound with it, still in step', () => {
+    const timeline = gapped()
+    const closed = closeGapBefore(timeline, 'video', timeline.video[1].id)
+    expect(closed.audio[1].start).toBeCloseTo(closed.video[1].start)
+  })
+
+  it('moves everything after, rather than moving the gap along', () => {
+    const timeline = appendClip(gapped(), { path: 'c.mp4', durationSeconds: 2, hasAudio: false })
+    const third = timeline.video[2]
+    const closed = closeGapBefore(timeline, 'video', timeline.video[1].id)
+
+    expect(closed.video[2].start).toBeCloseTo(third.start - 0.1)
+    expect(gapBefore(closed, 'video', closed.video[2].id)).toBe(0)
+  })
+
+  it('pulls a clip that starts late back to the beginning', () => {
+    const late = appendClip(EMPTY_TIMELINE, { path: 'a.mp4', durationSeconds: 4, hasAudio: false }, 2)
+    const closed = closeGapBefore(late, 'video', late.video[0].id)
+    expect(closed.video[0].start).toBe(0)
+  })
+
+  it('does nothing where the clips already touch', () => {
+    const touching = appendClip(
+      appendClip(EMPTY_TIMELINE, { path: 'a.mp4', durationSeconds: 4, hasAudio: true }),
+      { path: 'b.mp4', durationSeconds: 4, hasAudio: true },
+    )
+
+    expect(closeGapBefore(touching, 'video', touching.video[1].id)).toBe(touching)
+  })
+
+  it('will not pull a clip back over a sound still running under it', () => {
+    // Closing a hole by making an overlap is not closing it.
+    const first = appendClip(EMPTY_TIMELINE, { path: 'a.mp4', durationSeconds: 4, hasAudio: true })
+    const longAudio = trimItem(first, 'audio', first.audio[0].id, 'end', 6, 10)
+    const withSecond = appendClip(longAudio, { path: 'b.mp4', durationSeconds: 2, hasAudio: false }, 8)
+
+    const closed = closeGapBefore(withSecond, 'video', withSecond.video[1].id)
+    expect(closed.video[1].start).toBeCloseTo(6)
   })
 })

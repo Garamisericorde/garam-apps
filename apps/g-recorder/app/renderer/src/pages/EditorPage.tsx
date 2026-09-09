@@ -4,6 +4,7 @@ import type { AppSettings, FrameCrop, MediaInfo } from '../../../shared/types'
 import { formatBytes, formatTime } from '../../../shared/time'
 import {
   appendClip,
+  closeGapBefore,
   copyItems,
   EMPTY_TIMELINE,
   itemAt,
@@ -212,6 +213,15 @@ export default function EditorPage(): JSX.Element {
   const [pendingDrop, setPendingDrop] = useState<PendingDrop | null>(null)
 
   const duration = timelineDuration(timeline)
+
+  /*
+   * Removing the clip the playhead was inside used to leave it past the end,
+   * and the transport then read 00:06.503 / 00:04.937 — a position that cannot
+   * exist, which reads as the editor having lost track of itself.
+   */
+  useEffect(() => {
+    if (duration > 0 && playhead > duration) setPlayhead(duration)
+  }, [duration, playhead])
 
   /*
    * Keep the preview pointing at something real. Removing the clip it was
@@ -592,6 +602,13 @@ export default function EditorPage(): JSX.Element {
     [edit],
   )
 
+  const handleCloseGap = useCallback(
+    (lane: LaneId, id: string) => {
+      edit((previous) => closeGapBefore(previous, lane, id))
+    },
+    [edit],
+  )
+
   const handleCopy = useCallback(
     (lane: LaneId, id: string) => {
       const copied = copyItems(latestTimeline.current, lane, id)
@@ -613,7 +630,16 @@ export default function EditorPage(): JSX.Element {
     if (!clipboard) return
 
     const before = latestTimeline.current
-    const after = pasteItems(before, clipboard, playhead)
+    /*
+     * Pulled onto a nearby edge, exactly as a dropped clip is.
+     *
+     * A paste lands wherever the playhead happens to be, and that is almost
+     * never precisely where the clip before it ends — so pasting one clip after
+     * another left a sliver of a gap, invisible at most zooms and a flash of
+     * black on export.
+     */
+    const at = snapEnabled ? snapDropTo(before, playhead, PASTE_SNAP_SECONDS) : playhead
+    const after = pasteItems(before, clipboard, at)
     if (after === before) return
 
     edit(() => after)
@@ -621,7 +647,7 @@ export default function EditorPage(): JSX.Element {
     const lane = clipboard.some((entry) => entry.lane === 'video') ? 'video' : 'audio'
     const id = pastedId(before, after, lane)
     if (id) setSelected({ lane, id })
-  }, [clipboard, edit, playhead])
+  }, [clipboard, edit, playhead, snapEnabled])
 
   /**
    * Cut at a moment.
@@ -1106,6 +1132,7 @@ export default function EditorPage(): JSX.Element {
             onCopy={handleCopy}
             onPaste={handlePaste}
             onReverse={handleReverse}
+            onCloseGap={handleCloseGap}
             canPaste={clipboard !== null}
             onViewChange={setView}
           />
@@ -1175,6 +1202,17 @@ function patchSource(
 
 /** How close a drop must come to an edge to land on it, in pixels */
 const DROP_SNAP_PX = 10
+
+/**
+ * How close a paste must come to an edge to land on it, in seconds.
+ *
+ * In seconds rather than pixels because a paste has no pointer: it lands where
+ * the playhead is, and the playhead was put there by an arrow key or a click,
+ * neither of which is trying to be frame-accurate. A quarter of a second is
+ * well inside "I meant right there" and nowhere near a gap anyone left on
+ * purpose.
+ */
+const PASTE_SNAP_SECONDS = 0.25
 
 /**
  * Pull an incoming clip onto the nearest clip edge.

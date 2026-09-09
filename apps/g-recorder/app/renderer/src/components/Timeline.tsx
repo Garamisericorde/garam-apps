@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { clamp } from '../../../shared/time'
 import {
   canReverse,
+  gapBefore,
   itemDuration,
   itemEnd,
   itemGain,
@@ -67,6 +68,8 @@ interface TimelineProps {
   onPaste: () => void
   /** Play a clip backwards, along with whatever is linked to it */
   onReverse: (lane: LaneId, id: string) => void
+  /** Pull a clip back onto the one before it, taking everything after with it */
+  onCloseGap: (lane: LaneId, id: string) => void
   /** Whether anything has been copied yet, so the menu can leave Paste out */
   canPaste: boolean
   onViewChange: (view: TimelineView) => void
@@ -124,6 +127,7 @@ export default function Timeline({
   onCopy,
   onPaste,
   onReverse,
+  onCloseGap,
   canPaste,
   onViewChange,
 }: TimelineProps): JSX.Element {
@@ -428,6 +432,20 @@ export default function Timeline({
                   : `Reverse (only up to ${MAX_REVERSE_SECONDS} seconds)`,
                 disabled: !canReverse(menuTarget),
                 onSelect: () => onReverse(menu.target.lane, menu.target.id),
+              },
+            ]
+          : []),
+        ...(gapBefore(timeline, menu.target.lane, menu.target.id) > 0.001
+          ? [
+              {
+                /*
+                 * Only when there is a gap to close. A clip a few frames short
+                 * of the one before it is a flash of black on export, and at a
+                 * zoomed-out view the space is too small to see, let alone drag
+                 * shut.
+                 */
+                label: 'Close the gap before this',
+                onSelect: () => onCloseGap(menu.target.lane, menu.target.id),
               },
             ]
           : []),

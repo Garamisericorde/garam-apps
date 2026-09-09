@@ -414,6 +414,54 @@ export function pastedId(before: Timeline, after: Timeline, lane: LaneId): strin
   return after[lane].find((item) => !known.has(item.id))?.id ?? null
 }
 
+/**
+ * The empty space immediately before an item, on either lane.
+ *
+ * A gap is a real thing on this timeline — the exporter fills one with black,
+ * which is how you hold on a title or leave a beat. What it must never be is an
+ * accident, and a clip dropped or pasted a few frames short of the one before
+ * it leaves exactly that: a flash of black nobody asked for.
+ */
+export function gapBefore(timeline: Timeline, lane: LaneId, id: string): number {
+  const item = timeline[lane].find((candidate) => candidate.id === id)
+  if (!item) return 0
+
+  // Measured against both lanes: pulling a clip back over a sound that is still
+  // running would close one hole by making an overlap.
+  let previousEnd = 0
+  for (const other of ['video', 'audio'] as LaneId[]) {
+    for (const candidate of timeline[other]) {
+      const end = itemEnd(candidate)
+      if (end <= item.start + 0.001 && end > previousEnd) previousEnd = end
+    }
+  }
+
+  return Math.max(item.start - previousEnd, 0)
+}
+
+/**
+ * Close that space, taking everything after it along.
+ *
+ * Everything, not just the clip asked about: moving one clip back and leaving
+ * the rest where they are does not close a gap, it moves it. Both lanes shift
+ * together, so a sound that was in step with a picture still is.
+ */
+export function closeGapBefore(timeline: Timeline, lane: LaneId, id: string): Timeline {
+  const item = timeline[lane].find((candidate) => candidate.id === id)
+  const gap = gapBefore(timeline, lane, id)
+  if (!item || gap <= 0.001) return timeline
+
+  const from = item.start - 0.001
+  const shift = (items: TimelineItem[]): TimelineItem[] =>
+    items.map((candidate) =>
+      candidate.start >= from
+        ? { ...candidate, start: Math.max(candidate.start - gap, 0) }
+        : candidate,
+    )
+
+  return { video: shift(timeline.video), audio: shift(timeline.audio) }
+}
+
 /** How far apart two source positions can be and still count as the same moment */
 const SYNC_TOLERANCE_SECONDS = 0.05
 
