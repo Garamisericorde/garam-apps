@@ -178,8 +178,14 @@ export default function EditorPage(): JSX.Element {
 
   const [keys, setKeys] = useState<EditorKeys>(DEFAULT_EDITOR_KEYS)
   const [snapEnabled, setSnapEnabled] = useState(true)
-  /** Whether reaching the end starts the timeline again */
-  const [loop, setLoop] = useState(false)
+  /*
+   * Whether reaching the end starts the timeline again.
+   *
+   * On to begin with: editing a short clip means watching it over, and having
+   * to press play again after every pass is the kind of small friction that is
+   * only noticed a hundred times.
+   */
+  const [loop, setLoop] = useState(true)
 
   const [exportControl, setExportControl] = useState<ExportControl | null>(null)
   const [exportOpen, setExportOpen] = useState(false)
@@ -354,14 +360,6 @@ export default function EditorPage(): JSX.Element {
       setBusy(null)
     }
   }, [addClip])
-
-  /** Empty the timeline, leaving the editor as it opens */
-  const clearTimeline = useCallback(() => {
-    edit(() => EMPTY_TIMELINE)
-    setSelected(null)
-    setPlayhead(0)
-    setView(FIT_VIEW)
-  }, [edit])
 
   /*
    * A replay saved from the tray or a hotkey is NOT put on the timeline.
@@ -1295,7 +1293,6 @@ export default function EditorPage(): JSX.Element {
           onTogglePlay={() => playerRef.current?.togglePlay()}
           onSplit={() => handleSplit(playhead)}
           onRemove={() => selected && handleRemove(selected.lane, selected.id)}
-          onClear={clearTimeline}
           onSeek={handleSeek}
           cropping={cropping}
           cropped={isCropped(crop)}

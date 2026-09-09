@@ -515,6 +515,12 @@ input:focus {
 /* ── Editor ──────────────────────────────────────────────────────────────── */
 
 .editor {
+  /*
+   * The transport measures itself against this, not against the window: the
+   * clips panel beside it is collapsible, and the same window is 280px wider
+   * for the controls with it shut.
+   */
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -679,6 +685,51 @@ input:focus {
   gap: 8px;
 }
 
+/*
+ * Too narrow for a centred row: two rows instead of an overlapping one.
+ *
+ * Taking the side clusters out of the flow is what keeps the play button on the
+ * centre line, and it is also what lets them run over it when the row is short
+ * of space — measured at an 898px editor, the actions began at 725 while the
+ * transport buttons ran 645 to 835, so Crop sat on top of Play.
+ *
+ * The threshold is measured, not guessed: the actions come to 311 at their
+ * widest and the buttons in the middle to 190, and a centred middle needs room
+ * for the wider cluster on BOTH sides of it — 836. Below that the clock and the
+ * actions share a row of their own and the transport keeps the one under the
+ * picture, still centred on the lanes.
+ */
+@container (max-width: 835px) {
+  .transport {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-areas:
+      'side actions'
+      'main main';
+    align-items: center;
+    row-gap: 6px;
+    column-gap: 12px;
+  }
+
+  .transport-side {
+    position: static;
+    grid-area: side;
+  }
+
+  .transport-actions {
+    position: static;
+    grid-area: actions;
+    justify-content: flex-end;
+    /* The row it shares is its own, so it may use all of it. */
+    flex-wrap: wrap;
+  }
+
+  .transport-main {
+    grid-area: main;
+    justify-self: center;
+  }
+}
+
 /* The one control you reach for without looking, so it is round and larger. */
 .play-button {
   width: 38px;
@@ -731,6 +782,18 @@ input:focus {
 .transport-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;
+}
+
+/*
+ * The × that undoes a crop, tucked against the button that made one.
+ *
+ * Narrower than the rest of the row and pulled in tight, so the pair reads as
+ * one control with an undo on it rather than as two separate actions.
+ */
+.crop-reset {
+  width: 26px;
+  height: 26px;
+  margin-left: -4px;
 }
 
 /* A transport toggle that is on — the lighter end of the ramp, since --accent

@@ -15,7 +15,6 @@ interface TrimControlsProps {
   onTogglePlay: () => void
   onSplit: () => void
   onRemove: () => void
-  onClear: () => void
   onSeek: (seconds: number) => void
   /** Whether the crop rectangle is on screen, and whether it takes anything */
   cropping: boolean
@@ -50,7 +49,6 @@ export default function TrimControls({
   onTogglePlay,
   onSplit,
   onRemove,
-  onClear,
   onSeek,
   cropping,
   cropped,
@@ -200,9 +198,21 @@ export default function TrimControls({
         >
           {cropping ? 'Done' : 'Crop'}
         </button>
+        {/*
+          * Undoing the crop is a mark on the Crop button, not a second button
+          * of its own. As "Reset crop" it was the widest thing in the row —
+          * ninety-eight pixels to undo one action — and it was what pushed the
+          * controls into each other on a narrower window.
+          */}
         {cropped && (
-          <button className="btn btn-ghost" onClick={onResetCrop} title="Keep the whole frame">
-            Reset crop
+          <button
+            className="transport-btn crop-reset"
+            onClick={onResetCrop}
+            title="Keep the whole frame again"
+          >
+            <svg viewBox="0 0 20 20" aria-hidden>
+              <path d="M6.5 6.5l7 7M13.5 6.5l-7 7" />
+            </svg>
           </button>
         )}
 
@@ -223,14 +233,6 @@ export default function TrimControls({
           Remove
         </button>
 
-        <button
-          className="btn btn-ghost"
-          onClick={onClear}
-          disabled={disabled}
-          title="Empty the timeline"
-        >
-          Clear
-        </button>
       </div>
     </div>
   )
