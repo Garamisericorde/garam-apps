@@ -173,6 +173,20 @@ function createMainWindow(): void {
     void mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
+  /*
+   * Renderer errors, in the log with everything else.
+   *
+   * Without this the only trace of a failure in the interface is the user
+   * saying it did not work: the console lives in a window nobody has open, and
+   * a packaged build has no way to show it. Warnings and errors only — logging
+   * every line the interface prints would bury the ones that matter.
+   */
+  mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    if (level < 2) return
+    const where = sourceId ? `${sourceId.split('/').pop()}:${line}` : 'renderer'
+    logger.warn(`Renderer: ${message}`, { where })
+  })
+
   // Report the palette the window actually resolved. "The theme did not change"
   // and "the stylesheet did not load" look identical from the outside, and the
   // renderer is the only place that can tell them apart.

@@ -40,8 +40,22 @@ export async function readEditorState(): Promise<EditorState> {
   }
 }
 
+/*
+ * Writes are queued, never concurrent.
+ *
+ * An atomic write is a temp file and a rename, and on Windows two renames onto
+ * the same name at the same moment take each other down with EPERM — so a
+ * caller that saved twice in one millisecond saved nothing at all.
+ */
+let writing: Promise<void> = Promise.resolve()
+
 export async function writeEditorState(state: unknown): Promise<void> {
-  await writeJson(filePath(), sanitizeEditorState(state))
+  const next = writing
+    .catch(() => undefined)
+    .then(() => writeJson(filePath(), sanitizeEditorState(state)))
+
+  writing = next.catch(() => undefined)
+  await next
 }
 
 export function sanitizeEditorState(value: unknown): EditorState {

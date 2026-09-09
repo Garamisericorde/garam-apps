@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 
 export interface VideoPlayerHandle {
   play: () => void
@@ -42,6 +42,14 @@ interface VideoPlayerProps {
  * See the loop below for why this is nowhere near the frame rate.
  */
 const REVERSE_SEEK_INTERVAL_MS = 125
+
+/**
+ * Longest a held frame stays up waiting for the next one.
+ *
+ * A still picture that never gives way is worse than the flash it was hiding,
+ * so a source that never produces a frame gets the black it earned.
+ */
+const HOLD_LIMIT_MS = 2000
 
 const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function VideoPlayer(
   {
@@ -203,6 +211,53 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
     videoRef.current?.pause()
   }, [reversed, src, stopReverse])
 
+  /*
+   * The last frame of the outgoing clip, held on screen while the next one
+   * loads.
+   *
+   * Changing a video element's source empties it, and it paints its background
+   * until the new file has a frame to show — so playing across a cut where the
+   * two clips come from different files (or from a clip and its reversed copy)
+   * flashed black every time. The frame is copied to a canvas laid exactly over
+   * the picture and dropped the moment there is something to replace it with.
+   *
+   * Only drawn to, never read back: a clip:// source taints the canvas, which
+   * makes reading the pixels out illegal but drawing them perfectly fine.
+   */
+  const holdRef = useRef<HTMLCanvasElement>(null)
+  /*
+   * Whether the held frame is on screen, as state rather than a property set on
+   * the element. React rewrites `hidden` on every render, so showing the canvas
+   * by hand lasted exactly until the next one — which, with the playhead moving,
+   * is the same frame.
+   */
+  const [holding, setHolding] = useState(false)
+
+  const releaseHold = useCallback(() => setHolding(false), [])
+
+  /**
+   * Let go once there is really a picture, not merely a loaded file.
+   *
+   * `loadeddata` fires with readyState still at HAVE_METADATA — measured: the
+   * event at 19 ms, the first frame at 90 ms — so releasing on it put the black
+   * back for seventy milliseconds, which is exactly the flash this is here to
+   * remove. requestVideoFrameCallback fires when a frame has been presented,
+   * which is the only signal that means what is wanted.
+   */
+  const releaseWhenPainted = useCallback(() => {
+    const video = videoRef.current as
+      | (HTMLVideoElement & { requestVideoFrameCallback?: (cb: () => void) => number })
+      | null
+
+    if (!video) return
+    if (typeof video.requestVideoFrameCallback === 'function') {
+      video.requestVideoFrameCallback(() => setHolding(false))
+      return
+    }
+
+    setHolding(false)
+  }, [])
+
   useEffect(() => {
     const video = videoRef.current
     if (!video) return
@@ -210,14 +265,28 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
     if (!src) {
       video.removeAttribute('src')
       video.load()
+      releaseHold()
       return
+    }
+
+    // HAVE_CURRENT_DATA or better: there is a frame on screen worth keeping.
+    const canvas = holdRef.current
+    if (canvas && video.readyState >= 2 && video.videoWidth > 0) {
+      canvas.width = video.videoWidth
+      canvas.height = video.videoHeight
+      canvas.getContext('2d')?.drawImage(video, 0, 0)
+      setHolding(true)
     }
 
     // A seek meant for the file being replaced does not belong to the new one.
     if (video.currentSrc !== src) pendingSeek.current = null
     video.src = src
     video.load()
-  }, [src])
+
+    // A frame that never arrives must not leave a still image in its place.
+    const giveUp = setTimeout(releaseHold, HOLD_LIMIT_MS)
+    return () => clearTimeout(giveUp)
+  }, [releaseHold, src])
 
   /*
    * Set on the element rather than written as attributes: `volume` has no
@@ -307,40 +376,61 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
   )
 
   return (
-    <video
-      ref={videoRef}
-      style={style}
-      playsInline
-      onLoadedMetadata={(event) => {
-        const video = event.currentTarget
-        if (Number.isFinite(video.duration)) onDurationChange(video.duration)
+    <>
+      {/* Hidden until there is a frame to hold; see the effect above. */}
+      <canvas ref={holdRef} className="stage-hold" style={style} hidden={!holding} />
 
-        const pending = pendingSeek.current
-        pendingSeek.current = null
-        // Backwards, a clip opens on its last frame, not its first.
-        const opensAt = reversedRef.current
-          ? boundsRef.current.outPoint
-          : boundsRef.current.inPoint
-        video.currentTime = pending ?? opensAt
-      }}
-      onPlay={() => {
-        onPlayingChange(true)
-        startTracking()
-      }}
-      onPause={() => {
-        onPlayingChange(false)
-        stopTracking()
-        if (videoRef.current) onTimeUpdate(videoRef.current.currentTime)
-      }}
-      onSeeked={() => {
-        // While playing backwards the loop is already reporting the position it
-        // asked for. Reporting where the seek actually landed on top of that
-        // makes the playhead stutter between the two.
-        if (reversing.current) return
-        if (videoRef.current) onTimeUpdate(videoRef.current.currentTime)
-      }}
-      onError={() => onError('This video could not be played. It may still be finishing writing.')}
-    />
+      <video
+        ref={videoRef}
+        style={style}
+        playsInline
+        onLoadedMetadata={(event) => {
+          const video = event.currentTarget
+          if (Number.isFinite(video.duration)) onDurationChange(video.duration)
+
+          const pending = pendingSeek.current
+          pendingSeek.current = null
+          // Backwards, a clip opens on its last frame, not its first.
+          const opensAt = reversedRef.current
+            ? boundsRef.current.outPoint
+            : boundsRef.current.inPoint
+          video.currentTime = pending ?? opensAt
+        }}
+        // There is a picture on the way; the held frame goes when it arrives.
+        onLoadedData={releaseWhenPainted}
+        onPlay={() => {
+          onPlayingChange(true)
+          startTracking()
+        }}
+        onPause={() => {
+          onPlayingChange(false)
+          stopTracking()
+          if (videoRef.current) onTimeUpdate(videoRef.current.currentTime)
+        }}
+        onSeeked={() => {
+          releaseWhenPainted()
+          // While playing backwards the loop is already reporting the position
+          // it asked for. Reporting where the seek actually landed on top of
+          // that makes the playhead stutter between the two.
+          if (reversing.current) return
+          if (videoRef.current) onTimeUpdate(videoRef.current.currentTime)
+        }}
+        onError={(event) => {
+          /*
+           * The element's own reason, not a guess at one. "It may still be
+           * finishing writing" was a plausible cause printed for every failure,
+           * which made a decode error and a missing file read identically.
+           */
+          releaseHold()
+          const detail = event.currentTarget.error?.message?.trim()
+          onError(
+            detail
+              ? `This video could not be played: ${detail}`
+              : 'This video could not be played. It may still be finishing writing.',
+          )
+        }}
+      />
+    </>
   )
 })
 

@@ -587,6 +587,37 @@ input:focus {
   object-fit: fill;
 }
 
+/*
+ * The last frame of the outgoing clip, held while the next one loads.
+ *
+ * Laid over the picture and sized exactly like it, so what the eye sees across
+ * a cut is one continuous image rather than a flash of the stage's background.
+ */
+.stage-hold {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+}
+
+/*
+ * A class with a display of its own outranks the browser's own [hidden] rule,
+ * so without this the held frame covered the picture permanently.
+ */
+.stage-hold[hidden] {
+  display: none;
+}
+
+.stage-crop .stage-hold {
+  max-width: none;
+  max-height: none;
+  object-fit: fill;
+}
+
 .stage-empty {
   display: flex;
   flex-direction: column;

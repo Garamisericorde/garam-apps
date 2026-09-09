@@ -426,23 +426,29 @@ export default function EditorPage(): JSX.Element {
    * while playing, and waiting for that to settle would mean an edit made just
    * before pressing play was never written at all.
    */
-  const playheadRef = useRef(playhead)
-  playheadRef.current = playhead
+  const stateRef = useRef({ timeline, crop, playhead })
+  stateRef.current = { timeline, crop, playhead }
+
+  const saveState = useCallback((): void => {
+    const { timeline: current, crop: rect, playhead: at } = stateRef.current
+    void window.api.editor
+      .set({ timeline: current, crop: isCropped(rect) ? rect : null, playhead: at })
+      .catch(() => undefined)
+  }, [])
 
   useEffect(() => {
-    const save = (): void => {
-      void window.api.editor
-        .set({ timeline, crop: isCropped(crop) ? crop : null, playhead: playheadRef.current })
-        .catch(() => undefined)
-    }
+    const timer = setTimeout(saveState, SAVE_DELAY_MS)
+    /*
+     * Only the timer. Saving from the cleanup as well meant every change wrote
+     * twice — once on the way out of the old effect and once from its timer —
+     * and three of those landing together lost the rename to each other:
+     * EPERM, and nothing saved at all.
+     */
+    return () => clearTimeout(timer)
+  }, [timeline, crop, saveState])
 
-    const timer = setTimeout(save, SAVE_DELAY_MS)
-    // Leaving the page is the one moment the delay cannot be afforded.
-    return () => {
-      clearTimeout(timer)
-      save()
-    }
-  }, [timeline, crop])
+  // Leaving the editor is the one moment the delay cannot be afforded.
+  useEffect(() => saveState, [saveState])
 
   // Navigating in with a clip already chosen
   useEffect(() => {
