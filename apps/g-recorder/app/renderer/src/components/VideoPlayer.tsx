@@ -10,9 +10,28 @@ export interface VideoPlayerHandle {
   currentTime: () => number
 }
 
+/** A clip waiting out of sight, so the cut to it costs nothing */
+export interface PlayerPreload {
+  /** The clip it is, so a second cut to the same file is still a cut */
+  id: string
+  src: string
+  /** Where it should start, in its own timebase */
+  at: number
+}
+
 interface VideoPlayerProps {
   /** clip:// URL produced by the main process */
   src?: string
+  /**
+   * Which clip is on screen.
+   *
+   * A change means a cut, even between two clips of the same file: the second
+   * half of a split needs the same swap the picture would need for a different
+   * source, or the preview freezes on the last frame while it seeks.
+   */
+  clipId?: string
+  /** What comes after it, loaded and positioned before the cut arrives */
+  preload?: PlayerPreload | null
   inPoint: number
   outPoint: number
   onTimeUpdate: (seconds: number) => void
@@ -71,6 +90,8 @@ const SWAP_LIMIT_MS = 2000
 const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function VideoPlayer(
   {
     src,
+    clipId,
+    preload,
     inPoint,
     outPoint,
     onTimeUpdate,
@@ -108,6 +129,8 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
    * start instead. Held here and applied the moment the duration is known.
    */
   const pendingSeek = useRef<(number | null)[]>([null, null])
+  /** Which clip each element is holding, so a preloaded one can be recognised */
+  const holds = useRef<(string | undefined)[]>([undefined, undefined])
 
   // Keep the latest bounds available to the rAF loop without restarting it
   const boundsRef = useRef({ inPoint, outPoint })
@@ -283,6 +306,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
     shownRef.current = 1 - shownRef.current
     setShown(shownRef.current)
     applySound(incoming)
+    holds.current[1 - shownRef.current] = undefined
 
     if (resumeOnSwap.current) {
       resumeOnSwap.current = false
@@ -310,6 +334,23 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
     finishSwap()
   }, [finishSwap, standby])
 
+  /** Put a clip into the element that is not on screen, ready to take over */
+  const loadStandby = useCallback(
+    (id: string | undefined, source: string, at: number | null): void => {
+      const incoming = standby()
+      if (!incoming) return
+
+      const slot = 1 - shownRef.current
+      holds.current[slot] = id
+      pendingSeek.current[slot] = at
+      // Silent until it takes over, or both clips would be heard at once.
+      incoming.muted = true
+      incoming.src = source
+      incoming.load()
+    },
+    [standby],
+  )
+
   useEffect(() => {
     if (!src) {
       for (const video of slots.current) {
@@ -317,27 +358,50 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
         video.removeAttribute('src')
         video.load()
       }
+      holds.current = [undefined, undefined]
       swapping.current = false
       return
     }
 
+    const slot = shownRef.current
     const showing = live()
-    if (showing && showing.currentSrc === src) return
+    if (showing && showing.currentSrc === src && holds.current[slot] === clipId) return
 
+    /*
+     * Already waiting in the wings, loaded and positioned before the cut came:
+     * it goes straight on screen. This is what makes a cut instant rather than
+     * a freeze on the last frame while the next clip loads.
+     */
     const incoming = standby()
-    if (!incoming) return
+    const ready = incoming && incoming.readyState >= 2 && !incoming.seeking
+    if (ready && holds.current[1 - slot] === clipId && incoming.currentSrc === src) {
+      swapping.current = true
+      finishSwap()
+      return
+    }
 
     swapping.current = true
-    pendingSeek.current[1 - shownRef.current] = null
-    // Silent until it takes over, or both clips would be heard at once.
-    incoming.muted = true
-    incoming.src = src
-    incoming.load()
+    loadStandby(clipId, src, null)
 
     // A picture that never arrives must not leave the wrong one up for ever.
     const giveUp = setTimeout(finishSwap, SWAP_LIMIT_MS)
     return () => clearTimeout(giveUp)
-  }, [finishSwap, live, src, standby])
+  }, [clipId, finishSwap, live, loadStandby, src, standby])
+
+  /*
+   * The clip after this one, fetched while there is still time.
+   *
+   * Loading at the cut is what the freeze was: a file has to be opened, its
+   * headers read and a frame decoded, and none of that can happen inside a
+   * frame. Doing it a clip early costs one idle decoder and buys a cut with
+   * nothing in it.
+   */
+  useEffect(() => {
+    if (swapping.current || !preload) return
+    if (holds.current[1 - shownRef.current] === preload.id) return
+
+    loadStandby(preload.id, preload.src, preload.at)
+  }, [loadStandby, preload, shown])
 
   // Turning a clip round mid-play leaves the loop running the wrong way.
   useEffect(() => {
@@ -454,7 +518,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
           video.currentTime = pending ?? opensAt
         }}
         onLoadedData={() => {
-          if (slot !== shownRef.current) swapWhenPainted()
+          if (slot !== shownRef.current && swapping.current) swapWhenPainted()
         }}
         onPlay={() => {
           if (slot !== shownRef.current) return
@@ -470,8 +534,9 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
         onSeeked={() => {
           if (slot !== shownRef.current) {
             // The incoming clip has landed where it was asked to. It can go on
-            // screen as soon as it has a frame there.
-            swapWhenPainted()
+            // screen as soon as it has a frame there — unless it is only being
+            // kept ready for later, in which case it waits where it is.
+            if (swapping.current) swapWhenPainted()
             return
           }
 

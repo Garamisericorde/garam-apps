@@ -504,12 +504,44 @@ export default function EditorPage(): JSX.Element {
 
   const activePreview = previewFor(activeItem)
 
-  /* Build the copy the moment a clip is turned round, not when play is pressed */
-  useEffect(() => {
-    if (!activeItem?.reversed || activePreview) return
+  /** The clip playback will hand over to, so the preview can get it ready */
+  const nextItem = useMemo(() => {
+    if (!activeItem) return null
+    return sortLane(timeline.video).find((item) => item.start > activeItem.start) ?? null
+  }, [activeItem, timeline.video])
 
-    const key = previewKey(activeItem)
-    const { path, sourceIn, sourceOut } = activeItem
+  const nextPreview = previewFor(nextItem)
+
+  /*
+   * What the preview should have loaded before the cut arrives.
+   *
+   * Memoised on the values rather than the objects: this is handed to the
+   * player as a prop, and a fresh object every render would have it reloading
+   * the same clip for ever.
+   */
+  const nextSource = nextItem
+    ? nextPreview?.url ?? sources[nextItem.path]?.url
+    : undefined
+  const nextAt = nextItem ? playerTimeFor(nextItem, nextItem.start) : 0
+  const nextId = nextItem?.id
+
+  const preload = useMemo(
+    () => (nextId && nextSource ? { id: nextId, src: nextSource, at: nextAt } : null),
+    [nextAt, nextId, nextSource],
+  )
+
+  /*
+   * Build the copy the moment a clip is turned round, not when play is pressed
+   * — and for the clip after it too, or the cut into a reversed clip would be
+   * the first thing to ask for one.
+   */
+  const needsPreview = [activeItem, nextItem].find((item) => item?.reversed && !previewFor(item))
+
+  useEffect(() => {
+    if (!needsPreview) return
+
+    const key = previewKey(needsPreview)
+    const { path, sourceIn, sourceOut } = needsPreview
     let cancelled = false
 
     setBuildingPreview(true)
@@ -532,7 +564,7 @@ export default function EditorPage(): JSX.Element {
     return () => {
       cancelled = true
     }
-  }, [activeItem, activePreview])
+  }, [needsPreview])
 
   /* What the audio lane says should be heard right now — see previewAudio */
   const sound = useMemo(
@@ -1148,6 +1180,8 @@ export default function EditorPage(): JSX.Element {
             <VideoPlayer
               ref={playerRef}
               src={activePreview?.url ?? activeSource.url}
+              clipId={activeItem.id}
+              preload={preload}
               inPoint={activePreview ? 0 : activeItem.sourceIn}
               outPoint={
                 activePreview ? activePreview.durationSeconds : activeItem.sourceOut
