@@ -130,6 +130,15 @@ export default function EditorPage(): JSX.Element {
   const [sources, setSources] = useState<Record<string, Source>>({})
   const [selected, setSelected] = useState<Selection | null>(null)
   /*
+   * Rows picked in the clips panel.
+   *
+   * Held here, beside the timeline's own selection, because the app has one
+   * selection and not two. Delete has to mean one thing, and it cannot if a row
+   * in the list and a clip on the timeline can both be lit at once — so picking
+   * in either place clears the other.
+   */
+  const [libraryPicks, setLibraryPicks] = useState<string[]>([])
+  /*
    * The last clip copied.
    *
    * The app's own, not the system clipboard: what is held is a position in a
@@ -711,6 +720,8 @@ export default function EditorPage(): JSX.Element {
         return
       }
       if (event.key === 'Delete' || event.key === 'Backspace') {
+        // A selection in the clips panel takes the key; the panel handles it.
+        if (libraryPicks.length > 0) return
         event.preventDefault()
         if (selected) handleRemove(selected.lane, selected.id)
         return
@@ -753,6 +764,7 @@ export default function EditorPage(): JSX.Element {
     handleSplit,
     handleTrim,
     keys,
+    libraryPicks,
     playhead,
     selected,
     toggleFullscreen,
@@ -898,6 +910,11 @@ export default function EditorPage(): JSX.Element {
         onOpen={(clipPath) => void addClip(clipPath)}
         onImport={() => void handleImport()}
         onDropFile={(event) => handleDrop(event)}
+        picked={libraryPicks}
+        onPicked={(paths) => {
+          setLibraryPicks(paths)
+          if (paths.length > 0) setSelected(null)
+        }}
         onRemoved={(removed) => {
           // A file that is gone cannot stay on the timeline — the editor would
           // be holding a picture of something that no longer exists.
@@ -1074,7 +1091,10 @@ export default function EditorPage(): JSX.Element {
             snap={snapEnabled}
             view={view}
             drop={dragOver === 'timeline' ? pendingDrop : null}
-            onSelect={setSelected}
+            onSelect={(selection) => {
+              setSelected(selection)
+              if (selection) setLibraryPicks([])
+            }}
             onSeek={handleSeek}
             onMove={handleMove}
             onEditBegin={beginEdit}

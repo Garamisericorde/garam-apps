@@ -19,6 +19,15 @@ interface MediaLibraryProps {
    * clip dragged in from a folder arrives the same way wherever it is dropped.
    */
   onDropFile: (event: React.DragEvent) => void
+  /**
+   * The rows the user has picked.
+   *
+   * Held by the editor rather than here because the app has one selection, not
+   * two: Delete has to mean one thing, and it cannot if a clip in this list and
+   * a clip on the timeline can both be lit at once.
+   */
+  picked: string[]
+  onPicked: (paths: string[]) => void
 }
 
 /**
@@ -39,19 +48,19 @@ export default function MediaLibrary({
   onImport,
   onRemoved,
   onDropFile,
+  picked,
+  onPicked,
 }: MediaLibraryProps): JSX.Element {
   const [items, setItems] = useState<LibraryItem[]>([])
   const [loading, setLoading] = useState(true)
   const posterRequests = useRef(new Set<string>())
   /*
-   * The rows the user has picked.
-   *
-   * Separate from `activePath`, which is whatever the preview is showing: a
-   * click picks clips out of the list, and only a double click puts one on the
+   * A click picks clips out of the list; only a double click puts one on the
    * timeline. Adding on one click meant browsing the list appended a clip every
-   * time you looked at one.
+   * time you looked at one. The picks themselves live in the editor — see the
+   * prop.
    */
-  const [picked, setPicked] = useState<string[]>([])
+  const setPicked = onPicked
   /** Where a shift-click measures its range from */
   const anchor = useRef<string | null>(null)
   const [menu, setMenu] = useState<{ at: MenuPosition; paths: string[] } | null>(null)
@@ -140,17 +149,60 @@ export default function MediaLibrary({
 
       if (event.ctrlKey || event.metaKey) {
         anchor.current = path
-        setPicked((previous) =>
-          previous.includes(path) ? previous.filter((p) => p !== path) : [...previous, path],
-        )
+        setPicked(picked.includes(path) ? picked.filter((p) => p !== path) : [...picked, path])
         return
       }
 
       anchor.current = path
       setPicked([path])
     },
-    [items],
+    [items, picked, setPicked],
   )
+
+  /**
+   * Take rows out of the list.
+   *
+   * The file itself is never touched — this list is what the user has put in
+   * the editor, not a view of a folder — so the only thing to undo is adding
+   * them back.
+   */
+  const removePicks = useCallback(
+    (paths: string[]): void => {
+      if (paths.length === 0) return
+      void Promise.all(paths.map((path) => window.api.media.forget(path))).then(refresh)
+      for (const path of paths) onRemoved(path)
+      setPicked([])
+    },
+    [onRemoved, refresh, setPicked],
+  )
+
+  /*
+   * Delete, on the picked rows.
+   *
+   * On the window rather than on the panel: nothing here takes focus, so a
+   * handler that waited for it would never fire. The editor leaves the key
+   * alone whenever this list has a selection, which is why the two cannot both
+   * act on one press.
+   */
+  useEffect(() => {
+    if (picked.length === 0) return
+
+    const onKey = (event: KeyboardEvent): void => {
+      // Backspace too, since the timeline takes both and the two keys should
+      // not start meaning different things depending on what is lit.
+      if (event.key !== 'Delete' && event.key !== 'Backspace') return
+
+      const target = event.target as HTMLElement | null
+      const tag = target?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return
+
+      event.preventDefault()
+      removePicks(picked)
+    }
+
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [picked, removePicks])
 
   /**
    * What a right-click acts on.
@@ -176,7 +228,7 @@ export default function MediaLibrary({
       setPicked([path])
       return [path]
     },
-    [picked],
+    [picked, setPicked],
   )
 
   /**
@@ -189,16 +241,6 @@ export default function MediaLibrary({
     (paths: string[]) => {
       const many = paths.length > 1
       const count = `${paths.length} clip${many ? 's' : ''}`
-
-      const forEach = (
-        run: (path: string) => Promise<void>,
-      ): (() => void) => {
-        return () => {
-          void Promise.all(paths.map(run)).then(refresh)
-          for (const path of paths) onRemoved(path)
-          setPicked([])
-        }
-      }
 
       return [
         {
@@ -223,11 +265,11 @@ export default function MediaLibrary({
            */
           label: many ? `Remove ${count}` : 'Remove clip',
           destructive: true,
-          onSelect: forEach((path) => window.api.media.forget(path)),
+          onSelect: () => removePicks(paths),
         },
       ]
     },
-    [items, onOpen, onRemoved, refresh],
+    [items, onOpen, removePicks],
   )
 
   return (
