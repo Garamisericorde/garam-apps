@@ -5,6 +5,7 @@ import {
   buildConcatCopyArgs,
   buildGifExportArgs,
   buildSegmentOutputArgs,
+  buildReversedPreviewArgs,
   buildTimelineExportArgs,
   buildVideoEncodeArgs,
 } from '../app/main/ffmpeg/commands'
@@ -780,5 +781,78 @@ describe('a clip the timeline says runs backwards', () => {
     }
 
     expect(graphOf(forwards)).not.toContain('reverse')
+  })
+})
+
+describe('the reversed copy the preview plays', () => {
+  const base = {
+    clipPath: 'A.mp4',
+    sourceIn: 2,
+    sourceOut: 6,
+    hasAudio: true,
+    outputPath: 'rev.mp4',
+  }
+
+  it('seeks to the window instead of decoding the file up to it', () => {
+    // Trimming alone made a five-second preview two minutes in decode the whole
+    // two minutes first.
+    const args = buildReversedPreviewArgs(base)
+    expect(valueAfter(args, '-ss')).toBe('2.000')
+    expect(args.indexOf('-ss')).toBeLessThan(args.indexOf('-i'))
+  })
+
+  it('still trims, because seeking alone rounds the window out by a frame', () => {
+    const graph = valueAfter(buildReversedPreviewArgs(base), '-filter_complex') ?? ''
+    const branch = graph.split(';')[0] ?? ''
+
+    // Rebased: the input seek has already moved the start to zero.
+    expect(branch).toContain('trim=start=0:end=4.000')
+    expect(branch.indexOf('trim=')).toBeLessThan(branch.indexOf('reverse'))
+  })
+
+  it('scales down before reversing, never up', () => {
+    const graph = valueAfter(buildReversedPreviewArgs(base), '-filter_complex') ?? ''
+    const branch = graph.split(';')[0] ?? ''
+
+    expect(branch).toContain("scale=-2:'min(720,ih)'")
+    expect(branch.indexOf('scale=')).toBeLessThan(branch.indexOf(',reverse'))
+  })
+
+  it('encodes on the CPU, so the buffer keeps the hardware encoder', () => {
+    // A preview must never be the reason a recording drops frames.
+    const args = buildReversedPreviewArgs(base)
+    expect(valueAfter(args, '-c:v')).toBe('libx264')
+    expect(args).not.toContain('h264_nvenc')
+  })
+
+  it('turns the sound round with the picture', () => {
+    const graph = valueAfter(buildReversedPreviewArgs(base), '-filter_complex') ?? ''
+    expect(graph).toContain('atrim=start=0:end=4.000')
+    expect(graph).toContain('areverse')
+  })
+
+  it('maps no audio at all for a silent clip', () => {
+    const args = buildReversedPreviewArgs({ ...base, hasAudio: false })
+    expect(args).not.toContain('areverse')
+    expect(args).not.toContain('[a]')
+  })
+})
+
+describe('the reversed preview stays out of the recorder s way', () => {
+  it('caps its threads, on the way in and on the way out', () => {
+    // Left alone FFmpeg takes a thread per core, which starves the capture's
+    // acquire loop the same way a game does — and the buffer then records
+    // repeated frames. Measured: 5 distinct frames a second in a 60 fps clip.
+    const args = buildReversedPreviewArgs({
+      clipPath: 'A.mp4',
+      sourceIn: 0,
+      sourceOut: 4,
+      hasAudio: true,
+      outputPath: 'rev.mp4',
+    })
+
+    const threads = args.filter((arg) => arg === '-threads')
+    expect(threads).toHaveLength(2)
+    expect(args.indexOf('-threads')).toBeLessThan(args.indexOf('-i'))
   })
 })

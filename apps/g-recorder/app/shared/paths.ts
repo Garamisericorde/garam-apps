@@ -25,6 +25,11 @@ export function thumbsDir(): string {
   return join(userDataDir(), 'thumbs')
 }
 
+/** Small proxies the preview plays instead of the source, one per reversed clip */
+export function previewDir(): string {
+  return join(userDataDir(), 'preview')
+}
+
 export function settingsFilePath(): string {
   return join(userDataDir(), 'settings.json')
 }

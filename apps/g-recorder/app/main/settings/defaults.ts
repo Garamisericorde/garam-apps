@@ -79,6 +79,15 @@ export const TIMELINE_THUMBNAIL_COUNT = 12
 /** Width of each timeline thumbnail, in pixels */
 export const TIMELINE_THUMBNAIL_WIDTH = 160
 
+/**
+ * Tallest a reversed preview is rendered.
+ *
+ * It is watched in a pane a few hundred pixels high, and the export renders the
+ * real thing from the source, so anything larger is time spent encoding detail
+ * nobody sees. It also keeps what `reverse` has to hold in memory small.
+ */
+export const REVERSE_PREVIEW_HEIGHT = 720
+
 /** Frame rate used for GIF export */
 export const GIF_FPS = 12
 

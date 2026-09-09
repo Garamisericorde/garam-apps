@@ -1,6 +1,6 @@
 import type { AppSettings, EncodeEffort, EncoderType } from '../../shared/types'
 import { resolutionHeight } from '../../shared/presets'
-import { KEYFRAME_INTERVAL_SECONDS } from '../settings/defaults'
+import { KEYFRAME_INTERVAL_SECONDS, REVERSE_PREVIEW_HEIGHT } from '../settings/defaults'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Encoder argument helpers
@@ -890,6 +890,87 @@ export function buildProbeArgs(clipPath: string): string[] {
     '-of', 'json',
     clipPath,
   ]
+}
+
+/**
+ * A reversed copy of one clip's window, for the preview to play forwards.
+ *
+ * Deliberately small and quick rather than good: it is watched in a pane a few
+ * hundred pixels tall, and the export renders the real thing from the source.
+ * x264 rather than NVENC because the replay buffer usually has the hardware
+ * encoder, and a preview must never be the reason a recording drops frames.
+ *
+ * `reverse` sits last, after the scale, so it buffers frames at preview size
+ * rather than at the source's — a ten-second 1440p60 clip is over three
+ * gigabytes of raw frames before the scale and a tenth of that after it.
+ */
+export function buildReversedPreviewArgs(options: {
+  clipPath: string
+  sourceIn: number
+  sourceOut: number
+  hasAudio: boolean
+  outputPath: string
+}): string[] {
+  const length = Math.max(options.sourceOut - options.sourceIn, 0)
+  /*
+   * The window is reached by seeking the input, not by trimming a stream
+   * decoded from the start of the file. Trimming alone made a five-second
+   * preview two minutes into a recording decode the whole two minutes first,
+   * and that decoding is not free: it competes with the replay buffer for the
+   * same hardware, and a starved capture writes repeated frames.
+   *
+   * The trim stays, rebased to zero, because seeking alone rounds the window
+   * out by a frame. Together they are exactly the frames the item holds —
+   * measured frame by frame against decoding the file from its start — at a
+   * fifth of the cost.
+   */
+  const trim = `trim=start=0:end=${length.toFixed(3)}`
+  const parts = [
+    `[0:v]${trim},setpts=PTS-STARTPTS,` +
+      // Only ever downwards: scaling a 720p capture up would cost time and
+      // memory to show exactly what it already showed.
+      `scale=-2:'min(${REVERSE_PREVIEW_HEIGHT},ih)':flags=fast_bilinear,` +
+      `format=yuv420p,reverse,setpts=PTS-STARTPTS[v]`,
+  ]
+
+  if (options.hasAudio) {
+    parts.push(
+      `[0:a]a${trim},areverse,asetpts=PTS-STARTPTS,` +
+        `aformat=sample_rates=48000:channel_layouts=stereo[a]`,
+    )
+  }
+
+  const args = [
+    '-hide_banner',
+    '-v', 'error',
+    '-nostdin',
+    /*
+     * Kept on a short leash. Decoding H.264 happens on the CPU, and left alone
+     * FFmpeg takes a thread per core — which starves the capture's acquire loop
+     * exactly the way a game does, and the buffer then records repeated frames.
+     * A preview must never cost a recording.
+     */
+    '-threads', '2',
+    '-ss', options.sourceIn.toFixed(3),
+    '-i', options.clipPath,
+    '-filter_complex', parts.join(';'),
+    '-map', '[v]',
+  ]
+
+  if (options.hasAudio) args.push('-map', '[a]', '-c:a', 'aac', '-b:a', '128k')
+
+  args.push(
+    '-c:v', 'libx264',
+    '-preset', 'veryfast',
+    '-threads', '2',
+    '-crf', '26',
+    '-pix_fmt', 'yuv420p',
+    '-movflags', '+faststart',
+    '-y',
+    options.outputPath,
+  )
+
+  return args
 }
 
 /**

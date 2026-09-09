@@ -76,6 +76,23 @@ function matches(event: KeyboardEvent, configured: string | null): boolean {
  */
 const WAVEFORM_BUCKETS = 600
 
+/** A reversed copy of one clip's window, played forwards in place of it */
+interface ReversePreview {
+  url: string
+  durationSeconds: number
+}
+
+/**
+ * What a reversed copy is of: the file and the window, never the item.
+ *
+ * Keyed this way, splitting a reversed clip reuses the copy for whichever half
+ * still spans the same seconds, and trimming one asks for a new one — which is
+ * exactly when the old copy has stopped being a picture of it.
+ */
+function previewKey(item: TimelineItem): string {
+  return `${item.path}|${item.sourceIn}|${item.sourceOut}`
+}
+
 /** Everything known about one source file the timeline references */
 interface Source extends SourceAssets {
   url: string
@@ -121,6 +138,17 @@ export default function EditorPage(): JSX.Element {
    * the user had copied elsewhere.
    */
   const [clipboard, setClipboard] = useState<ClipboardItem[] | null>(null)
+  /*
+   * Reversed clips, each as a small copy that has already been turned round.
+   *
+   * A video element cannot play backwards at any speed worth watching: seeking
+   * towards the head of an H.264 file decodes from the previous keyframe every
+   * time, which on a 1440p60 capture is up to a hundred and twenty frames per
+   * step. So the reversing is done once by FFmpeg and the preview plays the
+   * result the normal way round.
+   */
+  const [reversePreviews, setReversePreviews] = useState<Record<string, ReversePreview>>({})
+  const [buildingPreview, setBuildingPreview] = useState(false)
 
   /** Playhead, in timeline seconds */
   const [playhead, setPlayhead] = useState(0)
@@ -335,6 +363,60 @@ export default function EditorPage(): JSX.Element {
   )
   const activeSource = activeItem ? sources[activeItem.path] : undefined
 
+  /** The reversed copy standing in for an item, once it has been built */
+  const previewFor = useCallback(
+    (item: TimelineItem | null | undefined): ReversePreview | undefined =>
+      item?.reversed ? reversePreviews[previewKey(item)] : undefined,
+    [reversePreviews],
+  )
+
+  /**
+   * Where the player should be, in the timebase of whatever it is showing.
+   *
+   * A reversed clip standing on its proxy is played forwards through a file
+   * that is already backwards, so the two run in opposite directions and the
+   * position has to be turned round with them.
+   */
+  const playerTimeFor = useCallback(
+    (item: TimelineItem, time: number): number => {
+      const inSource = sourceTimeAt(item, time)
+      return previewFor(item) ? item.sourceOut - inSource : inSource
+    },
+    [previewFor],
+  )
+
+  const activePreview = previewFor(activeItem)
+
+  /* Build the copy the moment a clip is turned round, not when play is pressed */
+  useEffect(() => {
+    if (!activeItem?.reversed || activePreview) return
+
+    const key = previewKey(activeItem)
+    const { path, sourceIn, sourceOut } = activeItem
+    let cancelled = false
+
+    setBuildingPreview(true)
+    window.api.media
+      .reversedPreview(path, sourceIn, sourceOut)
+      .then((built) => {
+        if (cancelled) return
+        setReversePreviews((previous) => ({
+          ...previous,
+          [key]: { url: built.clipUrl, durationSeconds: built.durationSeconds },
+        }))
+      })
+      .catch((err) => {
+        if (!cancelled) setError(cleanError(err))
+      })
+      .finally(() => {
+        if (!cancelled) setBuildingPreview(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeItem, activePreview])
+
   /* What the audio lane says should be heard right now — see previewAudio */
   const sound = useMemo(
     () => previewAudio(timeline, activeItem, playhead),
@@ -384,23 +466,28 @@ export default function EditorPage(): JSX.Element {
       if (!item) return
 
       setActiveId(item.id)
-      requestSeek(sourceTimeAt(item, time))
+      requestSeek(playerTimeFor(item, time))
     },
-    [requestSeek, timeline],
+    [playerTimeFor, requestSeek, timeline],
   )
 
   /** Player time is a position in one source; the timeline wants where that is */
   const handlePlayerTime = useCallback(
     (sourceSeconds: number) => {
       if (!activeItem) return
-      setPlayhead(timelineTimeAt(activeItem, sourceSeconds))
+
+      // A proxy runs the other way from the item it stands for.
+      const inSource = activePreview
+        ? activeItem.sourceOut - sourceSeconds
+        : sourceSeconds
+      setPlayhead(timelineTimeAt(activeItem, inSource))
 
       // Hand over at the edge, so a run of clips plays through rather than
       // stopping at the first boundary. A reversed clip reaches its edge
       // travelling the other way, so the edge is the other end of the window.
       const atEnd = activeItem.reversed
-        ? sourceSeconds <= activeItem.sourceIn + 0.02
-        : sourceSeconds >= activeItem.sourceOut - 0.02
+        ? inSource <= activeItem.sourceIn + 0.02
+        : inSource >= activeItem.sourceOut - 0.02
 
       if (isPlaying && atEnd) {
         const next = sortLane(timeline.video).find((item) => item.start > activeItem.start)
@@ -410,11 +497,11 @@ export default function EditorPage(): JSX.Element {
           // The player has already paused itself at this clip's end, so handing
           // over is not enough: without this, playback stopped at every cut.
           // Where the next clip begins depends on which way round it runs.
-          requestSeek(sourceTimeAt(next, next.start), true)
+          requestSeek(playerTimeFor(next, next.start), true)
         }
       }
     },
-    [activeItem, isPlaying, requestSeek, timeline.video],
+    [activeItem, activePreview, isPlaying, playerTimeFor, requestSeek, timeline.video],
   )
 
   /**
@@ -919,14 +1006,16 @@ export default function EditorPage(): JSX.Element {
             >
             <VideoPlayer
               ref={playerRef}
-              src={activeSource.url}
-              inPoint={activeItem.sourceIn}
-              outPoint={activeItem.sourceOut}
+              src={activePreview?.url ?? activeSource.url}
+              inPoint={activePreview ? 0 : activeItem.sourceIn}
+              outPoint={
+                activePreview ? activePreview.durationSeconds : activeItem.sourceOut
+              }
               onTimeUpdate={handlePlayerTime}
               onDurationChange={() => undefined}
               onPlayingChange={setIsPlaying}
               onError={setError}
-              reversed={activeItem.reversed ?? false}
+              reversed={(activeItem.reversed ?? false) && !activePreview}
               muted={sound.muted}
               volume={sound.volume}
               style={
@@ -942,6 +1031,15 @@ export default function EditorPage(): JSX.Element {
             />
             </div>
           ) : null}
+
+          {/*
+            * Turning a clip round takes a second or two of FFmpeg, and until it
+            * is done the preview is the slow stand-in. Saying so is the
+            * difference between waiting and thinking it is broken.
+            */}
+          {buildingPreview && !activePreview && (
+            <div className="stage-note">Preparing the reversed preview…</div>
+          )}
 
           {cropping && activeSource && (
             <CropOverlay

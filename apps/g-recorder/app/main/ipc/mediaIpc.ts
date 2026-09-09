@@ -8,6 +8,7 @@ import {
   buildWaveform,
   probeMedia,
 } from '../ffmpeg/MediaProbe'
+import { buildReversedPreview } from '../ffmpeg/ReversePreview'
 import { registerClipFile } from '../protocol/clipProtocol'
 import { addToLibrary, listLibrary, removeFromLibrary } from '../settings/ClipLibrary'
 import { SettingsStore } from '../settings/SettingsStore'
@@ -56,6 +57,32 @@ export function registerMediaIpc(getMainWindow: () => BrowserWindow | null): voi
   ipcMain.handle('media:probe', async (_event, clipPath: string): Promise<MediaInfo> => {
     return probeMedia(clipPath)
   })
+
+  /**
+   * A reversed copy of one clip's window, for the preview to play forwards.
+   *
+   * Built here rather than in the renderer because no video element can play
+   * backwards at all — see ReversePreview for what the alternative cost.
+   */
+  ipcMain.handle(
+    'media:reversedPreview',
+    async (
+      _event,
+      clipPath: string,
+      sourceIn: number,
+      sourceOut: number,
+    ): Promise<{ clipUrl: string; durationSeconds: number }> => {
+      if (typeof clipPath !== 'string' || !existsSync(clipPath)) {
+        throw new Error('That file could not be found')
+      }
+
+      const preview = await buildReversedPreview(clipPath, sourceIn, sourceOut)
+      return {
+        clipUrl: registerClipFile(preview.path),
+        durationSeconds: preview.durationSeconds,
+      }
+    },
+  )
 
   ipcMain.handle(
     'media:thumbnails',

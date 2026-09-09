@@ -128,6 +128,17 @@ export const api = {
     thumbnails: (clipPath: string, durationSeconds: number): Promise<ThumbnailStrip> =>
       ipcRenderer.invoke('media:thumbnails', clipPath, durationSeconds),
 
+    /**
+     * A reversed copy of one clip's window, which the preview plays forwards.
+     * The only way to show a clip running backwards: no video element can.
+     */
+    reversedPreview: (
+      clipPath: string,
+      sourceIn: number,
+      sourceOut: number,
+    ): Promise<{ clipUrl: string; durationSeconds: number }> =>
+      ipcRenderer.invoke('media:reversedPreview', clipPath, sourceIn, sourceOut),
+
     revealInFolder: (filePath: string): Promise<void> =>
       ipcRenderer.invoke('media:revealInFolder', filePath),
 

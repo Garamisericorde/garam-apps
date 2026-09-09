@@ -36,6 +36,13 @@ interface VideoPlayerProps {
  * selection jumps to IN, and playback stops at OUT. That makes the IN/OUT
  * handles feel like a real selection rather than two disconnected numbers.
  */
+/**
+ * How often the backwards stand-in asks for a new frame, in milliseconds.
+ *
+ * See the loop below for why this is nowhere near the frame rate.
+ */
+const REVERSE_SEEK_INTERVAL_MS = 125
+
 const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function VideoPlayer(
   {
     src,
@@ -100,30 +107,36 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
   useEffect(() => stopTracking, [stopTracking])
 
   /*
-   * Playing backwards.
+   * Playing backwards, the hard way.
    *
-   * No video element can do it: `playbackRate` will not go negative, and there
-   * is no API that decodes towards the head of a file. So the position is kept
-   * here and the element is seeked to it, which is the only way to show a frame
-   * from earlier than the one on screen.
+   * This is the stand-in, used only until the editor has a reversed copy of the
+   * clip to play forwards instead. No video element can run in reverse on its
+   * own — `playbackRate` will not go negative and nothing decodes towards the
+   * head of a file — so the position is kept here and the element is seeked to
+   * it, which is the only way to show a frame earlier than the one on screen.
    *
-   * Two rules keep it watchable. The position moves with the wall clock, so the
-   * clip takes the time it should however slow the seeks are; and a new seek is
-   * only asked for once the last one has landed, because a queue of them never
-   * catches up and the picture falls further behind every second. What gives
-   * way under load is the frame rate, which is the right thing to lose.
+   * It is deliberately slow. Every seek decodes from the previous keyframe, and
+   * asking sixty times a second brought the whole app to its knees on 1440p60
+   * footage. So the position moves with the wall clock, the clip takes the time
+   * it should, and the picture is refreshed a few times a second: enough to see
+   * where you are while the real copy is being made.
    */
   const reversing = useRef(false)
   const reverseTarget = useRef(0)
+  const reverseFrame = useRef<number | null>(null)
+  const lastSeekAt = useRef(0)
   const reversedRef = useRef(reversed)
   reversedRef.current = reversed
 
   const stopReverse = useCallback(() => {
+    if (reverseFrame.current !== null) {
+      cancelAnimationFrame(reverseFrame.current)
+      reverseFrame.current = null
+    }
     if (!reversing.current) return
     reversing.current = false
-    stopTracking()
     onPlayingChange(false)
-  }, [onPlayingChange, stopTracking])
+  }, [onPlayingChange])
 
   const startReverse = useCallback(() => {
     const video = videoRef.current
@@ -139,6 +152,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
     reverseTarget.current = from <= start + 0.01 || from > end ? end : from
 
     reversing.current = true
+    lastSeekAt.current = 0
     onPlayingChange(true)
 
     let last = performance.now()
@@ -156,18 +170,31 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
       reverseTarget.current -= elapsed
 
       if (reverseTarget.current <= head) {
+        reverseTarget.current = head
         element.currentTime = head
         onTimeUpdate(head)
         stopReverse()
         return
       }
 
-      if (!element.seeking) element.currentTime = reverseTarget.current
+      /*
+       * Asked for at a fraction of the frame rate on purpose. Every one of
+       * these seeks decodes from the previous keyframe — up to a hundred and
+       * twenty frames of 1440p60 — so at sixty a second the machine has no
+       * chance and the whole app crawls. This is the stand-in shown only while
+       * the reversed copy is being built, so a few pictures a second is enough
+       * to see where you are.
+       */
+      if (!element.seeking && now - lastSeekAt.current >= REVERSE_SEEK_INTERVAL_MS) {
+        lastSeekAt.current = now
+        element.currentTime = reverseTarget.current
+      }
+
       onTimeUpdate(reverseTarget.current)
-      frameRef.current = requestAnimationFrame(tick)
+      reverseFrame.current = requestAnimationFrame(tick)
     }
 
-    frameRef.current = requestAnimationFrame(tick)
+    reverseFrame.current = requestAnimationFrame(tick)
   }, [onPlayingChange, onTimeUpdate, stopReverse, stopTracking])
 
   // Turning a clip round mid-play leaves the loop running the wrong way.
