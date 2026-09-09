@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { clamp } from '../../../shared/time'
 import {
+  canReverse,
   itemDuration,
   itemEnd,
   itemGain,
   MAX_GAIN,
+  MAX_REVERSE_SECONDS,
   timelineDuration,
   type LaneId,
   type Timeline as TimelineModel,
@@ -63,6 +65,8 @@ interface TimelineProps {
   /** Copy a clip and whatever is linked to it */
   onCopy: (lane: LaneId, id: string) => void
   onPaste: () => void
+  /** Play a clip backwards, along with whatever is linked to it */
+  onReverse: (lane: LaneId, id: string) => void
   /** Whether anything has been copied yet, so the menu can leave Paste out */
   canPaste: boolean
   onViewChange: (view: TimelineView) => void
@@ -119,6 +123,7 @@ export default function Timeline({
   onSplit,
   onCopy,
   onPaste,
+  onReverse,
   canPaste,
   onViewChange,
 }: TimelineProps): JSX.Element {
@@ -407,6 +412,25 @@ export default function Timeline({
               },
             ]
           : []),
+        ...(menuTarget
+          ? [
+              {
+                /*
+                 * Shown greyed out rather than left out when the clip is too
+                 * long: an entry that is simply absent reads as a feature that
+                 * does not exist, and the way round it — cut a shorter piece
+                 * first — is only obvious once you know what the limit is.
+                 */
+                label: canReverse(menuTarget)
+                  ? menuTarget.reversed
+                    ? 'Play forwards again'
+                    : 'Reverse'
+                  : `Reverse (only up to ${MAX_REVERSE_SECONDS} seconds)`,
+                disabled: !canReverse(menuTarget),
+                onSelect: () => onReverse(menu.target.lane, menu.target.id),
+              },
+            ]
+          : []),
         {
           label: 'Split at the playhead',
           onSelect: () => onSplit(menu.target.lane, true),
@@ -470,9 +494,16 @@ export default function Timeline({
      * thumbnails, so the frames stay put under the pointer.
      */
     const sourceWidth = asset ? (asset.durationSeconds / Math.max(length, 0.001)) * 100 : 100
-    const sourceLeft = asset
-      ? (-item.sourceIn / Math.max(asset.durationSeconds, 0.001)) * sourceWidth
-      : 0
+    /*
+     * Backwards, the strip is mirrored and hung from the other end: the frame
+     * at the clip's left edge is now sourceOut, so what has to be pushed off
+     * the left is the source AFTER the window rather than the source before it.
+     */
+    const head = item.reversed
+      ? Math.max((asset?.durationSeconds ?? 0) - item.sourceOut, 0)
+      : item.sourceIn
+    const sourceLeft = asset ? (-head / Math.max(asset.durationSeconds, 0.001)) * sourceWidth : 0
+    const strip = item.reversed ? { transform: 'scaleX(-1)' } : undefined
 
     return (
       <div
@@ -486,14 +517,18 @@ export default function Timeline({
           onSelect({ lane, id: item.id })
           setMenu({ at: { x: event.clientX, y: event.clientY }, target: { lane, id: item.id } })
         }}
-        title="Click to play from here · drag to move"
+        title={
+          item.reversed
+            ? 'Plays backwards · click to play from here · drag to move'
+            : 'Click to play from here · drag to move'
+        }
       >
         <div className="clip-inner">
           {lane === 'video' &&
             (asset && asset.thumbnails.length > 0 ? (
               <div
                 className="clip-thumbs"
-                style={{ width: `${sourceWidth}%`, left: `${sourceLeft}%` }}
+                style={{ width: `${sourceWidth}%`, left: `${sourceLeft}%`, ...strip }}
               >
                 {asset.thumbnails.map((frame, index) => (
                   <img key={index} src={frame} alt="" draggable={false} />
@@ -509,7 +544,7 @@ export default function Timeline({
             (asset && asset.waveform.length > 0 ? (
               <div
                 className="clip-wave"
-                style={{ width: `${sourceWidth}%`, left: `${sourceLeft}%` }}
+                style={{ width: `${sourceWidth}%`, left: `${sourceLeft}%`, ...strip }}
               >
                 {asset.waveform.map((peak, index) => (
                   // Scaled by the clip's own gain, so the picture of the sound
@@ -534,6 +569,20 @@ export default function Timeline({
           >
             {isSelected && <span className="clip-gain-value">{Math.round(itemGain(item) * 100)}%</span>}
           </div>
+        )}
+
+        {/*
+          * A clip running backwards has to say so on its face. The mirrored
+          * thumbnails are the honest signal, but a clip of one repeated frame
+          * looks identical either way round, and then nothing on the timeline
+          * would tell you which it was.
+          */}
+        {item.reversed && (
+          <span className="clip-reversed" title="Plays backwards">
+            <svg viewBox="0 0 16 16" width="9" height="9" aria-hidden>
+              <path d="M7 3 L2 8 L7 13 Z M14 3 L9 8 L14 13 Z" fill="currentColor" />
+            </svg>
+          </span>
         )}
 
         {/* A clip that moves with another says so, quietly. */}

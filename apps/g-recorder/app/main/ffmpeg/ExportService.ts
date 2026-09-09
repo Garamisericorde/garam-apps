@@ -194,6 +194,10 @@ export class ExportService {
     const simple =
       video.length === 1 &&
       timeline.sources.length === 1 &&
+      // Nothing on this path can play a clip backwards: it hands the file to
+      // the encoder with a seek, and never builds a graph to put a filter in.
+      !video[0].reversed &&
+      !audioLane[0]?.reversed &&
       Math.abs(video[0].start) < 0.01 &&
       (audioLane.length === 0 ||
         (audioLane.length === 1 &&

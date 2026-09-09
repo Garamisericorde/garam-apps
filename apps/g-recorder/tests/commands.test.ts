@@ -710,3 +710,75 @@ describe('export encoding is not capture encoding', () => {
     expect(capture).not.toContain('-multipass')
   })
 })
+
+describe('a clip the timeline says runs backwards', () => {
+  const base = {
+    clipPath: 'A.mp4',
+    outputPath: 'out.mp4',
+    inPoint: 0,
+    outPoint: 6,
+    encoder: 'x264' as const,
+    outWidth: 1920,
+    outHeight: 1080,
+    crop: null,
+    fps: 60,
+    quality: 22,
+    maxBitrateKbps: 12000,
+    audioBitrateKbps: 160,
+    speed: 1,
+    volume: 1,
+    hasAudio: true,
+    targetBitrateKbps: undefined,
+    sources: ['A.mp4', 'B.mp4'],
+    duration: 6,
+  }
+
+  const mixed = {
+    ...base,
+    video: [
+      { input: 0, start: 0, sourceIn: 0, sourceOut: 3, reversed: true },
+      { input: 1, start: 3, sourceIn: 0, sourceOut: 3 },
+    ],
+    audio: [
+      { input: 0, start: 0, sourceIn: 0, sourceOut: 3, reversed: true },
+      { input: 1, start: 3, sourceIn: 0, sourceOut: 3 },
+    ],
+  }
+
+  const graphOf = (options: typeof mixed): string => {
+    const args = buildTimelineExportArgs(options)
+    return args[args.indexOf('-filter_complex') + 1] ?? ''
+  }
+
+  it('turns that branch round, and only that branch', () => {
+    const graph = graphOf(mixed)
+    expect(graph.match(/,reverse,/g)).toHaveLength(1)
+    expect(graph.match(/areverse,/g)).toHaveLength(1)
+  })
+
+  it('reverses last, once the frames are the size the output wants', () => {
+    // `reverse` holds every frame it is given until the piece ends. Fed the
+    // source's own pixels it would buffer several times the memory for the
+    // same result.
+    const graph = graphOf(mixed)
+    const branch = graph.split(';')[0] ?? ''
+
+    expect(branch.indexOf('scale=')).toBeLessThan(branch.indexOf(',reverse,'))
+    expect(branch.indexOf('fps=')).toBeLessThan(branch.indexOf(',reverse,'))
+  })
+
+  it('restamps after reversing, or concat writes a hole', () => {
+    const branch = graphOf(mixed).split(';')[0] ?? ''
+    expect(branch).toContain('reverse,setpts=PTS-STARTPTS')
+  })
+
+  it('leaves a forwards timeline exactly as it was', () => {
+    const forwards = {
+      ...mixed,
+      video: mixed.video.map(({ reversed: _reversed, ...item }) => item),
+      audio: mixed.audio.map(({ reversed: _reversed, ...item }) => item),
+    }
+
+    expect(graphOf(forwards)).not.toContain('reverse')
+  })
+})

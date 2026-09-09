@@ -39,6 +39,13 @@ export interface TimelineItem {
    * drag does, not what can be cut, trimmed or removed separately.
    */
   linkId?: string
+  /**
+   * Play this window backwards.
+   *
+   * A property of the item, not of the file: the same recording can appear on
+   * the timeline twice, once each way round.
+   */
+  reversed?: boolean
 }
 
 export interface Timeline {
@@ -88,7 +95,60 @@ export function itemAt(timeline: Timeline, lane: LaneId, time: number): Timeline
 
 /** Source position an item is showing at a moment on the output timeline */
 export function sourceTimeAt(item: TimelineItem, time: number): number {
-  return item.sourceIn + (time - item.start)
+  const into = time - item.start
+  return item.reversed ? item.sourceOut - into : item.sourceIn + into
+}
+
+/** The moment on the output timeline at which an item shows a source position */
+export function timelineTimeAt(item: TimelineItem, sourceSeconds: number): number {
+  return item.reversed
+    ? item.start + (item.sourceOut - sourceSeconds)
+    : item.start + (sourceSeconds - item.sourceIn)
+}
+
+/** The source position an item ends on, which is its head when it runs backwards */
+export function itemSourceEnd(item: TimelineItem): number {
+  return item.reversed ? item.sourceIn : item.sourceOut
+}
+
+/**
+ * Longest clip that may be reversed.
+ *
+ * FFmpeg's `reverse` has to hold the whole piece in memory before it can write
+ * the last frame first, and it holds raw frames: ten seconds of 1440p60 is
+ * over three gigabytes even after the export has scaled them down. A limit that
+ * says no is better than an export that takes the machine with it, and a clip
+ * longer than this can still be cut into a piece that fits.
+ */
+export const MAX_REVERSE_SECONDS = 10
+
+/** Whether this clip is short enough to be turned round */
+export function canReverse(item: TimelineItem): boolean {
+  return itemDuration(item) <= MAX_REVERSE_SECONDS + 0.001
+}
+
+/**
+ * Turn a clip round, along with everything linked to it.
+ *
+ * The whole group, because reversing a picture and leaving its sound running
+ * forwards is never what was meant — the two would be describing different
+ * moments from the first frame on.
+ */
+export function reverseItem(timeline: Timeline, lane: LaneId, id: string): Timeline {
+  const group = linkedWith(timeline, lane, id)
+  if (group.length === 0) return timeline
+  if (!group.every((entry) => canReverse(entry.item))) return timeline
+
+  // One state for the group, taken from the clip that was asked, so a pair that
+  // had somehow come apart is put back in step rather than flipped apart.
+  const target = group.find((entry) => entry.lane === lane && entry.item.id === id)
+  const next = !target?.item.reversed
+  const ids = new Set(group.map((entry) => entry.item.id))
+
+  const flip = (items: TimelineItem[]): TimelineItem[] =>
+    items.map((item) => (ids.has(item.id) ? { ...item, reversed: next } : item))
+
+  return { video: flip(timeline.video), audio: flip(timeline.audio) }
 }
 
 /** Items in play order, which is how both the preview and the exporter read a lane */
@@ -238,6 +298,20 @@ export function splitAt(
         rightLinks.set(item.linkId, rightLink)
       }
 
+      /*
+       * A backwards clip is cut at the same place on the timeline, but that
+       * place is a different point in the file: it runs from sourceOut down.
+       * The piece on the left keeps the tail of the window, the piece on the
+       * right keeps the head, which is the mirror of the forwards case.
+       */
+      if (item.reversed) {
+        const cut = item.sourceOut - offset
+        return [
+          { ...item, sourceIn: cut },
+          { ...item, id: nextId(lane[0] ?? 'i'), start: time, sourceOut: cut, linkId: rightLink },
+        ]
+      }
+
       const cut = item.sourceIn + offset
       return [
         { ...item, sourceOut: cut },
@@ -277,6 +351,7 @@ export interface ClipboardItem {
   sourceIn: number
   sourceOut: number
   gain?: number
+  reversed?: boolean
 }
 
 /**
@@ -299,6 +374,7 @@ export function copyItems(timeline: Timeline, lane: LaneId, id: string): Clipboa
     sourceIn: entry.item.sourceIn,
     sourceOut: entry.item.sourceOut,
     gain: entry.item.gain,
+    reversed: entry.item.reversed,
   }))
 }
 
@@ -324,6 +400,7 @@ export function pasteItems(timeline: Timeline, clipboard: ClipboardItem[], at: n
       sourceIn: entry.sourceIn,
       sourceOut: entry.sourceOut,
       gain: entry.gain,
+      reversed: entry.reversed,
       linkId,
     })
   }
@@ -364,6 +441,10 @@ export function previewAudio(
 
   const audio = itemAt(timeline, 'audio', time)
   if (!audio || audio.path !== video.path) return silent
+  // Halfway through a clip, a forwards track and a backwards one are at the
+  // same position while running opposite ways. Comparing positions alone would
+  // let the sound through for that one moment.
+  if (Boolean(audio.reversed) !== Boolean(video.reversed)) return silent
 
   const drift = Math.abs(sourceTimeAt(audio, time) - sourceTimeAt(video, time))
   if (drift > SYNC_TOLERANCE_SECONDS) return silent
@@ -425,14 +506,25 @@ export function trimItem(
       if (item.id !== id) return item
 
       if (edge === 'end') {
-        const maxEnd = item.start + (sourceDuration - item.sourceIn)
+        // Backwards, the tail of the clip is the head of the file, so what an
+        // edge can reach is the other end of the source.
+        const maxEnd = item.start + (item.reversed ? item.sourceOut : sourceDuration - item.sourceIn)
         const end = Math.min(Math.max(time, item.start + MIN_ITEM_SECONDS), maxEnd)
-        return { ...item, sourceOut: item.sourceIn + (end - item.start) }
+
+        return item.reversed
+          ? { ...item, sourceIn: item.sourceOut - (end - item.start) }
+          : { ...item, sourceOut: item.sourceIn + (end - item.start) }
       }
 
-      const minStart = Math.max(0, item.start - item.sourceIn)
+      const minStart = Math.max(
+        0,
+        item.start - (item.reversed ? sourceDuration - item.sourceOut : item.sourceIn),
+      )
       const start = Math.max(Math.min(time, itemEnd(item) - MIN_ITEM_SECONDS), minStart)
-      return { ...item, start, sourceIn: item.sourceIn + (start - item.start) }
+
+      return item.reversed
+        ? { ...item, start, sourceOut: item.sourceOut - (start - item.start) }
+        : { ...item, start, sourceIn: item.sourceIn + (start - item.start) }
     }),
   }
 }

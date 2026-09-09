@@ -19,6 +19,8 @@ interface VideoPlayerProps {
   onDurationChange: (seconds: number) => void
   onPlayingChange: (playing: boolean) => void
   onError: (message: string) => void
+  /** Play the trimmed range backwards */
+  reversed?: boolean
   /** Silence the preview — what the audio lane says when there is nothing under the clip */
   muted?: boolean
   /** 0 to 1, from the clip's gain */
@@ -43,6 +45,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
     onDurationChange,
     onPlayingChange,
     onError,
+    reversed = false,
     muted = false,
     volume = 1,
     style,
@@ -96,6 +99,83 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
 
   useEffect(() => stopTracking, [stopTracking])
 
+  /*
+   * Playing backwards.
+   *
+   * No video element can do it: `playbackRate` will not go negative, and there
+   * is no API that decodes towards the head of a file. So the position is kept
+   * here and the element is seeked to it, which is the only way to show a frame
+   * from earlier than the one on screen.
+   *
+   * Two rules keep it watchable. The position moves with the wall clock, so the
+   * clip takes the time it should however slow the seeks are; and a new seek is
+   * only asked for once the last one has landed, because a queue of them never
+   * catches up and the picture falls further behind every second. What gives
+   * way under load is the frame rate, which is the right thing to lose.
+   */
+  const reversing = useRef(false)
+  const reverseTarget = useRef(0)
+  const reversedRef = useRef(reversed)
+  reversedRef.current = reversed
+
+  const stopReverse = useCallback(() => {
+    if (!reversing.current) return
+    reversing.current = false
+    stopTracking()
+    onPlayingChange(false)
+  }, [onPlayingChange, stopTracking])
+
+  const startReverse = useCallback(() => {
+    const video = videoRef.current
+    if (!video) return
+
+    video.pause()
+    stopTracking()
+
+    const { inPoint: start, outPoint: end } = boundsRef.current
+    // Reaching the head is this direction's version of reaching the end, so
+    // pressing play there starts the clip again from its tail.
+    const from = video.currentTime
+    reverseTarget.current = from <= start + 0.01 || from > end ? end : from
+
+    reversing.current = true
+    onPlayingChange(true)
+
+    let last = performance.now()
+    const tick = (): void => {
+      const element = videoRef.current
+      if (!element || !reversing.current) return
+
+      const now = performance.now()
+      // A stalled frame must not be paid back all at once: a hidden window or a
+      // slow seek would otherwise jump the clip instead of resuming it.
+      const elapsed = Math.min((now - last) / 1000, 0.25)
+      last = now
+
+      const head = boundsRef.current.inPoint
+      reverseTarget.current -= elapsed
+
+      if (reverseTarget.current <= head) {
+        element.currentTime = head
+        onTimeUpdate(head)
+        stopReverse()
+        return
+      }
+
+      if (!element.seeking) element.currentTime = reverseTarget.current
+      onTimeUpdate(reverseTarget.current)
+      frameRef.current = requestAnimationFrame(tick)
+    }
+
+    frameRef.current = requestAnimationFrame(tick)
+  }, [onPlayingChange, onTimeUpdate, stopReverse, stopTracking])
+
+  // Turning a clip round mid-play leaves the loop running the wrong way.
+  useEffect(() => {
+    stopReverse()
+    videoRef.current?.pause()
+  }, [reversed, src, stopReverse])
+
   useEffect(() => {
     const video = videoRef.current
     if (!video) return
@@ -132,6 +212,11 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
         const video = videoRef.current
         if (!video) return
 
+        if (reversedRef.current) {
+          startReverse()
+          return
+        }
+
         const { inPoint: start, outPoint: end } = boundsRef.current
         // Restart from IN when the playhead sits outside the selection
         if (video.currentTime < start || video.currentTime >= end - 0.01) {
@@ -139,10 +224,20 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
         }
         void video.play().catch(() => undefined)
       },
-      pause: () => videoRef.current?.pause(),
+      pause: () => {
+        stopReverse()
+        videoRef.current?.pause()
+      },
       togglePlay: () => {
         const video = videoRef.current
         if (!video) return
+
+        if (reversedRef.current) {
+          if (reversing.current) stopReverse()
+          else startReverse()
+          return
+        }
+
         if (video.paused) {
           const { inPoint: start, outPoint: end } = boundsRef.current
           if (video.currentTime < start || video.currentTime >= end - 0.01) {
@@ -156,6 +251,11 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
       seek: (seconds: number) => {
         const video = videoRef.current
         if (!video) return
+
+        // A seek during backwards playback moves where it is playing from, not
+        // only what is on screen: without this the loop would pull the picture
+        // straight back to where it had got to.
+        reverseTarget.current = seconds
 
         if (video.readyState === 0) {
           pendingSeek.current = seconds
@@ -176,7 +276,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
       },
       currentTime: () => videoRef.current?.currentTime ?? 0,
     }),
-    [onTimeUpdate],
+    [onTimeUpdate, startReverse, stopReverse],
   )
 
   return (
@@ -190,7 +290,11 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
 
         const pending = pendingSeek.current
         pendingSeek.current = null
-        video.currentTime = pending ?? boundsRef.current.inPoint
+        // Backwards, a clip opens on its last frame, not its first.
+        const opensAt = reversedRef.current
+          ? boundsRef.current.outPoint
+          : boundsRef.current.inPoint
+        video.currentTime = pending ?? opensAt
       }}
       onPlay={() => {
         onPlayingChange(true)
@@ -202,6 +306,10 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
         if (videoRef.current) onTimeUpdate(videoRef.current.currentTime)
       }}
       onSeeked={() => {
+        // While playing backwards the loop is already reporting the position it
+        // asked for. Reporting where the seek actually landed on top of that
+        // makes the playhead stutter between the two.
+        if (reversing.current) return
         if (videoRef.current) onTimeUpdate(videoRef.current.currentTime)
       }}
       onError={() => onError('This video could not be played. It may still be finishing writing.')}

@@ -15,12 +15,14 @@ import {
   pastedId,
   previewAudio,
   removeItem,
+  reverseItem,
   setItemGain,
   unlinkItem,
   sortLane,
   sourceTimeAt,
   splitAt,
   timelineDuration,
+  timelineTimeAt,
   trimItem,
   type ClipboardItem,
   type LaneId,
@@ -391,18 +393,24 @@ export default function EditorPage(): JSX.Element {
   const handlePlayerTime = useCallback(
     (sourceSeconds: number) => {
       if (!activeItem) return
-      setPlayhead(activeItem.start + (sourceSeconds - activeItem.sourceIn))
+      setPlayhead(timelineTimeAt(activeItem, sourceSeconds))
 
       // Hand over at the edge, so a run of clips plays through rather than
-      // stopping at the first boundary.
-      if (isPlaying && sourceSeconds >= activeItem.sourceOut - 0.02) {
+      // stopping at the first boundary. A reversed clip reaches its edge
+      // travelling the other way, so the edge is the other end of the window.
+      const atEnd = activeItem.reversed
+        ? sourceSeconds <= activeItem.sourceIn + 0.02
+        : sourceSeconds >= activeItem.sourceOut - 0.02
+
+      if (isPlaying && atEnd) {
         const next = sortLane(timeline.video).find((item) => item.start > activeItem.start)
         if (next) {
           setActiveId(next.id)
           setPlayhead(next.start)
           // The player has already paused itself at this clip's end, so handing
           // over is not enough: without this, playback stopped at every cut.
-          requestSeek(next.sourceIn, true)
+          // Where the next clip begins depends on which way round it runs.
+          requestSeek(sourceTimeAt(next, next.start), true)
         }
       }
     },
@@ -470,6 +478,20 @@ export default function EditorPage(): JSX.Element {
     (lane: LaneId, id: string) => {
       edit((previous) => removeItem(previous, lane, id))
       setSelected((previous) => (previous?.id === id ? null : previous))
+    },
+    [edit],
+  )
+
+  /**
+   * Turn a clip round.
+   *
+   * The preview seeks backwards through the file to show it, which is the only
+   * way a video element can be made to run in reverse and is not as smooth as
+   * playing forwards. The export is exact either way.
+   */
+  const handleReverse = useCallback(
+    (lane: LaneId, id: string) => {
+      edit((previous) => reverseItem(previous, lane, id))
     },
     [edit],
   )
@@ -771,6 +793,7 @@ export default function EditorPage(): JSX.Element {
         sourceIn: item.sourceIn,
         sourceOut: item.sourceOut,
         gain: item.gain,
+        reversed: item.reversed,
       }))
 
     return { sources: paths, video: toItems(timeline.video), audio: toItems(timeline.audio), duration }
@@ -903,6 +926,7 @@ export default function EditorPage(): JSX.Element {
               onDurationChange={() => undefined}
               onPlayingChange={setIsPlaying}
               onError={setError}
+              reversed={activeItem.reversed ?? false}
               muted={sound.muted}
               volume={sound.volume}
               style={
@@ -963,6 +987,7 @@ export default function EditorPage(): JSX.Element {
             onSplit={(lane, both) => handleSplit(playhead, both ? undefined : [lane])}
             onCopy={handleCopy}
             onPaste={handlePaste}
+            onReverse={handleReverse}
             canPaste={clipboard !== null}
             onViewChange={setView}
           />

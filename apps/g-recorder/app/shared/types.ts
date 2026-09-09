@@ -119,6 +119,8 @@ export interface ExportTimelineItem {
   sourceOut: number
   /** This clip's own loudness, 1 or absent being the source untouched */
   gain?: number
+  /** Play this window backwards */
+  reversed?: boolean
 }
 
 /**

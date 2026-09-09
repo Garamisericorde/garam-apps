@@ -3,22 +3,26 @@ import {
   EMPTY_TIMELINE,
   MAX_GAIN,
   appendClip,
+  canReverse,
   copyItems,
   itemAt,
   itemDuration,
   itemGain,
   linkItems,
   linkedWith,
+  MAX_REVERSE_SECONDS,
   moveItem,
   pasteItems,
   pastedId,
   previewAudio,
   removeItem,
+  reverseItem,
   setItemGain,
   sourcePaths,
   sourceTimeAt,
   splitAt,
   timelineDuration,
+  timelineTimeAt,
   trimItem,
   unlinkItem,
 } from '../app/shared/timeline'
@@ -444,5 +448,105 @@ describe('copy and paste', () => {
     const after = pasteItems(before, copied, 20)
 
     expect(pastedId(before, after, 'video')).toBe(after.video[1].id)
+  })
+})
+
+describe('a clip played backwards', () => {
+  /** One ten-second clip at zero, turned round */
+  function flipped(): Timeline {
+    const timeline = single()
+    return reverseItem(timeline, 'video', timeline.video[0].id)
+  }
+
+  it('turns the picture and its sound round together', () => {
+    // Reversing one and leaving the other would have them describing different
+    // moments from the first frame on.
+    const turned = flipped()
+    expect(turned.video[0].reversed).toBe(true)
+    expect(turned.audio[0].reversed).toBe(true)
+  })
+
+  it('turns back', () => {
+    const once = flipped()
+    const twice = reverseItem(once, 'video', once.video[0].id)
+
+    expect(twice.video[0].reversed).toBe(false)
+    expect(twice.audio[0].reversed).toBe(false)
+  })
+
+  it('reads the source from the far end', () => {
+    // A ten-second clip at timeline 0: the first moment shows the last frame.
+    const item = flipped().video[0]
+
+    expect(sourceTimeAt(item, 0)).toBe(10)
+    expect(sourceTimeAt(item, 4)).toBe(6)
+    expect(timelineTimeAt(item, 6)).toBe(4)
+  })
+
+  it('refuses a clip too long to hold in memory', () => {
+    const long = appendClip(EMPTY_TIMELINE, {
+      path: 'a.mp4',
+      durationSeconds: MAX_REVERSE_SECONDS + 5,
+      hasAudio: true,
+    })
+
+    expect(canReverse(long.video[0])).toBe(false)
+    expect(reverseItem(long, 'video', long.video[0].id)).toBe(long)
+
+    // The way round it: cut a piece that fits.
+    const cut = splitAt(long, 5)
+    expect(canReverse(cut.video[0])).toBe(true)
+  })
+
+  it('splits at the same place on the timeline, from the other end of the file', () => {
+    const cut = splitAt(flipped(), 4)
+
+    // Four seconds in, the clip has played source 10 down to 6.
+    expect(cut.video[0].sourceIn).toBe(6)
+    expect(cut.video[0].sourceOut).toBe(10)
+    expect(cut.video[1].start).toBe(4)
+    expect(cut.video[1].sourceIn).toBe(0)
+    expect(cut.video[1].sourceOut).toBe(6)
+    expect(cut.video.every((item) => item.reversed)).toBe(true)
+  })
+
+  it('trims from the end the eye is on, not the end of the file', () => {
+    const turned = flipped()
+
+    // Cutting the tail at 4s keeps what has played so far: source 10 down to 6.
+    const tail = trimItem(turned, 'video', turned.video[0].id, 'end', 4, 10)
+    expect(itemDuration(tail.video[0])).toBe(4)
+    expect(tail.video[0].sourceIn).toBe(6)
+    expect(tail.video[0].sourceOut).toBe(10)
+
+    // Cutting the head at 4s keeps the rest: source 6 down to 0.
+    const head = trimItem(turned, 'video', turned.video[0].id, 'start', 4, 10)
+    expect(head.video[0].start).toBe(4)
+    expect(itemDuration(head.video[0])).toBe(6)
+    expect(head.video[0].sourceOut).toBe(6)
+  })
+
+  it('is copied along with the clip', () => {
+    const turned = flipped()
+    const copied = copyItems(turned, 'video', turned.video[0].id)
+
+    expect(pasteItems(turned, copied, 20).video[1].reversed).toBe(true)
+  })
+
+  it('is silent in the preview when only one lane was turned round', () => {
+    // One element cannot play a picture backwards and its sound forwards, and
+    // halfway through the two are at the same position while running opposite
+    // ways — which is exactly where comparing positions alone lets it slip.
+    const timeline = single()
+    const loose = unlinkItem(timeline, 'audio', timeline.audio[0].id)
+    const half = reverseItem(loose, 'video', loose.video[0].id)
+
+    expect(previewAudio(half, half.video[0], 5).muted).toBe(true)
+    expect(previewAudio(half, half.video[0], 2).muted).toBe(true)
+  })
+
+  it('is heard when both lanes were turned round', () => {
+    const turned = flipped()
+    expect(previewAudio(turned, turned.video[0], 5).muted).toBe(false)
   })
 })

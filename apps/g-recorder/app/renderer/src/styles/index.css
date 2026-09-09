@@ -2037,6 +2037,27 @@ kbd {
   pointer-events: none;
 }
 
+/*
+ * A clip running backwards.
+ *
+ * Top right, opposite the link dot, so a clip carrying both marks reads as two
+ * facts rather than one smudge. It sits on a plate of its own because the
+ * thumbnails behind it are whatever the recording happened to show.
+ */
+.clip-reversed {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 3px;
+  border-radius: 3px;
+  color: var(--text);
+  background: rgb(0 0 0 / 0.55);
+  pointer-events: none;
+}
+
 /* ── Crop ────────────────────────────────────────────────────────────────── */
 
 .crop-layer {

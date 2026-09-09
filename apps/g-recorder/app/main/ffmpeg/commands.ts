@@ -498,6 +498,8 @@ export interface TimelineExportItem {
   sourceOut: number
   /** This clip's own loudness, 1 or absent being the source untouched */
   gain?: number
+  /** Play this window backwards */
+  reversed?: boolean
 }
 
 export interface TimelineExportOptions extends Omit<ClipExportOptions, 'ranges'> {
@@ -555,7 +557,14 @@ export function buildTimelineExportArgs(options: TimelineExportOptions): string[
         // concat needs every branch to agree on size, rate, aspect AND pixel
         // format. Two clips from different sources rarely agree on the last
         // one, and concat refuses outright rather than converting.
-        `fps=${rate},setsar=1,format=yuv420p[${label}]`,
+        `fps=${rate},setsar=1,format=yuv420p` +
+        // Last in the branch on purpose: `reverse` holds every frame it is
+        // given until the piece ends, so it is fed frames that have already
+        // been scaled to the output and thinned to its rate. Reversing first
+        // would buffer the source's own pixels, which on a 1440p60 capture is
+        // several times the memory for the same result.
+        (item.reversed ? ',reverse,setpts=PTS-STARTPTS' : '') +
+        `[${label}]`,
     )
     videoLabels.push(`[${label}]`)
     cursor = item.start + (item.sourceOut - item.sourceIn)
@@ -583,6 +592,7 @@ export function buildTimelineExportArgs(options: TimelineExportOptions): string[
       parts.push(
         `[${item.input}:a]atrim=start=${item.sourceIn.toFixed(3)}:end=${item.sourceOut.toFixed(3)},` +
           gainFilter +
+          (item.reversed ? 'areverse,' : '') +
           // Same agreement on the audio side: a mono track next to a stereo one
           // stops the concat, and a game capture beside a phone clip is exactly
           // that pair.
