@@ -3,12 +3,15 @@ import {
   EMPTY_TIMELINE,
   MAX_GAIN,
   appendClip,
+  copyItems,
   itemAt,
   itemDuration,
   itemGain,
   linkItems,
   linkedWith,
   moveItem,
+  pasteItems,
+  pastedId,
   previewAudio,
   removeItem,
   setItemGain,
@@ -341,5 +344,105 @@ describe('what the preview is allowed to be heard doing', () => {
     const moved = moveItem(overlapping, 'audio', overlapping.audio[0].id, 0)
 
     expect(previewAudio(moved, moved.video[0], 2).muted).toBe(true)
+  })
+})
+
+describe('copy and paste', () => {
+  it('copies a clip with the sound linked to it', () => {
+    const timeline = single()
+    const copied = copyItems(timeline, 'video', timeline.video[0].id)
+
+    expect(copied.map((entry) => entry.lane).sort()).toEqual(['audio', 'video'])
+    expect(copied[0].sourceOut).toBe(10)
+  })
+
+  it('lands where the playhead is', () => {
+    const timeline = single()
+    const copied = copyItems(timeline, 'video', timeline.video[0].id)
+    const pasted = pasteItems(timeline, copied, 25)
+
+    expect(pasted.video).toHaveLength(2)
+    expect(pasted.video[1].start).toBe(25)
+    expect(pasted.audio[1].start).toBe(25)
+    expect(itemDuration(pasted.video[1])).toBe(10)
+  })
+
+  it('keeps the window into the source, not just the file', () => {
+    // Copying half a clip has to paste that half, or the copy is of the file
+    // rather than of the clip.
+    const half = splitAt(single(), 6)
+    const copied = copyItems(half, 'video', half.video[1].id)
+    const pasted = pasteItems(half, copied, 30)
+    const put = pasted.video[pasted.video.length - 1]
+
+    expect(put.sourceIn).toBe(6)
+    expect(put.sourceOut).toBe(10)
+    expect(itemDuration(put)).toBe(4)
+  })
+
+  it('carries the clip gain across', () => {
+    const timeline = single()
+    const quiet = setItemGain(timeline, 'audio', timeline.audio[0].id, 0.5)
+    const copied = copyItems(quiet, 'audio', quiet.audio[0].id)
+
+    expect(pasteItems(quiet, copied, 20).audio[1].gain).toBe(0.5)
+  })
+
+  it('gives the copy a link of its own', () => {
+    // Sharing the original's link would mean dragging the original moved the
+    // copy too, which is not what copying something is for.
+    const timeline = single()
+    const copied = copyItems(timeline, 'video', timeline.video[0].id)
+    const pasted = pasteItems(timeline, copied, 20)
+
+    expect(pasted.video[1].linkId).toBeDefined()
+    expect(pasted.video[1].linkId).not.toBe(pasted.video[0].linkId)
+    expect(pasted.video[1].linkId).toBe(pasted.audio[1].linkId)
+    expect(linkedWith(pasted, 'video', pasted.video[1].id)).toHaveLength(2)
+  })
+
+  it('keeps the gap between a picture and a sound that were pulled apart', () => {
+    // Unlinked, moved, then tied back together: a pair that travels three
+    // seconds apart has to land three seconds apart.
+    const timeline = single()
+    const loose = unlinkItem(timeline, 'audio', timeline.audio[0].id)
+    const apart = moveItem(loose, 'audio', loose.audio[0].id, 3)
+    const moved = linkItems(
+      apart,
+      { lane: 'video', id: apart.video[0].id },
+      { lane: 'audio', id: apart.audio[0].id },
+    )
+
+    const copied = copyItems(moved, 'video', moved.video[0].id)
+    const pasted = pasteItems(moved, copied, 40)
+
+    expect(pasted.video[1].start).toBe(40)
+    expect(pasted.audio[1].start).toBe(43)
+  })
+
+  it('pastes an unlinked audio clip on the audio lane alone', () => {
+    const timeline = single()
+    const loose = unlinkItem(timeline, 'audio', timeline.audio[0].id)
+    const copied = copyItems(loose, 'audio', loose.audio[0].id)
+    const pasted = pasteItems(loose, copied, 20)
+
+    expect(pasted.audio).toHaveLength(2)
+    expect(pasted.video).toHaveLength(1)
+  })
+
+  it('does nothing with an empty clipboard, and never lands before zero', () => {
+    const timeline = single()
+    expect(pasteItems(timeline, [], 5)).toBe(timeline)
+
+    const copied = copyItems(timeline, 'video', timeline.video[0].id)
+    expect(pasteItems(timeline, copied, -8).video[1].start).toBe(0)
+  })
+
+  it('names the item a paste added, so it can be selected', () => {
+    const before = single()
+    const copied = copyItems(before, 'video', before.video[0].id)
+    const after = pasteItems(before, copied, 20)
+
+    expect(pastedId(before, after, 'video')).toBe(after.video[1].id)
   })
 })

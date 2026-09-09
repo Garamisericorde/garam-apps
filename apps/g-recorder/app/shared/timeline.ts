@@ -262,6 +262,81 @@ export function removeItem(timeline: Timeline, lane: LaneId, id: string): Timeli
   return { ...timeline, [lane]: timeline[lane].filter((item) => item.id !== id) }
 }
 
+/**
+ * A clip taken off the timeline, ready to be put down again.
+ *
+ * Held without its id or its absolute position: both of those belong to where
+ * it came from, and a copy is going somewhere else. What it does keep is
+ * `offset` — how far behind the earliest piece of the copy it sat — so a
+ * picture and a sound that had been pulled apart stay that far apart.
+ */
+export interface ClipboardItem {
+  lane: LaneId
+  offset: number
+  path: string
+  sourceIn: number
+  sourceOut: number
+  gain?: number
+}
+
+/**
+ * Copy a clip and everything linked to it.
+ *
+ * The whole group, because a clip and its sound are one thing to the person
+ * looking at them: copying the picture alone and pasting a silent clip would
+ * be a trap rather than a shortcut.
+ */
+export function copyItems(timeline: Timeline, lane: LaneId, id: string): ClipboardItem[] {
+  const group = linkedWith(timeline, lane, id)
+  if (group.length === 0) return []
+
+  const earliest = Math.min(...group.map((entry) => entry.item.start))
+
+  return group.map((entry) => ({
+    lane: entry.lane,
+    offset: entry.item.start - earliest,
+    path: entry.item.path,
+    sourceIn: entry.item.sourceIn,
+    sourceOut: entry.item.sourceOut,
+    gain: entry.item.gain,
+  }))
+}
+
+/** Put a copy down, its earliest piece starting at `at` */
+export function pasteItems(timeline: Timeline, clipboard: ClipboardItem[], at: number): Timeline {
+  if (clipboard.length === 0) return timeline
+
+  const start = Math.max(at, 0)
+  /*
+   * A copy of a linked pair is a pair of its own, never a member of the group
+   * it was taken from: sharing the link would mean dragging the original moved
+   * the copy too, which is not what copying something is for.
+   */
+  const linkId = clipboard.length > 1 ? nextId('link') : undefined
+
+  const next: Timeline = { video: [...timeline.video], audio: [...timeline.audio] }
+
+  for (const entry of clipboard) {
+    next[entry.lane].push({
+      id: nextId(entry.lane[0] ?? 'i'),
+      path: entry.path,
+      start: start + entry.offset,
+      sourceIn: entry.sourceIn,
+      sourceOut: entry.sourceOut,
+      gain: entry.gain,
+      linkId,
+    })
+  }
+
+  return next
+}
+
+/** The item a paste just added on a lane, so the editor can select it */
+export function pastedId(before: Timeline, after: Timeline, lane: LaneId): string | null {
+  const known = new Set(before[lane].map((item) => item.id))
+  return after[lane].find((item) => !known.has(item.id))?.id ?? null
+}
+
 /** How far apart two source positions can be and still count as the same moment */
 const SYNC_TOLERANCE_SECONDS = 0.05
 

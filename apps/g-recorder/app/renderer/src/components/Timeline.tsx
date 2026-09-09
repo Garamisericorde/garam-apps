@@ -60,6 +60,11 @@ interface TimelineProps {
   onLink: (a: Selection, b: Selection) => void
   /** Cut at the playhead; `bothLanes` false cuts only the lane clicked */
   onSplit: (lane: LaneId, bothLanes: boolean) => void
+  /** Copy a clip and whatever is linked to it */
+  onCopy: (lane: LaneId, id: string) => void
+  onPaste: () => void
+  /** Whether anything has been copied yet, so the menu can leave Paste out */
+  canPaste: boolean
   onViewChange: (view: TimelineView) => void
 }
 
@@ -112,6 +117,9 @@ export default function Timeline({
   onUnlink,
   onLink,
   onSplit,
+  onCopy,
+  onPaste,
+  canPaste,
   onViewChange,
 }: TimelineProps): JSX.Element {
   const trackRef = useRef<HTMLDivElement>(null)
@@ -387,6 +395,18 @@ export default function Timeline({
 
   const menuItems = menu
     ? [
+        {
+          label: 'Copy',
+          onSelect: () => onCopy(menu.target.lane, menu.target.id),
+        },
+        ...(canPaste
+          ? [
+              {
+                label: 'Paste at the playhead',
+                onSelect: () => onPaste(),
+              },
+            ]
+          : []),
         {
           label: 'Split at the playhead',
           onSelect: () => onSplit(menu.target.lane, true),

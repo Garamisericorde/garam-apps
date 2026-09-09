@@ -4,12 +4,15 @@ import type { AppSettings, FrameCrop, MediaInfo } from '../../../shared/types'
 import { formatBytes, formatTime } from '../../../shared/time'
 import {
   appendClip,
+  copyItems,
   EMPTY_TIMELINE,
   itemAt,
   itemDuration,
   itemEnd,
   linkItems,
   moveItem,
+  pasteItems,
+  pastedId,
   previewAudio,
   removeItem,
   setItemGain,
@@ -19,6 +22,7 @@ import {
   splitAt,
   timelineDuration,
   trimItem,
+  type ClipboardItem,
   type LaneId,
   type Timeline as TimelineModel,
   type TimelineItem,
@@ -106,6 +110,15 @@ export default function EditorPage(): JSX.Element {
   latestTimeline.current = timeline
   const [sources, setSources] = useState<Record<string, Source>>({})
   const [selected, setSelected] = useState<Selection | null>(null)
+  /*
+   * The last clip copied.
+   *
+   * The app's own, not the system clipboard: what is held is a position in a
+   * file and a window into it, which means nothing to anything else on the
+   * machine, and Ctrl+C in the editor should never quietly replace whatever
+   * the user had copied elsewhere.
+   */
+  const [clipboard, setClipboard] = useState<ClipboardItem[] | null>(null)
 
   /** Playhead, in timeline seconds */
   const [playhead, setPlayhead] = useState(0)
@@ -461,6 +474,37 @@ export default function EditorPage(): JSX.Element {
     [edit],
   )
 
+  const handleCopy = useCallback(
+    (lane: LaneId, id: string) => {
+      const copied = copyItems(latestTimeline.current, lane, id)
+      if (copied.length > 0) setClipboard(copied)
+    },
+    [],
+  )
+
+  /**
+   * Put the copy down at the playhead.
+   *
+   * At the playhead rather than after the clip it came from, because the
+   * playhead is the one place on the timeline the user is already looking at,
+   * and it is where every other keyboard edit here happens. The copy is
+   * selected afterwards, so it can be dragged somewhere else without hunting
+   * for it first.
+   */
+  const handlePaste = useCallback(() => {
+    if (!clipboard) return
+
+    const before = latestTimeline.current
+    const after = pasteItems(before, clipboard, playhead)
+    if (after === before) return
+
+    edit(() => after)
+
+    const lane = clipboard.some((entry) => entry.lane === 'video') ? 'video' : 'audio'
+    const id = pastedId(before, after, lane)
+    if (id) setSelected({ lane, id })
+  }, [clipboard, edit, playhead])
+
   /**
    * Cut at a moment.
    *
@@ -523,6 +567,20 @@ export default function EditorPage(): JSX.Element {
           stepHistory(redo)
           return
         }
+        if (key === 'c') {
+          // Only claimed when there is a clip to claim it for: with nothing
+          // selected this is still the browser's copy, and swallowing it would
+          // stop the user copying a filename off the page.
+          if (!selected) return
+          event.preventDefault()
+          handleCopy(selected.lane, selected.id)
+          return
+        }
+        if (key === 'v') {
+          event.preventDefault()
+          handlePaste()
+          return
+        }
         return
       }
 
@@ -579,6 +637,8 @@ export default function EditorPage(): JSX.Element {
     activeSource,
     duration,
     stepHistory,
+    handleCopy,
+    handlePaste,
     handleRemove,
     handleSeek,
     handleSplit,
@@ -901,6 +961,9 @@ export default function EditorPage(): JSX.Element {
             onUnlink={handleUnlink}
             onLink={handleLink}
             onSplit={(lane, both) => handleSplit(playhead, both ? undefined : [lane])}
+            onCopy={handleCopy}
+            onPaste={handlePaste}
+            canPaste={clipboard !== null}
             onViewChange={setView}
           />
         </div>
