@@ -514,11 +514,21 @@ export default function EditorPage(): JSX.Element {
 
   const activePreview = previewFor(activeItem)
 
-  /** The clip playback will hand over to, so the preview can get it ready */
+  /**
+   * The clip playback will hand over to, so the preview can get it ready.
+   *
+   * The clip after this one, or — at the end of a looping timeline — the first
+   * one again. The loop is a cut like any other and gets the same preparation;
+   * without it the join back to the beginning was the one place playback still
+   * had to stop and load, which is exactly where a boomerang is watched most.
+   */
   const nextItem = useMemo(() => {
     if (!activeItem) return null
-    return sortLane(timeline.video).find((item) => item.start > activeItem.start) ?? null
-  }, [activeItem, timeline.video])
+    const order = sortLane(timeline.video)
+    const after = order.find((item) => item.start > activeItem.start)
+    if (after) return after
+    return loop ? order[0] ?? null : null
+  }, [activeItem, loop, timeline.video])
 
   const nextPreview = previewFor(nextItem)
 
@@ -629,6 +639,21 @@ export default function EditorPage(): JSX.Element {
     },
     [playerTimeFor, requestSeek, timeline],
   )
+
+  /**
+   * The preview has moved to the next clip by itself.
+   *
+   * It starts that clip running behind the picture a moment before the cut, so
+   * by the time this arrives the hand-over has already happened and the only
+   * thing left to do is agree with it. Deliberately no seek and no play: the
+   * clip is running, and either of those would take back the seamless join the
+   * pre-roll bought.
+   */
+  const handleHandover = useCallback(() => {
+    if (!nextItem) return
+    setActiveId(nextItem.id)
+    setPlayhead(nextItem.start)
+  }, [nextItem])
 
   /** Player time is a position in one source; the timeline wants where that is */
   const handlePlayerTime = useCallback(
@@ -1267,6 +1292,7 @@ export default function EditorPage(): JSX.Element {
               onTimeUpdate={handlePlayerTime}
               onDurationChange={() => undefined}
               onPlayingChange={setIsPlaying}
+              onHandover={handleHandover}
               onError={setError}
               muted={sound.muted}
               volume={sound.volume}
