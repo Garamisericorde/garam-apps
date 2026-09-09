@@ -29,13 +29,11 @@ interface VideoPlayerProps {
   style?: React.CSSProperties
 }
 
-/**
- * Preview surface for the editor.
- *
- * Playback is confined to the trimmed range: pressing play from outside the
- * selection jumps to IN, and playback stops at OUT. That makes the IN/OUT
- * handles feel like a real selection rather than two disconnected numbers.
- */
+/** An element with the frame callback Chromium provides and the DOM types do not */
+type VideoElement = HTMLVideoElement & {
+  requestVideoFrameCallback?: (callback: () => void) => number
+}
+
 /**
  * How often the backwards stand-in asks for a new frame, in milliseconds.
  *
@@ -44,13 +42,32 @@ interface VideoPlayerProps {
 const REVERSE_SEEK_INTERVAL_MS = 125
 
 /**
- * Longest a held frame stays up waiting for the next one.
+ * Longest the outgoing picture stays up waiting for the incoming one.
  *
- * A still picture that never gives way is worse than the flash it was hiding,
- * so a source that never produces a frame gets the black it earned.
+ * A preview frozen on the wrong clip is worse than the flash the swap avoids,
+ * so a source that never produces a frame is shown anyway and allowed to fail
+ * in the open.
  */
-const HOLD_LIMIT_MS = 2000
+const SWAP_LIMIT_MS = 2000
 
+/**
+ * Preview surface for the editor.
+ *
+ * Playback is confined to the trimmed range: pressing play from outside the
+ * selection jumps to IN, and playback stops at OUT. That makes the IN/OUT
+ * handles feel like a real selection rather than two disconnected numbers.
+ *
+ * There are two video elements, not one. Changing a single element's source
+ * empties it, and it paints its background until the new file has decoded a
+ * frame — so every cut between two different files, or between a clip and the
+ * reversed copy standing in for it, flashed black. The incoming clip is loaded
+ * and seeked in the element that is not on screen, and the two are swapped only
+ * once it has a frame to show; the outgoing one holds its last frame until then.
+ *
+ * Copying that frame to a canvas was tried first and is not an option: on this
+ * hardware `drawImage` of a paused video returns black, which is precisely the
+ * thing being hidden. Two elements never read a frame back at all.
+ */
 const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function VideoPlayer(
   {
     src,
@@ -67,20 +84,47 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
   },
   ref,
 ) {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const frameRef = useRef<number | null>(null)
+  const slots = useRef<(VideoElement | null)[]>([null, null])
   /*
-   * A seek asked for before the file has any metadata.
+   * Which element is on screen, as state so it renders, and as a ref so the
+   * callbacks below can read it without being rebuilt on every swap.
+   */
+  const [shown, setShown] = useState(0)
+  const shownRef = useRef(0)
+
+  const live = useCallback((): VideoElement | null => slots.current[shownRef.current], [])
+  const standby = useCallback((): VideoElement | null => slots.current[1 - shownRef.current], [])
+
+  /** A swap in flight: the standby is loading what should be on screen next */
+  const swapping = useRef(false)
+  /** Whether the incoming clip should start playing the moment it appears */
+  const resumeOnSwap = useRef(false)
+
+  /*
+   * A seek asked for before the file has any metadata, one slot each.
    *
    * Setting currentTime on an unloaded element is silently dropped, so clicking
    * into the middle of a clip whose source had not been shown yet landed at its
    * start instead. Held here and applied the moment the duration is known.
    */
-  const pendingSeek = useRef<number | null>(null)
+  const pendingSeek = useRef<(number | null)[]>([null, null])
 
   // Keep the latest bounds available to the rAF loop without restarting it
   const boundsRef = useRef({ inPoint, outPoint })
   boundsRef.current = { inPoint, outPoint }
+
+  const soundRef = useRef({ muted, volume })
+  soundRef.current = { muted, volume }
+
+  const applySound = useCallback((video: VideoElement | null): void => {
+    if (!video) return
+    video.muted = soundRef.current.muted
+    video.volume = Math.min(Math.max(soundRef.current.volume, 0), 1)
+  }, [])
+
+  // ── Playhead tracking ───────────────────────────────────────────────────────
+
+  const frameRef = useRef<number | null>(null)
 
   const stopTracking = useCallback(() => {
     if (frameRef.current !== null) {
@@ -94,7 +138,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
     stopTracking()
 
     const tick = (): void => {
-      const video = videoRef.current
+      const video = live()
       if (!video) return
 
       const { outPoint: end } = boundsRef.current
@@ -110,13 +154,13 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
     }
 
     frameRef.current = requestAnimationFrame(tick)
-  }, [onTimeUpdate, stopTracking])
+  }, [live, onTimeUpdate, stopTracking])
 
   useEffect(() => stopTracking, [stopTracking])
 
+  // ── Backwards, the hard way ────────────────────────────────────────────────
+
   /*
-   * Playing backwards, the hard way.
-   *
    * This is the stand-in, used only until the editor has a reversed copy of the
    * clip to play forwards instead. No video element can run in reverse on its
    * own — `playbackRate` will not go negative and nothing decodes towards the
@@ -147,7 +191,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
   }, [onPlayingChange])
 
   const startReverse = useCallback(() => {
-    const video = videoRef.current
+    const video = live()
     if (!video) return
 
     video.pause()
@@ -165,7 +209,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
 
     let last = performance.now()
     const tick = (): void => {
-      const element = videoRef.current
+      const element = live()
       if (!element || !reversing.current) return
 
       const now = performance.now()
@@ -203,129 +247,136 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
     }
 
     reverseFrame.current = requestAnimationFrame(tick)
-  }, [onPlayingChange, onTimeUpdate, stopReverse, stopTracking])
+  }, [live, onPlayingChange, onTimeUpdate, stopReverse, stopTracking])
+
+  // ── Swapping one clip for the next ─────────────────────────────────────────
+
+  const startPlaying = useCallback(
+    (video: VideoElement | null): void => {
+      if (!video) return
+
+      if (reversedRef.current) {
+        startReverse()
+        return
+      }
+
+      const { inPoint: start, outPoint: end } = boundsRef.current
+      // Restart from IN when the playhead sits outside the selection
+      if (video.currentTime < start || video.currentTime >= end - 0.01) {
+        video.currentTime = start
+      }
+      void video.play().catch(() => undefined)
+    },
+    [startReverse],
+  )
+
+  /** Put the loaded element on screen and retire the one that was there */
+  const finishSwap = useCallback(() => {
+    if (!swapping.current) return
+    swapping.current = false
+
+    const outgoing = live()
+    const incoming = standby()
+    outgoing?.pause()
+    if (outgoing) outgoing.muted = true
+
+    shownRef.current = 1 - shownRef.current
+    setShown(shownRef.current)
+    applySound(incoming)
+
+    if (resumeOnSwap.current) {
+      resumeOnSwap.current = false
+      startPlaying(incoming)
+    }
+  }, [applySound, live, standby, startPlaying])
+
+  /**
+   * Swap once the incoming element has really shown a frame.
+   *
+   * Not on `loadeddata`: it fires with readyState still at HAVE_METADATA —
+   * measured at 19 ms against a first frame at 90 ms — so swapping on it puts
+   * the black straight back. requestVideoFrameCallback fires when a frame has
+   * been presented, which is the only signal that means what is wanted.
+   */
+  const swapWhenPainted = useCallback(() => {
+    const incoming = standby()
+    if (!incoming || !swapping.current) return
+
+    if (typeof incoming.requestVideoFrameCallback === 'function') {
+      incoming.requestVideoFrameCallback(finishSwap)
+      return
+    }
+
+    finishSwap()
+  }, [finishSwap, standby])
+
+  useEffect(() => {
+    if (!src) {
+      for (const video of slots.current) {
+        if (!video) continue
+        video.removeAttribute('src')
+        video.load()
+      }
+      swapping.current = false
+      return
+    }
+
+    const showing = live()
+    if (showing && showing.currentSrc === src) return
+
+    const incoming = standby()
+    if (!incoming) return
+
+    swapping.current = true
+    pendingSeek.current[1 - shownRef.current] = null
+    // Silent until it takes over, or both clips would be heard at once.
+    incoming.muted = true
+    incoming.src = src
+    incoming.load()
+
+    // A picture that never arrives must not leave the wrong one up for ever.
+    const giveUp = setTimeout(finishSwap, SWAP_LIMIT_MS)
+    return () => clearTimeout(giveUp)
+  }, [finishSwap, live, src, standby])
 
   // Turning a clip round mid-play leaves the loop running the wrong way.
   useEffect(() => {
     stopReverse()
-    videoRef.current?.pause()
-  }, [reversed, src, stopReverse])
+    live()?.pause()
+  }, [live, reversed, src, stopReverse])
 
-  /*
-   * The last frame of the outgoing clip, held on screen while the next one
-   * loads.
-   *
-   * Changing a video element's source empties it, and it paints its background
-   * until the new file has a frame to show — so playing across a cut where the
-   * two clips come from different files (or from a clip and its reversed copy)
-   * flashed black every time. The frame is copied to a canvas laid exactly over
-   * the picture and dropped the moment there is something to replace it with.
-   *
-   * Only drawn to, never read back: a clip:// source taints the canvas, which
-   * makes reading the pixels out illegal but drawing them perfectly fine.
-   */
-  const holdRef = useRef<HTMLCanvasElement>(null)
-  /*
-   * Whether the held frame is on screen, as state rather than a property set on
-   * the element. React rewrites `hidden` on every render, so showing the canvas
-   * by hand lasted exactly until the next one — which, with the playhead moving,
-   * is the same frame.
-   */
-  const [holding, setHolding] = useState(false)
+  useEffect(() => applySound(live()), [applySound, live, muted, volume, shown])
 
-  const releaseHold = useCallback(() => setHolding(false), [])
+  // ── The editor's handle on all this ────────────────────────────────────────
 
-  /**
-   * Let go once there is really a picture, not merely a loaded file.
-   *
-   * `loadeddata` fires with readyState still at HAVE_METADATA — measured: the
-   * event at 19 ms, the first frame at 90 ms — so releasing on it put the black
-   * back for seventy milliseconds, which is exactly the flash this is here to
-   * remove. requestVideoFrameCallback fires when a frame has been presented,
-   * which is the only signal that means what is wanted.
-   */
-  const releaseWhenPainted = useCallback(() => {
-    const video = videoRef.current as
-      | (HTMLVideoElement & { requestVideoFrameCallback?: (cb: () => void) => number })
-      | null
-
-    if (!video) return
-    if (typeof video.requestVideoFrameCallback === 'function') {
-      video.requestVideoFrameCallback(() => setHolding(false))
-      return
-    }
-
-    setHolding(false)
-  }, [])
-
-  useEffect(() => {
-    const video = videoRef.current
-    if (!video) return
-
-    if (!src) {
-      video.removeAttribute('src')
-      video.load()
-      releaseHold()
-      return
-    }
-
-    // HAVE_CURRENT_DATA or better: there is a frame on screen worth keeping.
-    const canvas = holdRef.current
-    if (canvas && video.readyState >= 2 && video.videoWidth > 0) {
-      canvas.width = video.videoWidth
-      canvas.height = video.videoHeight
-      canvas.getContext('2d')?.drawImage(video, 0, 0)
-      setHolding(true)
-    }
-
-    // A seek meant for the file being replaced does not belong to the new one.
-    if (video.currentSrc !== src) pendingSeek.current = null
-    video.src = src
-    video.load()
-
-    // A frame that never arrives must not leave a still image in its place.
-    const giveUp = setTimeout(releaseHold, HOLD_LIMIT_MS)
-    return () => clearTimeout(giveUp)
-  }, [releaseHold, src])
-
-  /*
-   * Set on the element rather than written as attributes: `volume` has no
-   * attribute at all, and `muted` as one is only the initial value — React
-   * would stop changing it after the first render.
-   */
-  useEffect(() => {
-    const video = videoRef.current
-    if (!video) return
-
-    video.muted = muted
-    video.volume = Math.min(Math.max(volume, 0), 1)
-  }, [muted, volume, src])
+  /** Where a seek or a play should land: the incoming clip if one is on its way */
+  const target = useCallback(
+    (): { video: VideoElement | null; slot: number } =>
+      swapping.current
+        ? { video: standby(), slot: 1 - shownRef.current }
+        : { video: live(), slot: shownRef.current },
+    [live, standby],
+  )
 
   useImperativeHandle(
     ref,
     () => ({
       play: () => {
-        const video = videoRef.current
-        if (!video) return
-
-        if (reversedRef.current) {
-          startReverse()
+        // Playing what is about to be replaced would be a second of the wrong
+        // clip; the swap starts it instead, the moment it is on screen.
+        if (swapping.current) {
+          resumeOnSwap.current = true
           return
         }
-
-        const { inPoint: start, outPoint: end } = boundsRef.current
-        // Restart from IN when the playhead sits outside the selection
-        if (video.currentTime < start || video.currentTime >= end - 0.01) {
-          video.currentTime = start
-        }
-        void video.play().catch(() => undefined)
+        startPlaying(live())
       },
       pause: () => {
+        resumeOnSwap.current = false
         stopReverse()
-        videoRef.current?.pause()
+        live()?.pause()
       },
       togglePlay: () => {
-        const video = videoRef.current
+        const video = live()
         if (!video) return
 
         if (reversedRef.current) {
@@ -334,18 +385,16 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
           return
         }
 
-        if (video.paused) {
-          const { inPoint: start, outPoint: end } = boundsRef.current
-          if (video.currentTime < start || video.currentTime >= end - 0.01) {
-            video.currentTime = start
-          }
-          void video.play().catch(() => undefined)
-        } else {
-          video.pause()
+        if (swapping.current) {
+          resumeOnSwap.current = !resumeOnSwap.current
+          return
         }
+
+        if (video.paused) startPlaying(video)
+        else video.pause()
       },
       seek: (seconds: number) => {
-        const video = videoRef.current
+        const { video, slot } = target()
         if (!video) return
 
         // A seek during backwards playback moves where it is playing from, not
@@ -354,15 +403,16 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
         reverseTarget.current = seconds
 
         if (video.readyState === 0) {
-          pendingSeek.current = seconds
+          pendingSeek.current[slot] = seconds
           return
         }
 
         video.currentTime = seconds
-        onTimeUpdate(seconds)
+        // Only the visible clip's position is the playhead's business.
+        if (!swapping.current) onTimeUpdate(seconds)
       },
       nudge: (deltaSeconds: number) => {
-        const video = videoRef.current
+        const video = live()
         if (!video) return
 
         const { inPoint: start, outPoint: end } = boundsRef.current
@@ -370,50 +420,66 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
         video.currentTime = next
         onTimeUpdate(next)
       },
-      currentTime: () => videoRef.current?.currentTime ?? 0,
+      currentTime: () => live()?.currentTime ?? 0,
     }),
-    [onTimeUpdate, startReverse, stopReverse],
+    [live, onTimeUpdate, startPlaying, startReverse, stopReverse, target],
   )
 
-  return (
-    <>
-      {/* Hidden until there is a frame to hold; see the effect above. */}
-      <canvas ref={holdRef} className="stage-hold" style={style} hidden={!holding} />
+  // ── Render ─────────────────────────────────────────────────────────────────
 
+  const element = (slot: number): JSX.Element => {
+    const isShown = slot === shown
+
+    return (
       <video
-        ref={videoRef}
+        key={slot}
+        ref={(node) => {
+          slots.current[slot] = node as VideoElement | null
+        }}
+        className={`stage-video${isShown ? '' : ' is-standby'}`}
         style={style}
         playsInline
         onLoadedMetadata={(event) => {
           const video = event.currentTarget
-          if (Number.isFinite(video.duration)) onDurationChange(video.duration)
+          if (slot === shownRef.current && Number.isFinite(video.duration)) {
+            onDurationChange(video.duration)
+          }
 
-          const pending = pendingSeek.current
-          pendingSeek.current = null
+          const pending = pendingSeek.current[slot]
+          pendingSeek.current[slot] = null
           // Backwards, a clip opens on its last frame, not its first.
           const opensAt = reversedRef.current
             ? boundsRef.current.outPoint
             : boundsRef.current.inPoint
           video.currentTime = pending ?? opensAt
         }}
-        // There is a picture on the way; the held frame goes when it arrives.
-        onLoadedData={releaseWhenPainted}
+        onLoadedData={() => {
+          if (slot !== shownRef.current) swapWhenPainted()
+        }}
         onPlay={() => {
+          if (slot !== shownRef.current) return
           onPlayingChange(true)
           startTracking()
         }}
         onPause={() => {
+          if (slot !== shownRef.current) return
           onPlayingChange(false)
           stopTracking()
-          if (videoRef.current) onTimeUpdate(videoRef.current.currentTime)
+          onTimeUpdate(slots.current[slot]?.currentTime ?? 0)
         }}
         onSeeked={() => {
-          releaseWhenPainted()
+          if (slot !== shownRef.current) {
+            // The incoming clip has landed where it was asked to. It can go on
+            // screen as soon as it has a frame there.
+            swapWhenPainted()
+            return
+          }
+
           // While playing backwards the loop is already reporting the position
           // it asked for. Reporting where the seek actually landed on top of
           // that makes the playhead stutter between the two.
           if (reversing.current) return
-          if (videoRef.current) onTimeUpdate(videoRef.current.currentTime)
+          onTimeUpdate(slots.current[slot]?.currentTime ?? 0)
         }}
         onError={(event) => {
           /*
@@ -421,7 +487,12 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
            * finishing writing" was a plausible cause printed for every failure,
            * which made a decode error and a missing file read identically.
            */
-          releaseHold()
+          if (slot !== shownRef.current) {
+            // A source that cannot be played is still what the editor asked to
+            // show, so it takes the screen and reports itself.
+            finishSwap()
+          }
+
           const detail = event.currentTarget.error?.message?.trim()
           onError(
             detail
@@ -430,6 +501,13 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function Vid
           )
         }}
       />
+    )
+  }
+
+  return (
+    <>
+      {element(0)}
+      {element(1)}
     </>
   )
 })

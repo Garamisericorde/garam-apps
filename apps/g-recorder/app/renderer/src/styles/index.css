@@ -545,11 +545,32 @@ input:focus {
   justify-content: center;
 }
 
+/*
+ * Two of these, stacked exactly on top of each other.
+ *
+ * One shows the clip on screen while the other loads the next one out of sight;
+ * see VideoPlayer for why a single element cannot cross a cut without going
+ * black. Absolute rather than in flow, or the second would sit underneath the
+ * first and halve the picture.
+ */
 .stage video {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   object-fit: contain;
   display: block;
+}
+
+/*
+ * The one that is loading. Transparent rather than hidden on purpose: a video
+ * that is not rendered is not decoded either, so `display: none` here would
+ * mean the clip never produces the frame the swap is waiting for.
+ */
+.stage video.is-standby {
+  opacity: 0;
+  pointer-events: none;
 }
 
 /*
@@ -582,37 +603,6 @@ input:focus {
 
 .stage-crop video {
   position: absolute;
-  max-width: none;
-  max-height: none;
-  object-fit: fill;
-}
-
-/*
- * The last frame of the outgoing clip, held while the next one loads.
- *
- * Laid over the picture and sized exactly like it, so what the eye sees across
- * a cut is one continuous image rather than a flash of the stage's background.
- */
-.stage-hold {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: block;
-  pointer-events: none;
-}
-
-/*
- * A class with a display of its own outranks the browser's own [hidden] rule,
- * so without this the held frame covered the picture permanently.
- */
-.stage-hold[hidden] {
-  display: none;
-}
-
-.stage-crop .stage-hold {
   max-width: none;
   max-height: none;
   object-fit: fill;
