@@ -7,7 +7,7 @@ $catalog = Get-Content -LiteralPath (Join-Path $root 'catalog.json') -Raw | Conv
 if ($LASTEXITCODE -ne 0) { throw 'GitHub login required: gh auth login --web --scopes workflow' }
 $releaseList = & $Gh release list --repo $repo --limit 200 --json tagName
 if ($LASTEXITCODE -ne 0) { throw 'Could not read GitHub releases' }
-$knownTags = @($releaseList | ConvertFrom-Json | ForEach-Object tagName)
+$knownTags = @((ConvertFrom-Json -InputObject ($releaseList -join "`n")).tagName)
 foreach ($app in $catalog.apps) {
   $tag = "$($app.id)-v$($app.version)"
   $artifact = Join-Path $root ("apps/$($app.id)/release/$($app.installer.fileName)")
@@ -15,6 +15,11 @@ foreach ($app in $catalog.apps) {
   if ($tag -notin $knownTags) {
     & $Gh release create $tag --repo $repo --target $Target --title "$($app.name) $($app.version)" --notes "$($app.description)" --latest=false
     if ($LASTEXITCODE -ne 0) { throw "Release creation failed: $tag" }
+  } else {
+    $releaseJson = & $Gh api "repos/$repo/releases/tags/$tag"
+    if ($LASTEXITCODE -ne 0) { throw "Could not verify existing release: $tag" }
+    $asset = (ConvertFrom-Json -InputObject ($releaseJson -join "`n")).assets | Where-Object name -EQ $app.installer.fileName | Select-Object -First 1
+    if ($asset.digest -eq ('sha256:' + $app.installer.sha256)) { Write-Output "$tag is already published and verified."; continue }
   }
   & $Gh release upload $tag $artifact --repo $repo --clobber
   if ($LASTEXITCODE -ne 0) { throw "Asset upload failed: $tag" }
