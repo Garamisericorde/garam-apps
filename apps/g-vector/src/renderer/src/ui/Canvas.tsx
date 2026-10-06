@@ -19,8 +19,10 @@ import {
 import {
   ensurePath,
   insertAnchorAt,
+  openEndAt,
   refitSubPath,
   removeAnchors,
+  reverseSubPathIn,
   sameAnchor,
   toggleCornerAt,
   type AnchorRef,
@@ -53,6 +55,7 @@ import {
 } from '../tools/drag'
 import { handleCursor, handlePoints, hitHandle, hitRotateZone } from '../tools/handles'
 import { hitMarquee, hitNode } from '../tools/hit'
+import { measureSegment, segmentFromAnchors } from '../doc/segment'
 import {
   constrainAngle,
   stepAnchorMove,
@@ -239,6 +242,13 @@ export function Canvas(): ReactElement {
     return drawGhost(shown, penDraft, ghostAt, tool === 'curvature')
   }, [dragging, ghostAt, penDraft, shown, tool])
 
+  /** Which end of the selected segment the inspector's fields pivot about. */
+  const pivotAnchor = useMemo(() => {
+    if (!pathTool || anchorSelection.length !== 2) return null
+    const ref = segmentFromAnchors(shown, anchorSelection)
+    return ref ? (measureSegment(shown, ref)?.from ?? null) : null
+  }, [anchorSelection, pathTool, shown])
+
   const hoverQuad = useMemo(() => {
     if (pathTool || !hoverId || selection.includes(hoverId)) return null
     const node = shown.nodes.find((n) => n.id === hoverId)
@@ -415,6 +425,32 @@ export function Canvas(): ReactElement {
             return
           }
 
+          /*
+           * With nothing in progress, clicking the loose END of an open path
+           * picks the drawing back up there. Escape finishing a stroke should
+           * not mean the stroke is finished forever — and the alternative,
+           * starting a second path that merely touches the first, leaves two
+           * objects where the user sees one line.
+           *
+           * Resuming from the START turns the subpath round first: the tools
+           * only ever append, so the end being grown has to be the last anchor.
+           */
+          if (!draft) {
+            const end = openEndAt(state.doc, pick.ref)
+            if (end) {
+              const converted = ensurePath(state.doc, pick.ref.nodeId)
+              const next =
+                end === 'start' && count > 1
+                  ? reverseSubPathIn(converted, pick.ref.nodeId, pick.ref.subpath)
+                  : converted
+              if (next !== state.doc) state.commit(next)
+              state.setSelection([pick.ref.nodeId])
+              state.setAnchorSelection([])
+              state.setPenDraft({ nodeId: pick.ref.nodeId, subpath: pick.ref.subpath })
+              return
+            }
+          }
+
           const onDraft =
             !!draft && draft.nodeId === pick.ref.nodeId && draft.subpath === pick.ref.subpath
           const isFirst = onDraft && pick.ref.index === 0 && count >= 2
@@ -563,11 +599,30 @@ export function Canvas(): ReactElement {
         return
       }
 
-      if (pickSegment(state.doc, state.selection, state.viewport, screen)) {
-        // Clicking the outline keeps the path selected and drops the anchor
-        // selection — how you get every point back on screen after working on
-        // one of them.
-        state.setAnchorSelection([])
+      const onOutline = pickSegment(state.doc, state.selection, state.viewport, screen)
+      if (onOutline) {
+        /*
+         * Clicking a segment selects the two points it runs between, which is
+         * what puts its length and angle in the inspector. Selecting nothing
+         * would be the easier answer and a wasted click: the segment is the
+         * thing under the cursor, so it should be the thing you are now
+         * holding.
+         */
+        const count = anchorCount(pathViews, {
+          nodeId: onOutline.nodeId,
+          subpath: onOutline.subpath,
+          index: 0,
+        })
+        if (count >= 2) {
+          state.setAnchorSelection([
+            { nodeId: onOutline.nodeId, subpath: onOutline.subpath, index: onOutline.segment },
+            {
+              nodeId: onOutline.nodeId,
+              subpath: onOutline.subpath,
+              index: (onOutline.segment + 1) % count,
+            },
+          ])
+        }
         return
       }
 
@@ -998,6 +1053,7 @@ export function Canvas(): ReactElement {
             paths={pathViews}
             ghost={ghost}
             markedAnchor={markedAnchor}
+            pivotAnchor={pivotAnchor}
           />
         </>
       )}

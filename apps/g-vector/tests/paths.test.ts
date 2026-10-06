@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   ensurePath,
   moveAnchors,
+  openEndAt,
   removeAnchors,
+  reverseSubPathIn,
   setHandle,
   type AnchorRef,
 } from '../src/renderer/src/doc/anchors'
@@ -14,6 +16,7 @@ import {
   corner,
   cubicAt,
   insertAnchor,
+  reverseSubPath,
   segmentCubic,
   type SubPath,
 } from '../src/renderer/src/doc/path'
@@ -271,5 +274,71 @@ describe('the pen', () => {
     // The incoming handle is untouched: only the direction the next segment
     // leaves in was being changed.
     expect(pathOf(retracted.doc, id).subpaths[0].anchors[0].in).toEqual({ x: -30, y: -0 })
+  })
+})
+
+describe('picking a path back up', () => {
+  const open = (): SubPath => ({
+    closed: false,
+    anchors: [
+      { p: { x: 0, y: 0 }, in: { x: 0, y: 0 }, out: { x: 20, y: 0 } },
+      { p: { x: 100, y: 0 }, in: { x: -30, y: 10 }, out: { x: 40, y: 0 } },
+      { p: { x: 200, y: 50 }, in: { x: -10, y: -20 }, out: { x: 0, y: 0 } },
+    ],
+  })
+
+  /**
+   * Reversal is what lets a drawing tool continue from the START of a path: the
+   * tools only ever append, so the end being grown has to become the last
+   * anchor. The curve must not move while that happens.
+   */
+  it('reverses a subpath without changing the curve', () => {
+    const before = open()
+    const after = reverseSubPath(before)
+    expect(after.anchors.map((a) => a.p)).toEqual(
+      [...before.anchors].reverse().map((a) => a.p),
+    )
+    // Walking backwards, the handle the curve left along is the one it now
+    // arrives along.
+    expect(after.anchors[0].in).toEqual(before.anchors[2].out)
+    expect(after.anchors[0].out).toEqual(before.anchors[2].in)
+
+    // Sampled point for point, the two describe the same shape.
+    for (let i = 0; i < 2; i++) {
+      for (const t of [0, 0.25, 0.5, 0.75, 1]) {
+        const forward = sample(before, i, t)
+        const backward = sample(after, 1 - i, 1 - t)
+        expect(backward.x).toBeCloseTo(forward.x, 6)
+        expect(backward.y).toBeCloseTo(forward.y, 6)
+      }
+    }
+  })
+
+  it('reverses in place inside the document', () => {
+    const node = createPath(LAYER, [open()])
+    const doc: Doc = { ...DOC, nodes: [node] }
+    const after = pathOf(reverseSubPathIn(doc, node.id, 0), node.id)
+    expect(after.subpaths[0].anchors[0].p).toEqual({ x: 200, y: 50 })
+  })
+
+  /**
+   * Only the two loose ends resume; an interior point is an edit. The pen has
+   * always drawn that line, and the path itself says which is which.
+   */
+  it('knows which anchors are loose ends', () => {
+    const node = createPath(LAYER, [open()])
+    const doc: Doc = { ...DOC, nodes: [node] }
+    const at = (index: number): string | null =>
+      openEndAt(doc, { nodeId: node.id, subpath: 0, index })
+    expect(at(0)).toBe('start')
+    expect(at(2)).toBe('end')
+    expect(at(1)).toBeNull()
+  })
+
+  it('has no loose ends once the path is closed', () => {
+    const node = createPath(LAYER, [{ ...open(), closed: true }])
+    const doc: Doc = { ...DOC, nodes: [node] }
+    expect(openEndAt(doc, { nodeId: node.id, subpath: 0, index: 0 })).toBeNull()
+    expect(openEndAt(doc, { nodeId: node.id, subpath: 0, index: 2 })).toBeNull()
   })
 })

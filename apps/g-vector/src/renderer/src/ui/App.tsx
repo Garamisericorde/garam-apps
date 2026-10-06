@@ -2,6 +2,7 @@
  * The window: title bar, tool rail, canvas, inspector, status strip.
  */
 import { useEffect, useState, type ReactElement } from 'react'
+import { NO_INSET, type WindowInset } from '@shared/types'
 import { IconButton, TitleBar } from '@garam/ui'
 import { useEditor } from '../store/editor'
 import { Canvas } from './Canvas'
@@ -21,12 +22,29 @@ export function App(): ReactElement {
   const redo = useEditor((s) => s.redo)
   const canUndo = useEditor((s) => s.past.length > 0)
   const canRedo = useEditor((s) => s.future.length > 0)
-  const [maximized, setMaximized] = useState(false)
+  const [inset, setInset] = useState<WindowInset>(NO_INSET)
 
-  useEffect(() => window.api.window.onMaximizedChange(setMaximized), [])
+  useEffect(() => window.api.window.onStateChange((state) => setInset(state.inset)), [])
 
+  /*
+   * The app is padded by however much of the window is off screen.
+   *
+     *
+   * Windows maximises a frameless window to the work area plus its invisible
+   * resize border, so without this the top of the title bar — and with it the
+   * whole strip you drag the window by — sits above the top of the display, and
+   * the controls nearest the right edge are half past it.
+   */
   return (
-    <div className="gv-app">
+    <div
+      className="gv-app"
+      style={{
+        paddingTop: inset.top,
+        paddingRight: inset.right,
+        paddingBottom: inset.bottom,
+        paddingLeft: inset.left,
+      }}
+    >
       <TitleBar
         title="G-Vector"
         icon={<AppIcon />}
@@ -48,11 +66,7 @@ export function App(): ReactElement {
         />
       </TitleBar>
 
-      {/*
-        A maximized frameless window has no drop shadow, so its rounded corners
-        have to be squared off — otherwise the desktop shows through four gaps.
-      */}
-      <div className="gv-body" data-maximized={maximized || undefined}>
+      <div className="gv-body">
         <ToolRail />
         <Canvas />
         {/*

@@ -1,0 +1,24 @@
+{
+  "name": "g-dpi",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Windows service manager for GoodbyeDPI with Superonline profiles",
+  "author": "Garam",
+  "license": "MIT",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "icons": "node scripts/generate-icons.mjs",
+    "package": "node scripts/package.mjs"
+  },
+  "dependencies": { "@garam/theme": "0.1.0" },
+  "devDependencies": {
+    "electron": "32.3.3",
+    "electron-builder": "^24.13.3",
+    "electron-vite": "^2.3.0",
+    "vite": "^5.4.0",
+    "typescript": "^5.5.4"
+  }
+}

@@ -40,6 +40,12 @@ export interface OverlayProps {
    * point. Ringed, so the click is not a guess.
    */
   markedAnchor: Vec | null
+  /**
+   * The end of the selected segment that STAYS PUT when its length or angle is
+   * typed in. Which one it is has to be visible, or the fields look like they
+   * move whichever point they feel like.
+   */
+  pivotAnchor: Vec | null
 }
 
 export function Overlay(props: OverlayProps): ReactElement {
@@ -90,6 +96,15 @@ export function Overlay(props: OverlayProps): ReactElement {
       )}
 
       {props.ghost && <Ghost ghost={props.ghost} vp={vp} />}
+
+      {props.pivotAnchor && (
+        <circle
+          className="gv-anchor-pivot"
+          cx={toScreen(props.pivotAnchor).x}
+          cy={toScreen(props.pivotAnchor).y}
+          r={9}
+        />
+      )}
 
       {props.markedAnchor && (
         <circle

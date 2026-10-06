@@ -6,6 +6,10 @@ export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
 const LEVEL_ORDER: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 }
 
+function isLogLevel(value: string | undefined): value is LogLevel {
+  return value === 'debug' || value === 'info' || value === 'warn' || value === 'error'
+}
+
 export interface LoggerOptions {
   /** Entries below this level are dropped. Default: debug in dev, info in production. */
   level?: LogLevel
@@ -27,7 +31,18 @@ export class Logger {
   constructor(options: LoggerOptions = {}) {
     this.dir = join(app.getPath('userData'), 'logs')
     const fallback: LogLevel = app.isPackaged ? 'info' : 'debug'
-    this.minLevel = LEVEL_ORDER[options.level ?? fallback]
+    // GARAM_LOG_LEVEL wins over everything.
+    //
+    // These apps write their most useful lines at debug — capture timings, heap
+    // and external memory per capture, the size the display actually returned —
+    // and a packaged build threw all of them away. So the one build where a
+    // long-running fault appears was the one build that could not describe it,
+    // and the only way to look was to compile a special copy. An environment
+    // variable costs nothing and means a user can reproduce with the diagnostics
+    // on.
+    const override = process.env['GARAM_LOG_LEVEL']?.toLowerCase()
+    const level = isLogLevel(override) ? override : (options.level ?? fallback)
+    this.minLevel = LEVEL_ORDER[level]
 
     try {
       mkdirSync(this.dir, { recursive: true })

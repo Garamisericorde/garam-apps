@@ -21,7 +21,7 @@ async function boot() {
   render(viewLoading('Fetching the app list...'))
 
   try {
-    catalog = await invoke('fetch_catalog', { url: null })
+    catalog = await invoke('fetch_catalog')
     for (const a of catalog.apps) if (a.default) selected.add(a.id)
     render(viewPicker())
   } catch (err) {
@@ -162,10 +162,11 @@ async function startInstall() {
   })
 
   try {
-    const ids = await invoke('install_apps', { apps: chosen })
+    const ids = await invoke('install_apps', { ids: chosen.map(a => a.id) })
     const names = catalog.apps.filter((a) => ids.includes(a.id)).map((a) => a.name)
     render(viewDone(names))
   } catch (err) {
+    for (const id of done) selected.delete(id)
     render(viewError(String(err), () => render(viewPicker())))
   } finally {
     unlisten()

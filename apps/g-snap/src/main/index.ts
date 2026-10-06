@@ -221,6 +221,21 @@ if (!gotLock) {
   })
 }
 
+/*
+ * The GPU process dying used to be invisible.
+ *
+ * It is not a detail for this app: every capture paints a full-screen canvas,
+ * and when that process goes the overlay has nothing to draw with — the window
+ * stays, and stays black. Losing it silently is how "the app went mad" becomes
+ * a report with no evidence behind it.
+ */
+app.on('child-process-gone', (_event, details) => {
+  const where = details.serviceName ? `${details.type}/${details.serviceName}` : details.type
+  const line = `Child process gone: ${where} (${details.reason}, exit ${details.exitCode})`
+  if (details.reason === 'clean-exit') log?.debug(line)
+  else log?.error(line)
+})
+
 /** Set once the settings have been written, so the second quit goes through. */
 let settingsFlushed = false
 

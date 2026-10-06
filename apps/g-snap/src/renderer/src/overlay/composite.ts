@@ -71,6 +71,28 @@ export async function buildComposite(
   return { canvas, deviceWidth, deviceHeight, union, revision: ++revision }
 }
 
+/**
+ * Hands a composite's pixels back immediately.
+ *
+ * Dropping the reference is NOT enough. A canvas element is a tiny JavaScript
+ * object holding a ~15 MB backing store outside the heap, so it creates almost
+ * no GC pressure — V8 has no reason to hurry, and in a window that is never
+ * reloaded the surfaces pile up. Measured on a machine 19 hours and 55 captures
+ * into a session: the GPU process was holding 934 MB, and the overlay had drifted
+ * from ~180 ms to open to 1191 ms, with one capture taking 50 seconds.
+ *
+ * Setting either dimension frees the old surface synchronously, which is the
+ * only lever a page has over that memory.
+ *
+ * Call this only once the canvas is off screen — after React has committed a
+ * render that no longer uses it. Zeroing one Konva is still painting shows a
+ * blank frame.
+ */
+export function releaseComposite(composite: Composite): void {
+  composite.canvas.width = 0
+  composite.canvas.height = 0
+}
+
 /** Turns one display's raw BGRA buffer into an ImageBitmap. */
 async function toImageBitmap(shot: DisplayShot): Promise<ImageBitmap> {
   const { width, height } = shot.nativeSize

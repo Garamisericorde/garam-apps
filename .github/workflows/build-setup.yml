@@ -1,0 +1,47 @@
+name: Build Garam Setup
+on:
+  push:
+    branches: [codex/setup-release]
+    paths: ['installer/bootstrapper/**', '.github/workflows/build-setup.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  setup:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: installer/bootstrapper/src-tauri
+      - name: Install UI dependencies
+        working-directory: installer/bootstrapper
+        run: npm ci
+      - name: Build UI
+        working-directory: installer/bootstrapper
+        run: npm run ui:build
+      - name: Test installer validation
+        working-directory: installer/bootstrapper/src-tauri
+        run: cargo test
+      - name: Build standalone setup
+        working-directory: installer/bootstrapper
+        run: npx tauri build --bundles none
+      - name: Publish setup EXE
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $binary = 'installer/bootstrapper/src-tauri/target/release/Garam Setup.exe'
+          if (!(Test-Path $binary)) { $binary = 'installer/bootstrapper/src-tauri/target/release/garam-setup.exe' }
+          Copy-Item $binary 'Garam-Setup-0.2.0.exe'
+          gh release view setup-v0.2.0 --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) {
+            gh release create setup-v0.2.0 --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title 'Garam Setup 0.2.0' --notes 'Select and install all six Garam apps. Supports verified EXE installers and ZIP service/plugin packages.'
+            if ($LASTEXITCODE -ne 0) { throw 'Release creation failed' }
+          }
+          gh release upload setup-v0.2.0 Garam-Setup-0.2.0.exe --repo $env:GITHUB_REPOSITORY --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Setup upload failed' }

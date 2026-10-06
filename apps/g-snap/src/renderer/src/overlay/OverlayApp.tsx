@@ -12,7 +12,7 @@ import Konva from 'konva'
 import { mixHex, palette, violetAccent } from '@garam/theme'
 import type { CommitRequest, Rect } from '@shared/types'
 import { useOverlay, textFontSize } from './store'
-import { buildComposite, type Composite } from './composite'
+import { buildComposite, releaseComposite, type Composite } from './composite'
 import { renderShape, isMeaningful } from './Shapes'
 import { ToolPanel, TOOL_SHORTCUTS } from './ToolPanel'
 import { ActionBar } from './ActionBar'
@@ -123,6 +123,21 @@ export function OverlayApp() {
         .catch((err) => console.error('[overlay] could not build the composite', err))
     })
   }, [])
+
+  /**
+   * Give the previous capture's pixels back as soon as they are off screen.
+   *
+   * `setComposite(null)` only drops the reference, and that is not the same as
+   * freeing it: see releaseComposite. This runs after React has committed a
+   * render that no longer uses the old canvas, which is the first moment it is
+   * safe to zero.
+   */
+  const shownComposite = useRef<Composite | null>(null)
+  useEffect(() => {
+    const previous = shownComposite.current
+    shownComposite.current = composite
+    if (previous && previous !== composite) releaseComposite(previous)
+  }, [composite])
 
   // Wipe the canvas the moment the overlay is put away.
   //

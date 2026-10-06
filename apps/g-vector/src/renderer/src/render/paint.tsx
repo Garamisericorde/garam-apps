@@ -82,35 +82,3 @@ export function paintAttrs(paint: Paint, id: string): PaintAttrs {
       }
   }
 }
-
-/** A short, readable description for the inspector's paint row. */
-export function paintLabel(paint: Paint): string {
-  switch (paint.kind) {
-    case 'none':
-      return 'None'
-    case 'solid':
-      return paint.color.toUpperCase()
-    case 'linear':
-      return `Linear ${Math.round(paint.angle)}°`
-    case 'radial':
-      return 'Radial'
-  }
-}
-
-/** The colour to show in a swatch, for a paint that may not have just one. */
-export function paintSwatch(paint: Paint): string {
-  switch (paint.kind) {
-    case 'none':
-      return 'transparent'
-    case 'solid':
-      return paint.color
-    case 'linear':
-      return `linear-gradient(${paint.angle + 90}deg, ${paint.stops
-        .map((s) => `${s.color} ${Math.round(s.offset * 100)}%`)
-        .join(', ')})`
-    case 'radial':
-      return `radial-gradient(circle, ${paint.stops
-        .map((s) => `${s.color} ${Math.round(s.offset * 100)}%`)
-        .join(', ')})`
-  }
-}

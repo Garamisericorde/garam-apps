@@ -1,8 +1,16 @@
 node_modules/
+tools/android/
+apps/g-dpi-android/**/build/
+apps/g-dpi-android/.gradle/
+apps/g-dpi-android/**/.cxx/
+apps/g-dpi-android/local.properties
+apps/g-dpi-android/app/src/main/jniLibs/
+apps/g-dpi-android/private/
 dist/
 dist-electron/
 out/
-release/
+apps/*/release/
+/release/
 *.tsbuildinfo
 .DS_Store
 Thumbs.db
@@ -12,3 +20,6 @@ logs/
 .env.local
 installer/bootstrapper/src-tauri/target/
 resources/ffmpeg/
+apps/g-dpi/resources/engine/extracted/
+apps/g-dpi/resources/engine/upstream.zip
+apps/g-presets/private/

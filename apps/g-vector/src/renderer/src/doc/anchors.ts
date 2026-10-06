@@ -7,7 +7,7 @@
  * you drag an anchor down, which is the sort of bug that takes an hour to see.
  */
 import { applyMatrix, invertMatrix, lenVec, type Vec } from './geom'
-import { insertAnchor, type Anchor, type SubPath } from './path'
+import { insertAnchor, reverseSubPath, type Anchor, type SubPath } from './path'
 import { refitCurvature } from './curvature'
 import { toPathNode } from './defaults'
 import { isVectorNode, type Doc, type NodeId, type PathNode, type SceneNode } from './types'
@@ -263,6 +263,40 @@ export function toggleCornerAt(doc: Doc, id: NodeId, subpath: number, index: num
     const anchors = sp.anchors.map((a, i) => (i === index ? { ...a, corner: !a.corner } : a))
     return refitCurvature({ closed: sp.closed, anchors })
   })
+}
+
+/** One anchor's position, in document space. */
+export function anchorPosition(doc: Doc, ref: AnchorRef): Vec | null {
+  const node = doc.nodes.find((entry) => entry.id === ref.nodeId)
+  const anchor = anchorAt(doc, ref)
+  return node && anchor ? anchorWorld(node, anchor) : null
+}
+
+/** Puts one anchor somewhere, in document space. */
+export function setAnchorPosition(doc: Doc, ref: AnchorRef, position: Vec): Doc {
+  const current = anchorPosition(doc, ref)
+  if (!current) return doc
+  return moveAnchors(doc, [ref], { x: position.x - current.x, y: position.y - current.y })
+}
+
+/** Turns a subpath round, so its first point becomes the one a tool extends. */
+export function reverseSubPathIn(doc: Doc, id: NodeId, subpath: number): Doc {
+  return mapSubPath(doc, id, subpath, reverseSubPath)
+}
+
+/**
+ * Which end of an open subpath this anchor is, if it is one.
+ *
+ * A drawing tool resumes from an END and edits an interior point, the way the
+ * pen has always worked: the two are different intentions and the path itself
+ * says which is which.
+ */
+export function openEndAt(doc: Doc, ref: AnchorRef): 'start' | 'end' | null {
+  const sp = pathNodeOf(doc, ref.nodeId)?.subpaths[ref.subpath]
+  if (!sp || sp.closed || sp.anchors.length === 0) return null
+  if (ref.index === sp.anchors.length - 1) return 'end'
+  if (ref.index === 0) return 'start'
+  return null
 }
 
 /** Refits one subpath — run after every curvature edit. */

@@ -135,6 +135,153 @@ body,
 }
 
 
+/* ── Gradient editor ──────────────────────────────────────────────────────── */
+
+.gv-gradient {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.gv-row--spaced {
+  margin-top: 8px;
+}
+
+/*
+ * The ramp, laid out flat regardless of which way the gradient actually points.
+ * The bar is about WHERE each colour sits along the ramp; which way that ramp
+ * is aimed is the dial's job, and mixing the two makes both harder to read.
+ */
+.gv-gradient__bar {
+  position: relative;
+  height: 20px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+}
+
+.gv-gradient__stop {
+  position: absolute;
+  top: -3px;
+  width: 12px;
+  height: 24px;
+  transform: translateX(-50%);
+  border: 2px solid var(--text-on-accent);
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
+  cursor: ew-resize;
+  padding: 0;
+}
+
+.gv-gradient__stop.is-dragging,
+.gv-gradient__stop:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.gv-gradient__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gv-gradient__hex {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+
+.gv-gradient__label {
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+}
+
+.gv-gradient__pos {
+  width: 58px;
+  flex: none;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding-left: 6px;
+}
+
+.gv-gradient__pos:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-ring);
+}
+
+.gv-gradient__presets {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.gv-gradient__presets button {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  color: var(--text-faint);
+  font-size: var(--fs-sm);
+  line-height: 1;
+}
+
+.gv-gradient__presets button:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.gv-gradient__presets button.is-on {
+  color: var(--text-on-accent);
+  background: var(--accent);
+}
+
+/*
+ * The whole disc aims the gradient, not a handle on its rim.
+ *
+ * A direction is one number; making someone catch an eight-pixel dot to set it
+ * is exactly why rotating a gradient is a chore in the tool this replaces.
+ */
+.gv-dial {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-full, 50%);
+  background: var(--bg-inset);
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.gv-dial.is-active,
+.gv-dial:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.gv-dial__needle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 15px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  transform-origin: 0 50%;
+}
+
+.gv-dial__knob {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  margin: -3.5px 0 0 -3.5px;
+  border-radius: 50%;
+  background: var(--accent);
+  pointer-events: none;
+}
+
 /* ── Layers ─────────────────────────────────────────────────────────────── */
 
 .gv-layers {
@@ -392,6 +539,21 @@ body,
   stroke: var(--gv-anchor-fill);
 }
 
+/*
+ * The end of a segment that stays put when its length or angle is typed in.
+ *
+ * A wider, quieter ring than the hover mark: it is a standing fact about the
+ * selection rather than something about the cursor, and it has to be there
+ * without competing with the point being aimed at.
+ */
+.gv-anchor-pivot {
+  fill: none;
+  stroke: var(--gv-handle);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 2.5;
+  opacity: 0.9;
+}
+
 /* The ring on the point the next click would close on, or remove. */
 .gv-anchor-mark {
   fill: none;
@@ -517,12 +679,31 @@ body,
 }
 
 .gv-group__title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin: 0 0 8px;
   font-size: var(--fs-xs);
   font-weight: var(--fw-semibold);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-faint);
+}
+
+.gv-group__action {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 18px;
+  border-radius: 4px;
+  color: var(--text-faint);
+  background: transparent;
+  cursor: pointer;
+}
+
+.gv-group__action:hover {
+  color: var(--text);
+  background: var(--bg-hover);
 }
 
 .gv-grid2 {

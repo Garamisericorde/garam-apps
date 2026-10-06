@@ -59,7 +59,13 @@ export function NumberField({
         placeholder={value === null ? placeholder : undefined}
         disabled={disabled}
         aria-label={label}
-        onFocus={() => setDraft(display)}
+        onFocus={(event) => {
+          setDraft(display)
+          // Focusing a number field means changing the number, so the old one
+          // is selected ready to be typed over. Placing a caret in the middle
+          // of "347.78" is not what anyone came here to do.
+          event.target.select()
+        }}
         onChange={(event) => setDraft(event.target.value)}
         onBlur={commit}
         onKeyDown={(event) => {

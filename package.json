@@ -8,6 +8,10 @@
     "apps/*"
   ],
   "scripts": {
+    "dev:dpi": "npm run dev -w g-dpi",
+    "build:dpi": "npm run build -w g-dpi",
+    "package:dpi": "npm run package -w g-dpi",
+    "package:presets": "npm run package -w g-presets",
     "dev:snap": "npm run dev -w g-snap",
     "dev:note": "npm run dev -w g-note",
     "dev:recorder": "npm run dev -w g-recorder",
@@ -22,7 +26,7 @@
     "format": "prettier --write .",
     "catalog": "node tools/release/build-catalog.mjs",
     "clean": "node tools/release/clean.mjs",
-    "package:all": "npm run package:snap && npm run package:recorder && npm run package:note && npm run package:vector"
+    "package:all": "npm run package:snap && npm run package:recorder && npm run package:note && npm run package:vector && npm run package:dpi && npm run package:presets"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",

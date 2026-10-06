@@ -208,3 +208,10 @@ export const TrashIcon = (): ReactElement => (
     <path d="M4.2 4.4l.6 8.2h6.4l.6-8.2" />
   </Small>
 )
+
+export const SwapIcon = (): ReactElement => (
+  <Small>
+    <path d="M3.2 5.6h9.6l-2.4-2.4" />
+    <path d="M12.8 10.4H3.2l2.4 2.4" />
+  </Small>
+)

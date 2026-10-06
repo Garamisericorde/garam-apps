@@ -1,4 +1,4 @@
-import { BrowserWindow, screen } from 'electron'
+import { app, BrowserWindow, screen } from 'electron'
 import { join } from 'node:path'
 import { is } from '@electron-toolkit/utils'
 import type { Logger } from '@garam/core'
@@ -23,6 +23,14 @@ import {
 const REVEAL_GRACE_MS = 700
 /** How long to wait before believing a blur. */
 const BLUR_CONFIRM_MS = 150
+/**
+ * Working set at which one process is worth complaining about.
+ *
+ * Measured for scale rather than picked: a healthy session sits around 100-300
+ * MB per process, and the build that leaked its capture canvases reached 934 MB
+ * in the GPU process before the overlay started taking seconds to appear.
+ */
+const MEMORY_WARN_MB = 700
 
 export interface OverlayDefaults {
   color: string
@@ -67,6 +75,8 @@ export class OverlayController {
   private blurTimer: NodeJS.Timeout | null = null
   /** While a modal dialog is up, losing focus must not close the overlay. */
   private ignoreBlur = false
+  /** Set once the memory warning has been given, so it is not repeated. */
+  private memoryWarned = false
 
   constructor(
     private readonly log: Logger,
@@ -132,6 +142,41 @@ export class OverlayController {
       this.loaded = null
       this.visible = false
     })
+
+    /*
+     * A dead renderer used to be completely silent.
+     *
+     * Nothing in this app listened for it, so a killed or crashed overlay
+     * process left a window that Windows still owns and still previews — as a
+     * black rectangle, because it sits at opacity 0 — with not one line in the
+     * log. The app looked possessed rather than broken.
+     *
+     * Reloading puts it back on its feet: the window survives, so this costs a
+     * page load rather than the capture the user is in the middle of asking for.
+     */
+    win.webContents.on('render-process-gone', (_event, details) => {
+      this.log.error(
+        `Overlay renderer gone (${details.reason}, exit ${details.exitCode}) — reloading`,
+      )
+      this.visible = false
+      if (win.isDestroyed()) return
+      win.setOpacity(0)
+      win.setIgnoreMouseEvents(true)
+      this.isLoaded = false
+      this.loaded = this.load(win)
+      this.loaded
+        .then(() => {
+          this.isLoaded = true
+          if (!win.isDestroyed()) this.warmRenderer(win)
+        })
+        .catch((err) => this.log.error('Overlay renderer failed to reload', err))
+    })
+
+    // A capture that takes 50 seconds was measured in the field and left no
+    // trace at all. These two say when the page stopped answering and when it
+    // started again, so the gap has a start and an end rather than a guess.
+    win.on('unresponsive', () => this.log.warn('Overlay renderer is not responding'))
+    win.on('responsive', () => this.log.info('Overlay renderer is responding again'))
 
     // Close on focus loss so Alt+Tab does not leave the overlay stuck on top.
     // Suppressed while a modal dialog is up, and in development so switching to
@@ -249,6 +294,7 @@ export class OverlayController {
           `awaitLoaded=${tAfterLoaded - tLoaded}ms ` +
           `heap=${(mem.heapUsed / 1048576).toFixed(0)}MB external=${(mem.external / 1048576).toFixed(0)}MB`,
       )
+      this.reportMemory()
 
       const started = Date.now()
       const { shots, union, diagnostics } = await captureAllDisplays()
@@ -298,6 +344,43 @@ export class OverlayController {
     }
   }
 
+  /**
+   * Says how much memory each process is holding, and complains once when one
+   * of them is holding far too much.
+   *
+   * The main process was the only one being measured, and it is the one that
+   * barely moves. The capture path lives in the renderer and the GPU process:
+   * on a build that did not free its canvases, the GPU process was at 934 MB
+   * after 19 hours while the main process sat at 57 MB. Whichever process is
+   * growing, a line in the default log now names it — rather than the user
+   * having to notice that the app has become slow.
+   */
+  private reportMemory(): void {
+    let worst = { type: '', mb: 0 }
+    const parts: string[] = []
+
+    for (const metric of app.getAppMetrics()) {
+      // `memory` is deprecated in favour of per-process sampling, but it is the
+      // only figure available synchronously, and this sits on the hotkey path.
+      const mb = metric.memory.workingSetSize / 1024
+      parts.push(`${metric.type}=${mb.toFixed(0)}MB`)
+      if (mb > worst.mb) worst = { type: metric.type, mb }
+    }
+
+    this.log.debug(`Memory: ${parts.join(' ')}`)
+
+    if (worst.mb >= MEMORY_WARN_MB && !this.memoryWarned) {
+      this.memoryWarned = true
+      this.log.warn(
+        `The ${worst.type} process is holding ${worst.mb.toFixed(0)} MB. ` +
+          'Captures get slower from here; restarting G-Snap clears it.',
+      )
+    } else if (worst.mb < MEMORY_WARN_MB * 0.8) {
+      // Re-arm once it comes back down, so a second climb is reported too.
+      this.memoryWarned = false
+    }
+  }
+
   /** Called once the renderer has painted; makes the window visible. */
   markReady(): void {
     const win = this.win
@@ -313,6 +396,12 @@ export class OverlayController {
     win.setIgnoreMouseEvents(false)
     win.setOpacity(1)
     if (!win.isVisible()) win.show()
+    // Windows adds the taskbar tab back on show, and skipTaskbar is not sticky
+    // across it. Left alone, the overlay earns a permanent taskbar button whose
+    // preview is solid black — it is a full-screen window resting at opacity 0.
+    // Confirmed on a running copy: the only window g-snap had in the taskbar was
+    // this one, 2561x1441 and layered.
+    win.setSkipTaskbar(true)
 
     // A tray app is not the foreground process, so Electron's focus() alone is
     // refused by Windows and the overlay opens without keyboard focus — Esc
@@ -350,6 +439,10 @@ export class OverlayController {
       win.setAlwaysOnTop(false)
       win.setOpacity(0)
       win.setIgnoreMouseEvents(true)
+      // Asserted here as well as on reveal: whatever put the tab back — a show,
+      // an always-on-top change, a shell restart — it is gone by the time the
+      // overlay is at rest, which is the state it spends its life in.
+      win.setSkipTaskbar(true)
       // Leave nothing on the surface: see EVENTS.OVERLAY_CLEAR.
       win.webContents.send(EVENTS.OVERLAY_CLEAR)
     }

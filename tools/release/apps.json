@@ -1,0 +1,39 @@
+{
+  "$comment": "Distribution config: where the bootstrapper downloads installers from.",
+  "github": {
+    "owner": "Garamisericorde",
+    "repo": "garam-apps"
+  },
+  "apps": [
+    { "id": "g-dpi", "name": "G-DPI", "description": "Automatic GoodbyeDPI service with Superonline profiles", "workspace": "apps/g-dpi", "tagPrefix": "g-dpi-v", "default": false, "kind": "zip-powershell", "artifact": "G-DPI-{version}.zip", "entryPoint": "G-DPI-{version}/service/install.ps1", "silentArgs": [] },
+    { "id": "g-presets", "name": "G-Presets", "description": "Profile Presets plugin for installed Vencord. Close Discord before installing.", "workspace": "apps/g-presets", "tagPrefix": "g-presets-v", "default": false, "kind": "zip-powershell", "artifact": "G-Presets-{version}.zip", "entryPoint": "G-Presets-{version}/scripts/install.ps1", "silentArgs": [] },
+    { "id": "g-vector", "name": "G-Vector", "description": "Vector drawing with pen, curvature tools and gradients", "workspace": "apps/g-vector", "tagPrefix": "g-vector-v", "default": false },
+    {
+      "id": "g-snap",
+      "name": "G-Snap",
+      "description": "Screen capture, annotation and quick sharing",
+      "workspace": "apps/g-snap",
+      "tagPrefix": "g-snap-v",
+      "requires": ["webview2:false"],
+      "default": true
+    },
+    {
+      "id": "g-recorder",
+      "name": "G-Recorder",
+      "description": "Instant replay recording and simple video trimming",
+      "workspace": "apps/g-recorder",
+      "tagPrefix": "g-recorder-v",
+      "requires": [],
+      "default": false
+    },
+    {
+      "id": "g-note",
+      "name": "G-Note",
+      "description": "Rich text, sticky notes and freehand drawing",
+      "workspace": "apps/g-note",
+      "tagPrefix": "g-note-v",
+      "requires": [],
+      "default": false
+    }
+  ]
+}

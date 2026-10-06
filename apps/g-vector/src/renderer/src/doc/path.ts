@@ -342,3 +342,22 @@ export function scaleSubPaths(
     })),
   }))
 }
+
+/**
+ * The same curve, walked from the other end.
+ *
+ * Reversing is what lets a drawing tool continue a path from its START: the
+ * tools only ever append, so the end you want to grow becomes the last anchor
+ * and everything downstream works unchanged. Each anchor's handles swap, since
+ * the one the curve used to leave along is now the one it arrives along.
+ */
+export function reverseSubPath(sp: SubPath): SubPath {
+  return {
+    closed: sp.closed,
+    anchors: [...sp.anchors].reverse().map((anchor) => ({
+      ...anchor,
+      in: anchor.out,
+      out: anchor.in,
+    })),
+  }
+}

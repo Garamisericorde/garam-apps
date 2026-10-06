@@ -12,9 +12,17 @@ body {
   user-select: none;
 }
 
+/*
+ * The SOLID accent, not the soft one.
+ *
+ * --accent-soft is an 18% tint, which over a dark inset field is a shade too
+ * close to the field itself to see: selecting the contents of a number box
+ * looked exactly like not selecting it. A selection has to be unmistakable,
+ * because half of what it does is tell you that typing will replace something.
+ */
 ::selection {
-  background: var(--accent-soft);
-  color: var(--text);
+  background: var(--accent);
+  color: var(--text-on-accent);
 }
 
 /* ── Scrollbar ──────────────────────────────────────────────────── */

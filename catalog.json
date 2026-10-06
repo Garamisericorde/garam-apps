@@ -1,21 +1,74 @@
 {
-  "schemaVersion": 1,
-  "publishedAt": "2026-09-07T20:14:13.961Z",
+  "schemaVersion": 2,
+  "publishedAt": "2026-10-06T10:50:17.374Z",
   "apps": [
+    {
+      "id": "g-dpi",
+      "name": "G-DPI",
+      "description": "Automatic GoodbyeDPI service with Superonline profiles",
+      "version": "0.1.0",
+      "sizeBytes": 144143,
+      "default": false,
+      "requires": [],
+      "installer": {
+        "fileName": "G-DPI-0.1.0.zip",
+        "url": "https://github.com/Garamisericorde/garam-apps/releases/download/g-dpi-v0.1.0/G-DPI-0.1.0.zip",
+        "sha256": "7d63da9260f920d1d06f89ec1e38a47c9bddd3bc582b893efcdfa9aeaab3c53d",
+        "kind": "zip-powershell",
+        "entryPoint": "G-DPI-0.1.0/service/install.ps1",
+        "silentArgs": []
+      }
+    },
+    {
+      "id": "g-presets",
+      "name": "G-Presets",
+      "description": "Profile Presets plugin for installed Vencord. Close Discord before installing.",
+      "version": "0.1.0",
+      "sizeBytes": 1624427,
+      "default": false,
+      "requires": [],
+      "installer": {
+        "fileName": "G-Presets-0.1.0.zip",
+        "url": "https://github.com/Garamisericorde/garam-apps/releases/download/g-presets-v0.1.0/G-Presets-0.1.0.zip",
+        "sha256": "79d6af7d0989ceb3f523236734bf70560e4eff5e3624a36f9716baee39e231e4",
+        "kind": "zip-powershell",
+        "entryPoint": "G-Presets-0.1.0/scripts/install.ps1",
+        "silentArgs": []
+      }
+    },
+    {
+      "id": "g-vector",
+      "name": "G-Vector",
+      "description": "Vector drawing with pen, curvature tools and gradients",
+      "version": "0.1.0",
+      "sizeBytes": 82814246,
+      "default": false,
+      "requires": [],
+      "installer": {
+        "fileName": "G-Vector-0.1.0-setup.exe",
+        "url": "https://github.com/Garamisericorde/garam-apps/releases/download/g-vector-v0.1.0/G-Vector-0.1.0-setup.exe",
+        "sha256": "948e886e79ad193056666cf1570efa3779bbeef0ee5766da71c4a137a81ad822",
+        "kind": "exe",
+        "silentArgs": [
+          "/S"
+        ]
+      }
+    },
     {
       "id": "g-snap",
       "name": "G-Snap",
       "description": "Screen capture, annotation and quick sharing",
-      "version": "0.1.4",
-      "sizeBytes": 83628437,
+      "version": "0.1.5",
+      "sizeBytes": 83634453,
       "default": true,
       "requires": [
         "webview2:false"
       ],
       "installer": {
-        "fileName": "G-Snap-0.1.4-setup.exe",
-        "url": "https://github.com/Garamisericorde/garam-apps/releases/download/g-snap-v0.1.4/G-Snap-0.1.4-setup.exe",
-        "sha256": "cdf99d52af791472cbe50955812688e1915c5e670f645ef84b03ccb071e15389",
+        "fileName": "G-Snap-0.1.5-setup.exe",
+        "url": "https://github.com/Garamisericorde/garam-apps/releases/download/g-snap-v0.1.5/G-Snap-0.1.5-setup.exe",
+        "sha256": "527e171f48c6c9832deb2d1e63f2d848bb9be73e708a3d743412beb7b0efe9d1",
+        "kind": "exe",
         "silentArgs": [
           "/S"
         ]
@@ -25,14 +78,15 @@
       "id": "g-recorder",
       "name": "G-Recorder",
       "description": "Instant replay recording and simple video trimming",
-      "version": "0.1.5",
-      "sizeBytes": 83656124,
+      "version": "0.1.19",
+      "sizeBytes": 83673982,
       "default": false,
       "requires": [],
       "installer": {
-        "fileName": "G-Recorder-0.1.5-setup.exe",
-        "url": "https://github.com/Garamisericorde/garam-apps/releases/download/g-recorder-v0.1.5/G-Recorder-0.1.5-setup.exe",
-        "sha256": "b9416aec91f0aa425a921b279525a30b831d17ea00de9badb9cd12cb49f5f585",
+        "fileName": "G-Recorder-0.1.19-setup.exe",
+        "url": "https://github.com/Garamisericorde/garam-apps/releases/download/g-recorder-v0.1.19/G-Recorder-0.1.19-setup.exe",
+        "sha256": "4d5d91180594ce4ba1b65cfda9506cbd9ffef2379db92e7ad51a70e1c332bde9",
+        "kind": "exe",
         "silentArgs": [
           "/S"
         ]
@@ -50,6 +104,7 @@
         "fileName": "G-Note-1.0.1-setup.exe",
         "url": "https://github.com/Garamisericorde/garam-apps/releases/download/g-note-v1.0.1/G-Note-1.0.1-setup.exe",
         "sha256": "da4f8b72a54bdd25406689428fd78e7996118121a80a044e0f94f77e5b6fd91a",
+        "kind": "exe",
         "silentArgs": [
           "/S"
         ]

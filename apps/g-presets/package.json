@@ -1,0 +1,8 @@
+{
+  "name": "g-presets",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Profile Presets installer for an existing Vencord installation",
+  "license": "GPL-3.0-or-later",
+  "scripts": { "package": "node scripts/package.mjs", "package:personal": "node scripts/package.mjs --personal" }
+}

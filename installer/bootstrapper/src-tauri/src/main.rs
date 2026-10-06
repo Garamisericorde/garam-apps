@@ -4,7 +4,7 @@
 //   1. Downloads catalog.json (app list + version + sha256)
 //   2. Downloads the installers the user picked, reporting progress to the UI
 //   3. Verifies SHA-256 — a mismatch means it does NOT install
-//   4. Runs the NSIS installer silently (/S) and waits for its exit code
+//   4. Runs the EXE or extracted PowerShell installer and checks its exit code
 //
 // Installers are never embedded in this binary, so the setup stays a few MB
 // and adding a new app does not require republishing the setup.
@@ -12,7 +12,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, Component};
+use std::sync::Mutex;
 use std::process::Command;
 
 use futures_util::StreamExt;
@@ -26,7 +27,7 @@ use sha2::{Digest, Sha256};
 /// the variable is unset — otherwise every fresh clone would fail to build.
 const DEFAULT_CATALOG_URL: &str = match option_env!("GARAM_CATALOG_URL") {
     Some(url) => url,
-    None => "https://raw.githubusercontent.com/Garamisericorde/garam-apps/main/catalog.json",
+    None => "https://github.com/Garamisericorde/garam-apps/releases/download/catalog/catalog.json",
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -51,6 +52,9 @@ struct AppEntry {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Installer {
+    kind: String,
+    #[serde(rename = "entryPoint")]
+    entry_point: Option<String>,
     #[serde(rename = "fileName")]
     file_name: String,
     url: String,
@@ -75,11 +79,13 @@ fn emit(window: &tauri::Window, progress: Progress) {
     let _ = window.emit("install-progress", progress);
 }
 
-#[tauri::command]
-async fn fetch_catalog(url: Option<String>) -> Result<Catalog, String> {
-    let url = url.unwrap_or_else(|| DEFAULT_CATALOG_URL.to_string());
+struct SetupState { catalog: Mutex<Option<Catalog>>, busy: Mutex<bool> }
 
-    let response = reqwest::get(&url)
+#[tauri::command]
+async fn fetch_catalog(state: tauri::State<'_, SetupState>) -> Result<Catalog, String> {
+    let url = DEFAULT_CATALOG_URL.to_string();
+
+    let response = reqwest::Client::builder().connect_timeout(std::time::Duration::from_secs(30)).timeout(std::time::Duration::from_secs(60)).build().map_err(|e| e.to_string())?.get(&url).send()
         .await
         .map_err(|e| format!("Could not download the catalog: {e}"))?;
 
@@ -95,20 +101,40 @@ async fn fetch_catalog(url: Option<String>) -> Result<Catalog, String> {
         .await
         .map_err(|e| format!("Could not parse the catalog: {e}"))?;
 
-    if catalog.schema_version != 1 {
+    if catalog.schema_version != 2 {
         return Err(format!(
             "This setup does not support catalog version {}. Download the latest setup.",
             catalog.schema_version
         ));
     }
 
+    for app in &catalog.apps { validate_installer(&app.installer)?; }
+    *state.catalog.lock().map_err(|_| "Catalog state unavailable")? = Some(catalog.clone());
     Ok(catalog)
 }
 
 /// Downloads, verifies and installs the selected apps one after another.
 #[tauri::command]
-async fn install_apps(window: tauri::Window, apps: Vec<AppEntry>) -> Result<Vec<String>, String> {
-    let temp_dir = std::env::temp_dir().join("garam-setup");
+async fn install_apps(window: tauri::Window, ids: Vec<String>, state: tauri::State<'_, SetupState>) -> Result<Vec<String>, String> {
+    {
+        let mut busy = state.busy.lock().map_err(|_| "Setup state unavailable")?;
+        if *busy { return Err("Installation already running".into()); }
+        *busy = true;
+    }
+    let result = install_selected(&window, ids, &state).await;
+    if let Ok(mut busy) = state.busy.lock() { *busy = false; }
+    result
+}
+
+async fn install_selected(window: &tauri::Window, ids: Vec<String>, state: &SetupState) -> Result<Vec<String>, String> {
+    let catalog = state.catalog.lock().map_err(|_| "Catalog state unavailable")?.clone().ok_or("Fetch the catalog first")?;
+    let mut apps = Vec::new();
+    for id in ids {
+        if apps.iter().any(|app: &AppEntry| app.id == id) { continue; }
+        apps.push(catalog.apps.iter().find(|app| app.id == id).ok_or("Unknown application")?.clone());
+    }
+    let unique = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|e| e.to_string())?.as_nanos();
+    let temp_dir = std::env::temp_dir().join(format!("garam-setup-{}-{unique}", std::process::id()));
     std::fs::create_dir_all(&temp_dir)
         .map_err(|e| format!("Could not create the temp folder: {e}"))?;
 
@@ -159,7 +185,7 @@ async fn install_apps(window: tauri::Window, apps: Vec<AppEntry>) -> Result<Vec<
             },
         );
 
-        run_installer(&target, &app.installer.silent_args)
+        run_package(&target, &app.installer, &temp_dir)
             .map_err(|e| format!("{}: {e}", app.name))?;
 
         let _ = std::fs::remove_file(&target);
@@ -182,7 +208,7 @@ async fn install_apps(window: tauri::Window, apps: Vec<AppEntry>) -> Result<Vec<
 
 /// Streams the download to disk, emitting progress as chunks arrive.
 async fn download(window: &tauri::Window, app: &AppEntry, target: &Path) -> Result<(), String> {
-    let response = reqwest::get(&app.installer.url)
+    let response = reqwest::Client::builder().connect_timeout(std::time::Duration::from_secs(30)).timeout(std::time::Duration::from_secs(1800)).build().map_err(|e| e.to_string())?.get(&app.installer.url).send()
         .await
         .map_err(|e| format!("{}: could not connect ({e})", app.name))?;
 
@@ -248,6 +274,66 @@ fn sha256_file(path: &Path) -> std::io::Result<String> {
     Ok(format!("{:x}", hasher.finalize()))
 }
 
+fn safe_relative(value: &str) -> bool {
+    !value.is_empty() && !value.contains('\\') && !value.contains(':') &&
+        Path::new(value).components().all(|part| matches!(part, Component::Normal(_)))
+}
+
+fn validate_installer(installer: &Installer) -> Result<(), String> {
+    if !safe_relative(&installer.file_name) || installer.file_name.contains('/') {
+        return Err("Invalid installer filename".into());
+    }
+    if !installer.url.starts_with("https://github.com/Garamisericorde/garam-apps/releases/download/") {
+        return Err("Installer URL is outside the Garam release repository".into());
+    }
+    if installer.sha256.len() != 64 || !installer.sha256.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err("Invalid installer checksum".into());
+    }
+    match installer.kind.as_str() {
+        "exe" if installer.file_name.ends_with(".exe") => Ok(()),
+        "zip-powershell" if installer.file_name.ends_with(".zip") => {
+            let entry = installer.entry_point.as_deref().ok_or("Archive entry point missing")?;
+            if safe_relative(entry) && entry.ends_with(".ps1") { Ok(()) } else { Err("Invalid archive entry point".into()) }
+        },
+        _ => Err("Unsupported installer format".into())
+    }
+}
+
+fn run_package(path: &Path, installer: &Installer, temp_dir: &Path) -> Result<(), String> {
+    if installer.kind == "exe" { return run_installer(path, &installer.silent_args); }
+    let extraction = temp_dir.join(format!("{}-files", installer.file_name));
+    let mut archive = zip::ZipArchive::new(std::fs::File::open(path).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    if archive.len() > 10000 { return Err("Archive contains too many files".into()); }
+    let mut size = 0u64;
+    for index in 0..archive.len() {
+        let mut file = archive.by_index(index).map_err(|e| e.to_string())?;
+        size = size.checked_add(file.size()).ok_or("Archive size overflow")?;
+        if size > 512 * 1024 * 1024 { return Err("Archive exceeds extraction limit".into()); }
+        if file.unix_mode().map(|mode| mode & 0o170000 == 0o120000).unwrap_or(false) { return Err("Archive symlinks are not supported".into()); }
+        let relative = file.enclosed_name().ok_or("Archive path escapes destination")?;
+        if !safe_relative(file.name().trim_end_matches('/')) { return Err("Unsafe archive path".into()); }
+        let target = extraction.join(relative);
+        if file.is_dir() { std::fs::create_dir_all(&target).map_err(|e| e.to_string())?; }
+        else {
+            if let Some(parent) = target.parent() { std::fs::create_dir_all(parent).map_err(|e| e.to_string())?; }
+            std::io::copy(&mut file, &mut std::fs::File::create(target).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+        }
+    }
+    let entry = extraction.join(installer.entry_point.as_deref().ok_or("Missing script")?);
+    if !entry.is_file() { return Err("Archive installation script was not found".into()); }
+    let windows = std::env::var_os("SystemRoot").ok_or("Windows directory unavailable")?;
+    let mut command = Command::new(Path::new(&windows).join("System32/WindowsPowerShell/v1.0/powershell.exe"));
+    command.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"]).arg(entry).args(&installer.silent_args);
+    #[cfg(windows)] {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+    }
+    let output = command.output().map_err(|e| e.to_string())?;
+    if !output.status.success() { return Err(format!("Script installation failed: {} {}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr))); }
+    let _ = std::fs::remove_dir_all(&extraction);
+    Ok(())
+}
+
 /// Runs the NSIS installer silently and waits for it to finish.
 ///
 /// No install-directory override on purpose. Each app's installer already knows
@@ -265,7 +351,7 @@ fn run_installer(path: &Path, silent_args: &[String]) -> Result<(), String> {
         .map_err(|e| format!("could not start the installer ({e})"))?;
 
     match status.code() {
-        Some(0) => Ok(()),
+        Some(0) | Some(3010) => Ok(()),
         // NSIS 1223 = the user declined the UAC prompt
         Some(1223) => Err("the install was cancelled by the user".into()),
         Some(code) => Err(format!("the installer failed with exit code {code}")),
@@ -275,7 +361,23 @@ fn run_installer(path: &Path, silent_args: &[String]) -> Result<(), String> {
 
 fn main() {
     tauri::Builder::default()
+        .manage(SetupState { catalog: Mutex::new(None), busy: Mutex::new(false) })
         .invoke_handler(tauri::generate_handler![fetch_catalog, install_apps])
         .run(tauri::generate_context!())
         .expect("failed to start the Tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn rejects_escaping_paths() {
+        for path in ["../evil.ps1", "/evil.ps1", "C:/evil.ps1", "folder\\evil.ps1", ""] { assert!(!safe_relative(path)); }
+        assert!(safe_relative("G-DPI-0.1.0/service/install.ps1"));
+    }
+    #[test]
+    fn rejects_untrusted_release_urls() {
+        let installer = Installer { kind: "exe".into(), entry_point: None, file_name: "setup.exe".into(), url: "https://evil.example/setup.exe".into(), sha256: "a".repeat(64), silent_args: vec![] };
+        assert!(validate_installer(&installer).is_err());
+    }
 }

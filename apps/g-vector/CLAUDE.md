@@ -16,10 +16,12 @@ Phases P0–P3 are in. Everything below is built and working:
 - **the snap engine and the smart-guide overlay**
 - **pen, curvature and direct select**, with anchor and handle editing
 - **placed bitmaps** (paste, drop, file dialog) and a **layers list**
+- **linear and radial gradients**, with a direction dial and draggable stops
+- **segment length and angle**, readable and editable
 - inspector (X/Y/W/H/angle/radius, fill, stroke, opacity, arrange)
 
-Not yet: text, the on-canvas gradient editor, the eyedropper, boolean ops,
-layer groups, file I/O, packaging. See "Known gaps" for the specific compromises
+Not yet: text, an on-CANVAS gradient handle (the editor is in the inspector),
+the eyedropper, boolean ops, layer groups, file I/O, packaging. See "Known gaps" for the specific compromises
 inside what IS built.
 
 ## Rendering: SVG DOM, not Konva
@@ -219,7 +221,17 @@ thing Shift was asked for.
 
 Both the pen and the curvature tool edit as well as add — drag a point, pull a
 handle, Alt-click to remove one — so finishing a path does not mean changing
-tools to touch it. The exceptions are the two points of the path currently being
+tools to touch it.
+
+**Clicking the loose END of an open path picks the drawing back up there.**
+Escape finishing a stroke must not mean the stroke is finished forever, and the
+alternative — starting a second path that merely touches the first — leaves two
+objects where the user sees one line. Resuming from the START reverses the
+subpath first (`reverseSubPath`): the tools only ever append, so the end being
+grown has to become the last anchor. The reversal swaps each anchor's handles,
+because walking backwards the one the curve left along is the one it now arrives
+along, and `tests/paths.test.ts` samples both directions to prove the curve does
+not move. Only the two ends resume; an interior point is an edit. The exceptions are the two points of the path currently being
 drawn: its first point closes the path, and its last one retracts its outgoing
 handle (pen) or toggles sharp (curvature).
 
@@ -236,6 +248,90 @@ threshold (`convert` in the canvas's interaction state). Converting on selection
 instead would take the radius away from anyone who only wanted a closer look.
 The conversion is deterministic, so the anchor shown is the anchor that moves —
 `tests/paths.test.ts` pins that the two agree.
+
+## Segment length and angle
+
+A bounding box says nothing useful about a diagonal. A line from one corner of
+its box to the other reports a width, a height and a rotation of ZERO — and the
+number the person drawing it wants is none of those, it is the angle of the line
+itself. `doc/segment.ts` measures and sets it.
+
+- **The pivot comes from the SELECTION ORDER**, not from path order: the point
+  picked first stays, the one picked second swings. Something has to be the
+  pivot — turning about the midpoint moves a point the user was not talking
+  about — but taking it from path order made the answer to "which point does
+  this field move" depend on the direction the path happened to be drawn in,
+  which is invisible and arbitrary. A swap button in the section header flips
+  it, and a dashed ring on the canvas says which end is standing still.
+- **The edit goes through the node transform.** Anchors live in the node's own
+  space, so typing 90 into a path that is itself rotated has to come back
+  through `moveAnchors`, not be written straight into the anchor.
+- **0 points right and the angle grows clockwise**, matching the drawing
+  readout and the gradient dial. One convention across the app.
+
+A single selected anchor gets its own X and Y for the same reason: while a
+point is being worked on, the Transform box above is describing the whole shape,
+which is not the thing in hand.
+
+The segment fields appear when two NEIGHBOURING points are selected — clicking a segment with
+the direct tool selects exactly those two, which is the click that used to
+select nothing — and, for a plain two-point line, with no anchor selection at
+all, because there is nothing else it could be about.
+
+## Gradients
+
+The document stores an ANGLE, not two endpoints (`doc/types.ts`), and the
+renderer derives the endpoints from it (`render/paint.tsx`). Illustrator stores
+endpoints, which is why turning a gradient there means finding a handle on a
+line you first have to reveal. Here the same number is written by a dial, by a
+degree field and by four direction presets, and none of them has to know about
+the others.
+
+**Zero points right and the angle grows clockwise**, the way SVG measures it
+(the y axis points down). The dial, the field and the renderer all have to agree
+or turning the gradient moves it somewhere nobody asked for —
+`tests/paint.test.ts` pins 0, 90 and 270 against the actual rendered endpoints.
+CSS measures from the top instead, so the preview swatch adds 90; that offset is
+the only place the two conventions meet.
+
+**Dominance is a position, not a colour.** "Mostly green, black only in the far
+corner" means moving the green stop most of the way along the ramp so the fade
+happens late and fast. So the editor is a bar showing the real ramp with
+draggable stops on it, not two swatches with the transition fixed in the middle.
+The stops **re-sort by offset** on every edit: a ramp whose stops are out of
+order renders as though the colours had swapped, so dragging one past the other
+would otherwise turn the fill inside out under the cursor.
+
+**Changing the kind of fill converts, it does not replace** (`doc/paint.ts`).
+Flipping between solid, linear and radial while deciding is normal; a switch
+that reset to a stock black-and-white ramp would make the choice feel like a
+commitment. A flat fill becomes its own colour fading to black — which is the
+gradient people are usually reaching for.
+
+The whole dial responds to a drag, not a handle on its rim. A direction is one
+number, and making someone catch an eight-pixel dot to set it is exactly the
+thing this app exists to not do.
+
+## The frameless window on Windows
+
+**Maximising a frameless window puts part of it off screen.** Windows sizes it
+to the work area PLUS its invisible resize border, so roughly eight pixels on
+every edge — more at higher DPI — end up outside the display. Two symptoms, one
+cause: the top of the title bar is above the top of the screen, taking the strip
+you drag the window by with it, and any control near the right edge is cut in
+half.
+
+`MainWindow` measures the overflow rather than assuming it — the border is a
+different thickness at every DPI — by comparing the window bounds against
+`screen.getDisplayMatching(bounds).workArea`, and sends it with the maximised
+flag. `App` applies it as padding on `.gv-app`. The padding lands in the part of
+the window nobody can see, which is the point.
+
+**A title bar's free slot must stay a drag region.** `@garam/ui`'s TitleBar used
+to mark the whole slot `.g-no-drag`; the slot stretches across the middle of the
+bar, so that left a frameless window with almost nothing to grab. The stylesheet
+opts out the slot's children one by one instead (`.g-titlebar__slot > *`), which
+fixes every app in the family at once.
 
 ## Bitmaps and layers
 
@@ -329,8 +425,6 @@ Deliberate, and each one is commented at the site:
   There is no shared starting angle to correct from.
 - **No dimension matching** ("same width as that one"). The candidate model is
   per-axis coordinates; sizes would need a second pass.
-- **The pen cannot resume an existing open path.** Clicking its end point starts
-  a new path rather than continuing the old one.
 - **The direct tool cannot drag a whole path by its fill.** Clicking the
   interior selects the node; use the select tool to move it.
 - **A pen point costs two undo steps** when it is dragged into a curve: one for
