@@ -1,5 +1,8 @@
 param([string]$Gh = 'gh', [string]$Target = 'codex/setup-release')
 $ErrorActionPreference = 'Stop'
+if ($Gh -eq 'gh' -and -not (Get-Command gh -ErrorAction SilentlyContinue)) {
+  $Gh = Join-Path $env:LOCALAPPDATA 'Programs/GitHub CLI/gh.exe'
+}
 $repo = 'Garamisericorde/garam-apps'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $catalog = Get-Content -LiteralPath (Join-Path $root 'catalog.json') -Raw | ConvertFrom-Json
