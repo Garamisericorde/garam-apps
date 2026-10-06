@@ -1,14 +1,16 @@
 # garam-apps
 
 Small Windows desktop apps that share one design system, one set of libraries
-and one build chain. Three are released; a fourth is being built.
+and one build chain. Six applications are available through the shared setup.
 
 | | |
 |---|---|
 | **G-Snap** | Screen capture and annotation, in the shape of Lightshot. Press PrintScreen, drag a region, draw on it, copy or save. |
 | **G-Recorder** | Always-on instant replay. Keeps the last few minutes in a rolling buffer; one hotkey writes them to an MP4. Plus simple IN/OUT trimming. |
 | **G-Note** | Notes: rich text, sticky notes and freehand drawing. |
-| **G-Vector** | A small vector editor: pen, gradients and smart guides that work. **In progress** — no release yet. |
+| **G-Vector** | A small vector editor: pen, gradients and smart guides. |
+| **G-DPI** | Automatic GoodbyeDPI service with Superonline connection profiles. |
+| **G-Presets** | Installs the ProfilePresets plugin into an existing Vencord installation. |
 
 Windows 10 and 11, x64. Free, and free to do anything with — see
 [License](#license).
@@ -16,17 +18,22 @@ Windows 10 and 11, x64. Free, and free to do anything with — see
 ## Install
 
 **One setup for everything:** download
-[Garam-Setup-0.1.1.exe](https://github.com/Garamisericorde/garam-apps/releases/download/setup-v0.1.1/Garam-Setup-0.1.1.exe)
-(3.9 MB), run it, and tick the apps you want.
+[Garam-Setup-0.2.0.exe](https://github.com/Garamisericorde/garam-apps/releases/download/setup-v0.2.0/Garam-Setup-0.2.0.exe),
+run it, and tick the apps you want.
 
 It is that small because it carries no apps of its own. It reads
-[`catalog.json`](catalog.json), downloads only what you selected, verifies each
+the [live catalog](https://github.com/Garamisericorde/garam-apps/releases/download/catalog/catalog.json), downloads only what you selected, verifies each
 download's SHA-256 against the catalog — a mismatch aborts the install, so a
 corrupted or tampered installer is never executed — and then runs it silently.
 The versions come from the catalog at run time, so the same setup keeps
 installing the current releases without being republished. It asks for
 administrator once at the start, because a silent installer cannot raise its own
 privileges; that single prompt covers every app it installs.
+
+G-DPI and G-Presets use ZIP packages with automated PowerShell installers;
+the other apps use silent EXE installers. Close Discord before installing
+G-Presets. Personal preset backups are kept local and are not included in
+GitHub releases.
 
 Each app also has its own installer, and they are **fully independent** —
 installing one never requires the others. Grab whichever you want from
@@ -65,7 +72,9 @@ garam-apps/
 │   ├── g-snap/
 │   ├── g-recorder/
 │   ├── g-note/
-│   └── g-vector/
+│   ├── g-vector/
+│   ├── g-dpi/
+│   └── g-presets/
 ├── installer/
 │   └── bootstrapper/  Garam Setup
 └── tools/
