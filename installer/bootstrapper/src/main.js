@@ -14,6 +14,7 @@ const app = document.getElementById('app')
 let catalog = null
 const selected = new Set()
 let installing = false
+let dpiProfile = 'keep'
 
 boot()
 
@@ -39,7 +40,9 @@ function viewLoading(text) {
 
 function viewError(message, retry) {
   const el = node('div', 'screen')
-  el.append(node('h1', '', 'Something went wrong'), node('p', 'error-text', message))
+  const content = node('div', 'result-list')
+  content.append(node('p', 'error-text', message))
+  el.append(node('h1', '', 'Something went wrong'), content)
 
   const actions = node('div', 'actions')
   const again = button('Try again', 'primary', retry)
@@ -59,6 +62,25 @@ function viewPicker() {
     list.append(appRow(entry))
   }
   el.append(list)
+  const provider = node('div', 'dpi-provider')
+  const providerLabel = node('label', '', 'G-DPI connection profile')
+  const providerSelect = document.createElement('select')
+  providerSelect.id = 'dpi-profile'
+  providerLabel.htmlFor = providerSelect.id
+  for (const [value, label] of [
+    ['keep', 'Keep existing G-DPI installation'],
+    ['superonline', 'New installation: Superonline'],
+    ['vodafone-zapret', 'New installation: Vodafone'],
+  ]) {
+    const option = node('option', '', label)
+    option.value = value
+    providerSelect.append(option)
+  }
+  providerSelect.value = dpiProfile
+  providerSelect.addEventListener('change', () => { dpiProfile = providerSelect.value })
+  provider.append(providerLabel, providerSelect)
+  provider.append(node('p', 'muted', 'Existing G-DPI services are preserved. New installations require a provider and run after all downloads and other apps.'))
+  el.append(provider)
 
   const footer = node('div', 'footer')
   const total = node('span', 'muted total')
@@ -72,6 +94,7 @@ function viewPicker() {
       ? `${selected.size} ${selected.size === 1 ? 'app' : 'apps'}  ·  ${mb(bytes)} to download`
       : 'Nothing selected'
     install.disabled = selected.size === 0
+    providerSelect.disabled = !selected.has('g-dpi')
   }
 
   el.addEventListener('selection-changed', updateFooter)
@@ -133,6 +156,29 @@ function viewDone(installedNames) {
   return el
 }
 
+function viewResults(report) {
+  const names = catalog.apps.filter((a) => report.installed.includes(a.id)).map((a) => a.name)
+  if (!report.failed.length) return viewDone(names)
+
+  const el = node('div', 'screen')
+  el.append(node('h1', '', names.length ? 'Installation partially complete' : 'Installation failed'))
+  if (names.length) el.append(node('p', 'muted', `Installed: ${names.join(', ')}`))
+
+  const list = node('div', 'result-list')
+  for (const failure of report.failed) {
+    const item = node('div', 'result-item')
+    item.append(node('strong', '', `${failure.name} could not be installed`))
+    item.append(node('p', 'error-text', failure.message))
+    list.append(item)
+  }
+  el.append(list)
+  const actions = node('div', 'actions')
+  actions.append(button('Close', 'secondary', () => window.close()))
+  actions.append(button('Choose apps / retry', 'primary', () => render(viewPicker())))
+  el.append(actions)
+  return el
+}
+
 // ── Install flow ───────────────────────────────────────────────────────────
 
 async function startInstall() {
@@ -144,32 +190,39 @@ async function startInstall() {
 
   const chosen = catalog.apps.filter((a) => selected.has(a.id))
   const done = new Set()
-
-  const unlisten = await listen('install-progress', (event) => {
-    const p = event.payload
-    screen._parts.label.textContent = p.message
-
-    // Overall progress: completed apps plus the current app's own ratio
-    const per = 1 / chosen.length
-    const current = p.ratio >= 0 ? p.ratio * per : per * 0.5
-    const ratio = Math.min(1, done.size * per + current)
-    screen._parts.fill.style.width = `${ratio * 100}%`
-
-    if (p.phase === 'done') {
-      done.add(p.app_id)
-      screen._parts.log.append(node('div', 'log__line', `✓ ${p.message}`))
-    }
-  })
+  const completed = new Set()
+  let unlisten
 
   try {
-    const ids = await invoke('install_apps', { ids: chosen.map(a => a.id) })
-    const names = catalog.apps.filter((a) => ids.includes(a.id)).map((a) => a.name)
-    render(viewDone(names))
+    unlisten = await listen('install-progress', (event) => {
+      const p = event.payload
+      screen._parts.label.textContent = p.message
+
+      // Overall progress includes both successful and failed completed apps.
+      const per = 1 / chosen.length
+      const current = p.ratio >= 0 ? p.ratio * per : per * 0.5
+      const terminal = p.phase === 'done' || p.phase === 'error'
+      if (terminal) completed.add(p.app_id)
+      const ratio = Math.min(1, completed.size * per + (terminal ? 0 : current))
+      screen._parts.fill.style.width = `${ratio * 100}%`
+
+      if (p.phase === 'done') {
+        done.add(p.app_id)
+        screen._parts.log.append(node('div', 'log__line', `✓ ${p.message}`))
+      }
+      if (p.phase === 'error') {
+        screen._parts.log.append(node('div', 'log__line error-text', `✗ ${p.message}`))
+      }
+    })
+
+    const report = await invoke('install_apps', { ids: chosen.map(a => a.id), dpiProfile })
+    for (const id of report.installed) selected.delete(id)
+    render(viewResults(report))
   } catch (err) {
     for (const id of done) selected.delete(id)
     render(viewError(String(err), () => render(viewPicker())))
   } finally {
-    unlisten()
+    unlisten?.()
     installing = false
   }
 }

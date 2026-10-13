@@ -66,6 +66,17 @@ h1 {
   word-break: break-word;
 }
 
+.result-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  user-select: text;
+}
+
+.result-item {
+  padding: 12px 0;
+}
+
 /* ── App list ─────────────────────────────────────────────────────────── */
 
 .list {
@@ -215,6 +226,17 @@ h1 {
 .log__line {
   padding: 2px 0;
 }
+
+.dpi-provider { display: grid; gap: 8px; }
+.dpi-provider select {
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+.dpi-provider p { margin: 0; font-size: 12px; }
 
 .spinner {
   width: 22px;
