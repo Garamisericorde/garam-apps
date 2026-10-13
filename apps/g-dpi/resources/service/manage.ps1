@@ -1,6 +1,6 @@
 param(
   [ValidateSet('install', 'remove', 'status')][string]$Action = 'status',
-  [ValidateSet('superonline', 'standard', 'cloudflare', 'vodafone-1', 'vodafone-2', 'vodafone-3', 'vodafone-4', 'vodafone-5', 'vodafone-6', 'adguard-1', 'adguard-2', 'adguard-3', 'adguard-4', 'vodafone-zapret')][string]$Profile = 'superonline'
+  [ValidateSet('superonline', 'vodafone-zapret')][string]$Profile = 'superonline'
 )
 $ErrorActionPreference = 'Stop'
 $serviceName = 'G-DPI'
@@ -33,11 +33,11 @@ try {
     $profiles = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'profiles.json') -Raw | ConvertFrom-Json
     $selected = $profiles.PSObject.Properties[$Profile].Value
     if (-not $selected.args) { throw 'Selected profile was not found.' }
-    if ($Profile -like 'adguard-*' -or $Profile -eq 'vodafone-zapret') {
+    if ($Profile -eq 'vodafone-zapret') {
       & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'dns.ps1') -Action enable
       if ($LASTEXITCODE -ne 0) { throw 'Encrypted DNS configuration failed; service was not started.' }
     }
-    $arguments = $selected.args.Replace('{discordList}', ('"' + (Join-Path (Split-Path $engine) 'discord-domains.txt') + '"'))
+    $arguments = $selected.args
     if ($Profile -eq 'vodafone-zapret') {
       . (Join-Path $PSScriptRoot 'zapret-core.ps1')
       $arguments = Get-ZapretServiceArguments (Split-Path $engine)

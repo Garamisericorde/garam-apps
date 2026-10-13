@@ -3,57 +3,9 @@
     "label": "Superonline",
     "args": "-5 --dns-addr 77.88.8.8 --dns-port 1253 --dnsv6-addr 2a02:6b8::feed:0ff --dnsv6-port 1253"
   },
-  "standard": {
-    "label": "Current system DNS",
-    "args": "-5"
-  },
-  "cloudflare": {
-    "label": "Cloudflare alternative",
-    "args": "-5 --dns-addr 1.1.1.1 --dns-port 53 --dnsv6-addr 2606:4700:4700::1111 --dnsv6-port 53"
-  },
-  "vodafone-1": {
-    "label": "Vodafone alternative 1 - sequence / Cloudflare",
-    "args": "-6 -p --dns-addr 1.1.1.1 --dns-port 53 --dnsv6-addr 2606:4700:4700::1111 --dnsv6-port 53"
-  },
-  "vodafone-2": {
-    "label": "Vodafone alternative 2 - checksum / Cloudflare",
-    "args": "-7 -p --dns-addr 1.1.1.1 --dns-port 53 --dnsv6-addr 2606:4700:4700::1111 --dnsv6-port 53"
-  },
-  "vodafone-3": {
-    "label": "Vodafone alternative 3 - combined / QUIC block / Cloudflare",
-    "args": "-9 -p --dns-addr 1.1.1.1 --dns-port 53 --dnsv6-addr 2606:4700:4700::1111 --dnsv6-port 53"
-  },
-  "vodafone-4": {
-    "label": "Vodafone alternative 4 - sequence / Yandex port 1253",
-    "args": "-6 -p --dns-addr 77.88.8.8 --dns-port 1253 --dnsv6-addr 2a02:6b8::feed:0ff --dnsv6-port 1253"
-  },
-  "vodafone-5": {
-    "label": "Vodafone alternative 5 - legacy fragmentation / Cloudflare",
-    "args": "-1 --dns-addr 1.1.1.1 --dns-port 53 --dnsv6-addr 2606:4700:4700::1111 --dnsv6-port 53"
-  },
-  "vodafone-6": {
-    "label": "Vodafone alternative 6 - SNI fragmentation without fake packets / Cloudflare",
-    "args": "-p -f 2 -e 2 --native-frag --frag-by-sni --max-payload --dns-addr 1.1.1.1 --dns-port 53 --dnsv6-addr 2606:4700:4700::1111 --dnsv6-port 53"
-  },
-  "adguard-4": {
-    "label": "AdGuard encrypted DNS / Discord DPI adguard-4",
-    "args": "-p -f 2 -e 2 --native-frag --frag-by-sni --max-payload --blacklist {discordList}"
-  },
-  "adguard-3": {
-    "label": "AdGuard encrypted DNS / Discord DPI adguard-3",
-    "args": "-8 -p --blacklist {discordList}"
-  },
-  "adguard-2": {
-    "label": "AdGuard encrypted DNS / Discord DPI adguard-2",
-    "args": "-7 -p --blacklist {discordList}"
-  },
-  "adguard-1": {
-    "label": "AdGuard encrypted DNS / Discord DPI adguard-1",
-    "args": "-6 -p --blacklist {discordList}"
-  },
   "vodafone-zapret": {
-    "args": "zapret",
-    "engine": "zapret",
-    "label": "Vodafone / Zapret2 + AdGuard DoH (web verified; desktop pending)"
+    "label": "Vodafone / Zapret2 syndata + AdGuard DoH",
+    "args": "--lua-desync=syndata",
+    "engine": "zapret"
   }
 }

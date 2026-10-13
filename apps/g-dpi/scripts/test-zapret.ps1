@@ -21,10 +21,10 @@ public static class GDpiArgv {
 $directory = 'C:\Program Files\G-DPI\zapret'
 $command = '"' + $directory + '\winws2.exe" ' + (Get-ZapretServiceArguments $directory)
 $arguments = [GDpiArgv]::Parse($command)
-if ($arguments.Count -ne 10) { throw "Unexpected argument count: $($arguments.Count)" }
+if ($arguments.Count -ne 6) { throw "Unexpected argument count: $($arguments.Count)" }
 if ($arguments[1] -ne "--lua-init=@$directory\lua\zapret-lib.lua") { throw 'Library path quoting failed.' }
 if ($arguments[2] -ne "--lua-init=@$directory\lua\zapret-antidpi.lua") { throw 'Antidpi path quoting failed.' }
-if ($arguments[5] -ne '--lua-init=fake_default_tls=tls_mod(fake_default_tls,string.char(114,110,100))') { throw 'Lua expression was changed.' }
+if ($arguments[5] -ne '--lua-desync=syndata') { throw 'The verified Vodafone strategy was changed.' }
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../resources/zapret'))
 $manifest = Get-Content -LiteralPath (Join-Path $root 'manifest.json') -Raw | ConvertFrom-Json
 foreach ($entry in $manifest.files.PSObject.Properties) {

@@ -53,7 +53,7 @@ function Enable-GDpiDns([string]$StatePath) {
     # Use the normal Windows resolver rather than a manually pinned DoH request.
     Assert-DiscordResolution
     Write-Output 'AdGuard encrypted DNS enabled for Discord domains. Other DNS and adapter settings are unchanged.'
-    Write-Output 'DPI is stopped. Restart Discord and test access; use an AdGuard DPI installer only if needed.'
+    Write-Output 'Encrypted DNS is ready. The installer will start the selected G-DPI service profile.'
   } catch {
     $failure = $_
     try { Restore-GDpiDns $StatePath } catch { Write-Warning 'Automatic DNS rollback failed. Run dns_restore.bat as administrator.' }

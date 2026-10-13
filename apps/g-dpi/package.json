@@ -1,8 +1,8 @@
 {
   "name": "g-dpi",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
-  "description": "Windows service manager for GoodbyeDPI with Superonline profiles",
+  "description": "Windows service manager with Superonline and Vodafone profiles",
   "author": "Garam",
   "license": "MIT",
   "main": "out/main/index.js",

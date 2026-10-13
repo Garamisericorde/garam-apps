@@ -1,0 +1,2 @@
+# Keep runtime bytes stable across checkout platforms for manifest verification.
+resources/zapret/** -text
