@@ -1,21 +1,21 @@
 {
   "schemaVersion": 2,
-  "publishedAt": "2026-10-06T10:50:17.374Z",
+  "publishedAt": "2026-10-13T09:12:59.9784367Z",
   "apps": [
     {
       "id": "g-dpi",
       "name": "G-DPI",
       "description": "Automatic GoodbyeDPI service with Superonline profiles",
-      "version": "0.1.0",
-      "sizeBytes": 144143,
+      "version": "0.1.1",
+      "sizeBytes": 145604,
       "default": false,
       "requires": [],
       "installer": {
-        "fileName": "G-DPI-0.1.0.zip",
-        "url": "https://github.com/Garamisericorde/garam-apps/releases/download/g-dpi-v0.1.0/G-DPI-0.1.0.zip",
-        "sha256": "7d63da9260f920d1d06f89ec1e38a47c9bddd3bc582b893efcdfa9aeaab3c53d",
+        "fileName": "G-DPI-0.1.1.zip",
+        "url": "https://github.com/Garamisericorde/garam-apps/releases/download/g-dpi-v0.1.1/G-DPI-0.1.1.zip",
+        "sha256": "7795c33a9fea3c4878d385ba78f938400faa80973644af772029b90c7922efca",
         "kind": "zip-powershell",
-        "entryPoint": "G-DPI-0.1.0/service/install.ps1",
+        "entryPoint": "G-DPI-0.1.1/service/install.ps1",
         "silentArgs": []
       }
     },
