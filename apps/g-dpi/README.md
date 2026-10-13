@@ -6,7 +6,11 @@ records their SHA-256 hashes and download origin. Installation verifies hashes.
 
 ## Usage
 
-Extract G-DPI-0.1.0.zip, then right-click service_install.bat and choose Run as administrator. The installer copies the engine and service scripts to C:\Program Files\G-DPI and installs the automatic G-DPI service using the Superonline profile. The extracted package may be deleted after successful installation. No setup EXE or Electron interface is needed.
+Extract the current G-DPI ZIP, then right-click service_install.bat and choose Run as administrator. The installer copies the engine and service scripts to C:\Program Files\G-DPI and installs the automatic G-DPI service using the Superonline profile. The extracted package may be deleted after successful installation. No setup EXE or Electron interface is needed.
+
+If another ISP needs an alternative, run service/service_install_cloudflare.bat as administrator. This changes the service profile; it does not change Windows adapter DNS settings. Compatibility must be tested on the target connection.
+
+Reinstallation stops only the engine in this installation's directory and skips identical binaries, including loaded drivers. If a changed file remains locked, restart Windows and rerun the installer. Existing unrelated DPI tools and shared drivers are not removed.
 
 To remove the service, run service_remove.bat as administrator, either from the package or C:\Program Files\G-DPI\service. Engine files are retained for reinstallation; shared WinDivert drivers and system DNS settings are unchanged.
 
@@ -16,7 +20,7 @@ Open https://discord.com/app after installation and test login and a voice chann
 
 ## Build
 
-Run npm run package:dpi to create release/G-DPI-0.1.0.zip. This distribution contains BAT installers, PowerShell helpers, the engine and license notices. It does not produce setup.exe and is not listed in the EXE-based bootstrapper catalog.
+Run npm run package:dpi to create the versioned ZIP under release. This distribution contains BAT installers, PowerShell helpers, the engine and license notices. Garam Setup downloads this ZIP and runs service/install.ps1 automatically.
 
 ## Sources
 

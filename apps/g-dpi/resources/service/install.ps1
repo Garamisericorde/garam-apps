@@ -1,5 +1,6 @@
 param([ValidateSet('superonline', 'standard', 'cloudflare')][string]$Profile = 'superonline')
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'deployment.ps1')
 try {
   $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
   if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -20,8 +21,14 @@ try {
     Stop-Service G-DPI
     $existing.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(20))
   }
+  Stop-InstalledEngine (Join-Path $engineDestination 'goodbyedpi.exe')
   New-Item -ItemType Directory -Force $engineDestination, $serviceDestination | Out-Null
-  if ($sourceEngine -ne $engineDestination) { Copy-Item -Path (Join-Path $sourceEngine '*') -Destination $engineDestination -Recurse -Force }
+  if ($sourceEngine -ne $engineDestination) {
+    foreach ($file in Get-ChildItem -LiteralPath $sourceEngine -File) {
+      Copy-EngineFile $file.FullName (Join-Path $engineDestination $file.Name)
+    }
+    Copy-Item -LiteralPath (Join-Path $sourceEngine 'licenses') -Destination $engineDestination -Recurse -Force
+  }
   if ($PSScriptRoot -ne $serviceDestination) { Copy-Item -Path (Join-Path $PSScriptRoot '*') -Destination $serviceDestination -Force }
   & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File (Join-Path $serviceDestination 'manage.ps1') -Action install -Profile $Profile
   if ($LASTEXITCODE -ne 0) { throw 'Service installation failed.' }
