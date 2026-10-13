@@ -1,21 +1,21 @@
 {
   "schemaVersion": 2,
-  "publishedAt": "2026-10-13T09:22:15.3977120Z",
+  "publishedAt": "2026-10-13T11:03:34.3272715Z",
   "apps": [
     {
       "id": "g-dpi",
       "name": "G-DPI",
-      "description": "GoodbyeDPI service with Superonline and Vodafone trial profiles",
-      "version": "0.1.2",
-      "sizeBytes": 151201,
+      "description": "DPI profiles and reversible AdGuard encrypted DNS for Discord",
+      "version": "0.1.3",
+      "sizeBytes": 156898,
       "default": false,
       "requires": [],
       "installer": {
-        "fileName": "G-DPI-0.1.2.zip",
-        "url": "https://github.com/Garamisericorde/garam-apps/releases/download/g-dpi-v0.1.2/G-DPI-0.1.2.zip",
-        "sha256": "855fa0f3efa6c8e9e8404fa834f6582ccbc0273dced8d7a138a99b1fc742cef3",
+        "fileName": "G-DPI-0.1.3.zip",
+        "url": "https://github.com/Garamisericorde/garam-apps/releases/download/g-dpi-v0.1.3/G-DPI-0.1.3.zip",
+        "sha256": "7b94df981a3b5a7d3e4c1632a3ad8a52bb8a1109765615c415f1f4ee7a624f41",
         "kind": "zip-powershell",
-        "entryPoint": "G-DPI-0.1.2/service/install.ps1",
+        "entryPoint": "G-DPI-0.1.3/service/install.ps1",
         "silentArgs": []
       }
     },
