@@ -3,6 +3,10 @@ $report = Join-Path $env:TEMP ('G-DPI-diagnostics-' + (Get-Date -Format 'yyyyMMd
 Start-Transcript -LiteralPath $report | Out-Null
 try {
   Write-Output 'G-DPI diagnostics. No settings are changed.'
+  if (Get-Command Get-DnsClientDohServerAddress -ErrorAction SilentlyContinue) {
+    Get-DnsClientDohServerAddress -ServerAddress '94.140.14.14' -ErrorAction SilentlyContinue | Format-List ServerAddress,DohTemplate,AutoUpgrade,AllowFallbackToUdp
+    Get-DnsClientNrptRule | Where-Object Comment -EQ 'G-DPI AdGuard DoH' | Format-List Name,Namespace,NameServers,Comment
+  }
   Get-CimInstance Win32_Service | Where-Object { $_.Name -eq 'G-DPI' -or $_.Name -match 'Goodbye|WinDivert|Yoga|Splitwire' -or $_.PathName -match 'goodbyedpi|yogadns|splitwire' } | Select-Object Name,State,StartMode,PathName | Format-List
   Get-CimInstance Win32_Process -Filter "Name='goodbyedpi.exe'" | Select-Object ProcessId,ExecutablePath | Format-List
   Get-DnsClientServerAddress | Where-Object { $_.ServerAddresses.Count -gt 0 } | Select-Object InterfaceAlias,AddressFamily,ServerAddresses | Format-Table -AutoSize

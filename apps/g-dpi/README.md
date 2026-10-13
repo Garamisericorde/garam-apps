@@ -6,6 +6,26 @@ records their SHA-256 hashes and download origin. Installation verifies hashes.
 
 ## Usage
 
+## AdGuard encrypted DNS mode (Windows 11)
+
+Run dns_adguard_on.bat as administrator first, then completely close and reopen
+Discord. It stops G-DPI and sets a Windows DNS policy for Discord domains only,
+using AdGuard DoH at 94.140.14.14 with plaintext fallback disabled. Adapter DNS
+and unrelated domains are unchanged. The original DoH entry is backed up under
+ProgramData/G-DPI. Run dns_restore.bat to remove the policy and restore that entry.
+An existing conflicting Discord DNS policy is left unchanged and reported.
+
+If DNS works but Discord access remains blocked, try install_vodafone_adguard_1.bat
+through install_vodafone_adguard_4.bat, one at a time. These use encrypted DNS
+and different DPI methods limited to the bundled Discord domain list; they
+do not redirect DNS to the previously unreachable Cloudflare resolver.
+Service removal restores G-DPI's encrypted DNS changes. Restore DNS before
+returning to the older Cloudflare/Yandex trial profiles. No VPN is used.
+
+AdGuard DoH DNS responses were verified by the user on the Vodafone connection;
+Windows policy deployment and Discord login still require target-machine testing.
+The initial VPN exploration is not part of this release.
+
 Run install_superonline.bat for Superonline. Vodafone trial installers are
 install_vodafone_1.bat through install_vodafone_6.bat in the package root.
 Close Discord completely, run one installer as administrator, then reopen

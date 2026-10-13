@@ -1,6 +1,6 @@
 param(
   [ValidateSet('install', 'remove', 'status')][string]$Action = 'status',
-  [ValidateSet('superonline', 'standard', 'cloudflare', 'vodafone-1', 'vodafone-2', 'vodafone-3', 'vodafone-4', 'vodafone-5', 'vodafone-6')][string]$Profile = 'superonline'
+  [ValidateSet('superonline', 'standard', 'cloudflare', 'vodafone-1', 'vodafone-2', 'vodafone-3', 'vodafone-4', 'vodafone-5', 'vodafone-6', 'adguard-1', 'adguard-2', 'adguard-3', 'adguard-4')][string]$Profile = 'superonline'
 )
 $ErrorActionPreference = 'Stop'
 $serviceName = 'G-DPI'
@@ -30,7 +30,12 @@ try {
     $profiles = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'profiles.json') -Raw | ConvertFrom-Json
     $selected = $profiles.PSObject.Properties[$Profile].Value
     if (-not $selected.args) { throw 'Selected profile was not found.' }
-    $binaryPath = '"' + $engine + '" ' + $selected.args
+    if ($Profile -like 'adguard-*') {
+      & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'dns.ps1') -Action enable
+      if ($LASTEXITCODE -ne 0) { throw 'Encrypted DNS configuration failed; service was not started.' }
+    }
+    $arguments = $selected.args.Replace('{discordList}', ('"' + (Join-Path (Split-Path $engine) 'discord-domains.txt') + '"'))
+    $binaryPath = '"' + $engine + '" ' + $arguments
     if ($service) {
       if ($service.Status -ne 'Stopped') { Stop-Service $serviceName; $service.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(20)) }
       $cimService = Get-CimInstance Win32_Service -Filter "Name='G-DPI'"
@@ -45,6 +50,11 @@ try {
     if ((Get-Service $serviceName).Status -ne 'Running') { throw 'The engine exited after startup. Check Windows Event Viewer.' }
     Write-Output "Running ($($selected.label)). This confirms service startup, not Discord access. Close and restart Discord to test."
   } else {
+    if (Test-Path -LiteralPath (Join-Path $env:ProgramData 'G-DPI/dns-backup.json')) {
+      & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'dns.ps1') -Action restore
+      if ($LASTEXITCODE -ne 0) { throw 'Restore encrypted DNS settings before removing the service.' }
+      $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+    }
     if ($service) {
       if ($service.Status -ne 'Stopped') { Stop-Service $serviceName; $service.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(20)) }
       & sc.exe delete $serviceName | Out-Null
