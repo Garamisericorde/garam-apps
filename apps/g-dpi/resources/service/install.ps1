@@ -1,4 +1,4 @@
-param([ValidateSet('superonline', 'standard', 'cloudflare')][string]$Profile = 'superonline')
+param([ValidateSet('superonline', 'standard', 'cloudflare', 'vodafone-1', 'vodafone-2', 'vodafone-3', 'vodafone-4', 'vodafone-5', 'vodafone-6')][string]$Profile = 'superonline')
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'deployment.ps1')
 try {

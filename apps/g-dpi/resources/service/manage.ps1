@@ -1,6 +1,6 @@
 param(
   [ValidateSet('install', 'remove', 'status')][string]$Action = 'status',
-  [ValidateSet('superonline', 'standard', 'cloudflare')][string]$Profile = 'superonline'
+  [ValidateSet('superonline', 'standard', 'cloudflare', 'vodafone-1', 'vodafone-2', 'vodafone-3', 'vodafone-4', 'vodafone-5', 'vodafone-6')][string]$Profile = 'superonline'
 )
 $ErrorActionPreference = 'Stop'
 $serviceName = 'G-DPI'
@@ -27,12 +27,10 @@ try {
       $file = Join-Path (Split-Path $engine) $entry.Name
       if ((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $entry.Value) { throw "Engine integrity check failed: $($entry.Name)" }
     }
-    $profiles = @{
-      superonline = '-5 --dns-addr 77.88.8.8 --dns-port 1253 --dnsv6-addr 2a02:6b8::feed:0ff --dnsv6-port 1253'
-      standard = '-5'
-      cloudflare = '-5 --dns-addr 1.1.1.1 --dns-port 53 --dnsv6-addr 2606:4700:4700::1111 --dnsv6-port 53'
-    }
-    $binaryPath = '"' + $engine + '" ' + $profiles[$Profile]
+    $profiles = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'profiles.json') -Raw | ConvertFrom-Json
+    $selected = $profiles.PSObject.Properties[$Profile].Value
+    if (-not $selected.args) { throw 'Selected profile was not found.' }
+    $binaryPath = '"' + $engine + '" ' + $selected.args
     if ($service) {
       if ($service.Status -ne 'Stopped') { Stop-Service $serviceName; $service.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(20)) }
       $cimService = Get-CimInstance Win32_Service -Filter "Name='G-DPI'"
@@ -45,7 +43,7 @@ try {
     (Get-Service $serviceName).WaitForStatus('Running', [TimeSpan]::FromSeconds(20))
     Start-Sleep -Seconds 2
     if ((Get-Service $serviceName).Status -ne 'Running') { throw 'The engine exited after startup. Check Windows Event Viewer.' }
-    Write-Output "Running ($Profile). Test Discord connectivity from G-DPI."
+    Write-Output "Running ($($selected.label)). This confirms service startup, not Discord access. Close and restart Discord to test."
   } else {
     if ($service) {
       if ($service.Status -ne 'Stopped') { Stop-Service $serviceName; $service.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(20)) }

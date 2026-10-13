@@ -23,7 +23,7 @@ function probe(host: string, path: string) {
 export function registerIpc() {
   ipcMain.handle('dpi:status', () => manage('status'))
   ipcMain.handle('dpi:install', async (_, profile: unknown) => {
-    if (typeof profile !== 'string' || !['superonline', 'standard', 'cloudflare'].includes(profile)) throw new Error('Invalid profile')
+    if (typeof profile !== 'string' || !['superonline', 'standard', 'cloudflare', 'vodafone-1', 'vodafone-2', 'vodafone-3', 'vodafone-4', 'vodafone-5', 'vodafone-6'].includes(profile)) throw new Error('Invalid profile')
     if (busy) throw new Error('A service operation is already running')
     busy = true
     try { return await manage('install', profile) } finally { busy = false }
@@ -37,3 +37,4 @@ export function registerIpc() {
   ipcMain.handle('dpi:open', () => shell.openExternal('https://discord.com/app'))
   ipcMain.handle('dpi:scripts', () => shell.openPath(join(resources(), 'service')))
 }
+

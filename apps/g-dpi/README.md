@@ -6,6 +6,32 @@ records their SHA-256 hashes and download origin. Installation verifies hashes.
 
 ## Usage
 
+Run install_superonline.bat for Superonline. Vodafone trial installers are
+install_vodafone_1.bat through install_vodafone_6.bat in the package root.
+Close Discord completely, run one installer as administrator, then reopen
+Discord. If it does not connect, close Discord and try the next number.
+These are experimental alternatives, not verified Vodafone configurations.
+All installers update the same G-DPI service; removal between attempts is not
+required. Windows adapter DNS, IPv6 and proxy settings are never changed.
+
+| Installer | Method | DNS redirection |
+|---|---|---|
+| Superonline | Automatic TTL, reverse fragmentation | Yandex port 1253 |
+| Vodafone 1 | Fake sequence, reverse fragmentation | Cloudflare |
+| Vodafone 2 | Fake checksum, reverse fragmentation | Cloudflare |
+| Vodafone 3 | Fake sequence/checksum, QUIC blocking | Cloudflare |
+| Vodafone 4 | Fake sequence, reverse fragmentation | Yandex port 1253 |
+| Vodafone 5 | Legacy fragmentation | Cloudflare |
+| Vodafone 6 | Native fragmentation at SNI, no fake packets | Cloudflare |
+
+Run diagnose.bat if the Discord updater still fails. It prints a read-only
+report and saves it under the Windows temporary directory. Check the report
+before sharing it: it includes local paths, adapter names and DNS addresses.
+The report includes current service arguments, potential leftover DPI services,
+proxy configuration, DNS lookups and HTTP responses from Discord endpoints.
+An HTTP response does not prove that the updater or login works. A service
+starting successfully does not prove that the selected profile bypasses the ISP.
+
 Extract the current G-DPI ZIP, then right-click service_install.bat and choose Run as administrator. The installer copies the engine and service scripts to C:\Program Files\G-DPI and installs the automatic G-DPI service using the Superonline profile. The extracted package may be deleted after successful installation. No setup EXE or Electron interface is needed.
 
 If another ISP needs an alternative, run service/service_install_cloudflare.bat as administrator. This changes the service profile; it does not change Windows adapter DNS settings. Compatibility must be tested on the target connection.

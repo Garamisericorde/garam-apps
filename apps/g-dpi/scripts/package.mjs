@@ -11,9 +11,12 @@ await cp(join(root, 'resources/service'), join(output, 'service'), { recursive: 
 for (const name of ['goodbyedpi.exe', 'WinDivert.dll', 'WinDivert64.sys', 'manifest.json', 'licenses']) {
   await cp(join(root, 'resources/engine', name), join(output, 'engine', name), { recursive: true })
 }
-for (const [file, target] of [['service_install.bat', 'service_install.bat'], ['service_remove.bat', 'service_remove.bat']]) {
-  await writeFile(join(output, file), `@echo off\r\ncall "%~dp0service\\${target}"\r\n`, 'utf8')
+const installers = { 'service_install.bat': 'superonline', 'install_superonline.bat': 'superonline' }
+for (let index = 1; index <= 6; index++) installers[`install_vodafone_${index}.bat`] = `vodafone-${index}`
+for (const [file, profile] of Object.entries(installers)) {
+  await writeFile(join(output, file), `@echo off\r\ntitle G-DPI - ${profile}\r\npowershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0service\\install.ps1" -Profile ${profile}\r\nif errorlevel 1 (echo Installation failed.) else (echo Service started. Restart Discord and test access.)\r\npause\r\n`, 'utf8')
 }
+for (const [file, target] of [['service_remove.bat', 'service_remove.bat'], ['diagnose.bat', 'diagnose.bat']]) await writeFile(join(output, file), `@echo off\r\ncall "%~dp0service\\${target}"\r\n`, 'utf8')
 await cp(join(root, 'README.md'), join(output, 'README.md'))
 const archive = join(root, 'release', `${name}.zip`)
 const sevenZip = fileURLToPath(new URL('../../../node_modules/7zip-bin/win/x64/7za.exe', import.meta.url))
