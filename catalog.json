@@ -1,21 +1,21 @@
 {
   "schemaVersion": 2,
-  "publishedAt": "2026-10-13T09:12:59.9784367Z",
+  "publishedAt": "2026-10-13T09:22:15.3977120Z",
   "apps": [
     {
       "id": "g-dpi",
       "name": "G-DPI",
-      "description": "Automatic GoodbyeDPI service with Superonline profiles",
-      "version": "0.1.1",
-      "sizeBytes": 145604,
+      "description": "GoodbyeDPI service with Superonline and Vodafone trial profiles",
+      "version": "0.1.2",
+      "sizeBytes": 151201,
       "default": false,
       "requires": [],
       "installer": {
-        "fileName": "G-DPI-0.1.1.zip",
-        "url": "https://github.com/Garamisericorde/garam-apps/releases/download/g-dpi-v0.1.1/G-DPI-0.1.1.zip",
-        "sha256": "7795c33a9fea3c4878d385ba78f938400faa80973644af772029b90c7922efca",
+        "fileName": "G-DPI-0.1.2.zip",
+        "url": "https://github.com/Garamisericorde/garam-apps/releases/download/g-dpi-v0.1.2/G-DPI-0.1.2.zip",
+        "sha256": "855fa0f3efa6c8e9e8404fa834f6582ccbc0273dced8d7a138a99b1fc742cef3",
         "kind": "zip-powershell",
-        "entryPoint": "G-DPI-0.1.1/service/install.ps1",
+        "entryPoint": "G-DPI-0.1.2/service/install.ps1",
         "silentArgs": []
       }
     },

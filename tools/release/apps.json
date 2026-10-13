@@ -5,7 +5,7 @@
     "repo": "garam-apps"
   },
   "apps": [
-    { "id": "g-dpi", "name": "G-DPI", "description": "Automatic GoodbyeDPI service with Superonline profiles", "workspace": "apps/g-dpi", "tagPrefix": "g-dpi-v", "default": false, "kind": "zip-powershell", "artifact": "G-DPI-{version}.zip", "entryPoint": "G-DPI-{version}/service/install.ps1", "silentArgs": [] },
+    { "id": "g-dpi", "name": "G-DPI", "description": "GoodbyeDPI service with Superonline and Vodafone trial profiles", "workspace": "apps/g-dpi", "tagPrefix": "g-dpi-v", "default": false, "kind": "zip-powershell", "artifact": "G-DPI-{version}.zip", "entryPoint": "G-DPI-{version}/service/install.ps1", "silentArgs": [] },
     { "id": "g-presets", "name": "G-Presets", "description": "Profile Presets plugin for installed Vencord. Close Discord before installing.", "workspace": "apps/g-presets", "tagPrefix": "g-presets-v", "default": false, "kind": "zip-powershell", "artifact": "G-Presets-{version}.zip", "entryPoint": "G-Presets-{version}/scripts/install.ps1", "silentArgs": [] },
     { "id": "g-vector", "name": "G-Vector", "description": "Vector drawing with pen, curvature tools and gradients", "workspace": "apps/g-vector", "tagPrefix": "g-vector-v", "default": false },
     {
