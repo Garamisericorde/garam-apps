@@ -1,21 +1,21 @@
 {
   "schemaVersion": 2,
-  "publishedAt": "2026-10-13T14:15:37.7757519Z",
+  "publishedAt": "2026-10-13T15:29:57.6084750Z",
   "apps": [
     {
       "id": "g-dpi",
       "name": "G-DPI",
-      "description": "GoodbyeDPI and Zapret2 service profiles. Vodafone web verified; desktop updater pending.",
-      "version": "0.1.4",
-      "sizeBytes": 1742303,
+      "description": "Superonline and Vodafone services. Vodafone desktop login and voice verified on one connection.",
+      "version": "0.1.5",
+      "sizeBytes": 1733053,
       "default": false,
       "requires": [],
       "installer": {
-        "fileName": "G-DPI-0.1.4.zip",
-        "url": "https://github.com/Garamisericorde/garam-apps/releases/download/g-dpi-v0.1.4/G-DPI-0.1.4.zip",
-        "sha256": "4546542db125b8249c1cf419204ef63931fc3b93d57c9a513a565c628544a988",
+        "fileName": "G-DPI-0.1.5.zip",
+        "url": "https://github.com/Garamisericorde/garam-apps/releases/download/g-dpi-v0.1.5/G-DPI-0.1.5.zip",
+        "sha256": "04f8d62f8c25e6b580adc6ef3cc6714e2f0cb0355b36a297f42fef5bb18a9e79",
         "kind": "zip-powershell",
-        "entryPoint": "G-DPI-0.1.4/service/install.ps1",
+        "entryPoint": "G-DPI-0.1.5/service/install.ps1",
         "silentArgs": []
       }
     },
