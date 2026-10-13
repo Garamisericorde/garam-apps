@@ -74,3 +74,29 @@ Run npm run package:dpi to create the versioned ZIP under release. This distribu
 - Superonline profile (-5 and Yandex DNS port 1253):
   https://github.com/cagritaskn/GoodbyeDPI-Turkey/blob/master/windows/service_install_dnsredir_turkey_alternative4_superonline.cmd
 - Third-party license notices: `resources/engine/licenses`.
+
+## Vodafone Zapret2 profile (0.1.4)
+
+Run `install_vodafone_zapret.bat` as administrator after closing manual WinWS2
+and GoodbyeDPI windows. It enables Discord-only AdGuard DoH, copies the pinned
+WinWS2 runtime into Program Files, and replaces the single G-DPI service profile.
+The service starts automatically with Windows; no console window is required.
+Other applications using WinDivert are not removed or stopped.
+
+The current strategy was verified on one Vodafone connection for Discord web
+login, messages and voice. The user reported approximately 67 ms in that session;
+this is not a latency guarantee. The Windows desktop updater still returned a
+connection reset and is NOT verified working. TCP 443 processing applies to all
+domains, matching the tested configuration; encrypted DNS policy only targets
+Discord namespaces. UDP voice traffic is not changed by this profile.
+
+`test_discord_desktop.bat` runs an experimental dynamic TLS strategy with the
+PowerShell 5.1 argument quoting issue corrected. It stops G-DPI and requires all
+manual DPI windows closed. Keep its window open while restarting desktop Discord.
+It does not change DNS or install a second service. After closing the test, run
+`install_vodafone_zapret.bat` again to restore the verified web profile.
+
+`service_remove.bat` removes G-DPI and restores its backed-up DNS configuration.
+Shared WinDivert drivers are left intact. Existing Superonline installers retain
+their previous strategy. Upstream source references and notices are in
+`zapret/licenses`; binary hashes and the pinned revision are in `zapret/manifest.json`.

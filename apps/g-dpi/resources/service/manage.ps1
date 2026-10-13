@@ -1,6 +1,6 @@
 param(
   [ValidateSet('install', 'remove', 'status')][string]$Action = 'status',
-  [ValidateSet('superonline', 'standard', 'cloudflare', 'vodafone-1', 'vodafone-2', 'vodafone-3', 'vodafone-4', 'vodafone-5', 'vodafone-6', 'adguard-1', 'adguard-2', 'adguard-3', 'adguard-4')][string]$Profile = 'superonline'
+  [ValidateSet('superonline', 'standard', 'cloudflare', 'vodafone-1', 'vodafone-2', 'vodafone-3', 'vodafone-4', 'vodafone-5', 'vodafone-6', 'adguard-1', 'adguard-2', 'adguard-3', 'adguard-4', 'vodafone-zapret')][string]$Profile = 'superonline'
 )
 $ErrorActionPreference = 'Stop'
 $serviceName = 'G-DPI'
@@ -21,6 +21,9 @@ try {
       throw 'An existing GoodbyeDPI service was found. Remove it with its own uninstaller first.'
     }
     $engine = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../engine/goodbyedpi.exe'))
+    if ($Profile -eq 'vodafone-zapret') {
+      $engine = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../zapret/winws2.exe'))
+    }
     $manifestPath = Join-Path (Split-Path $engine) 'manifest.json'
     $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
     foreach ($entry in $manifest.files.PSObject.Properties) {
@@ -30,11 +33,15 @@ try {
     $profiles = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'profiles.json') -Raw | ConvertFrom-Json
     $selected = $profiles.PSObject.Properties[$Profile].Value
     if (-not $selected.args) { throw 'Selected profile was not found.' }
-    if ($Profile -like 'adguard-*') {
+    if ($Profile -like 'adguard-*' -or $Profile -eq 'vodafone-zapret') {
       & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'dns.ps1') -Action enable
       if ($LASTEXITCODE -ne 0) { throw 'Encrypted DNS configuration failed; service was not started.' }
     }
     $arguments = $selected.args.Replace('{discordList}', ('"' + (Join-Path (Split-Path $engine) 'discord-domains.txt') + '"'))
+    if ($Profile -eq 'vodafone-zapret') {
+      . (Join-Path $PSScriptRoot 'zapret-core.ps1')
+      $arguments = Get-ZapretServiceArguments (Split-Path $engine)
+    }
     $binaryPath = '"' + $engine + '" ' + $arguments
     if ($service) {
       if ($service.Status -ne 'Stopped') { Stop-Service $serviceName; $service.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(20)) }
@@ -42,7 +49,7 @@ try {
       $result = Invoke-CimMethod -InputObject $cimService -MethodName Change -Arguments @{ PathName = $binaryPath; StartMode = 'Automatic' }
       if ($result.ReturnValue -ne 0) { throw "Service configuration failed: $($result.ReturnValue)" }
     } else {
-      New-Service -Name $serviceName -BinaryPathName $binaryPath -StartupType Automatic -DisplayName 'G-DPI (GoodbyeDPI)' -Description 'G-DPI network access service powered by GoodbyeDPI' | Out-Null
+      New-Service -Name $serviceName -BinaryPathName $binaryPath -StartupType Automatic -DisplayName 'G-DPI' -Description 'G-DPI network access service' | Out-Null
     }
     Start-Service $serviceName
     (Get-Service $serviceName).WaitForStatus('Running', [TimeSpan]::FromSeconds(20))

@@ -8,7 +8,7 @@ try {
     Get-DnsClientNrptRule | Where-Object Comment -EQ 'G-DPI AdGuard DoH' | Format-List Name,Namespace,NameServers,Comment
   }
   Get-CimInstance Win32_Service | Where-Object { $_.Name -eq 'G-DPI' -or $_.Name -match 'Goodbye|WinDivert|Yoga|Splitwire' -or $_.PathName -match 'goodbyedpi|yogadns|splitwire' } | Select-Object Name,State,StartMode,PathName | Format-List
-  Get-CimInstance Win32_Process -Filter "Name='goodbyedpi.exe'" | Select-Object ProcessId,ExecutablePath | Format-List
+  Get-CimInstance Win32_Process -Filter "Name='goodbyedpi.exe' OR Name='winws2.exe'" | Select-Object ProcessId,ExecutablePath | Format-List
   Get-DnsClientServerAddress | Where-Object { $_.ServerAddresses.Count -gt 0 } | Select-Object InterfaceAlias,AddressFamily,ServerAddresses | Format-Table -AutoSize
   netsh.exe winhttp show proxy
   $proxy = Get-ItemProperty 'HKCU:/Software/Microsoft/Windows/CurrentVersion/Internet Settings' -ErrorAction SilentlyContinue

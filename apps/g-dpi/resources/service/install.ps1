@@ -1,4 +1,4 @@
-param([ValidateSet('superonline', 'standard', 'cloudflare', 'vodafone-1', 'vodafone-2', 'vodafone-3', 'vodafone-4', 'vodafone-5', 'vodafone-6', 'adguard-1', 'adguard-2', 'adguard-3', 'adguard-4')][string]$Profile = 'superonline')
+param([ValidateSet('superonline', 'standard', 'cloudflare', 'vodafone-1', 'vodafone-2', 'vodafone-3', 'vodafone-4', 'vodafone-5', 'vodafone-6', 'adguard-1', 'adguard-2', 'adguard-3', 'adguard-4', 'vodafone-zapret')][string]$Profile = 'superonline')
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'deployment.ps1')
 try {
@@ -22,12 +22,27 @@ try {
     $existing.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(20))
   }
   Stop-InstalledEngine (Join-Path $engineDestination 'goodbyedpi.exe')
+  Stop-InstalledEngine (Join-Path $destination 'zapret/winws2.exe')
   New-Item -ItemType Directory -Force $engineDestination, $serviceDestination | Out-Null
   if ($sourceEngine -ne $engineDestination) {
     foreach ($file in Get-ChildItem -LiteralPath $sourceEngine -File) {
       Copy-EngineFile $file.FullName (Join-Path $engineDestination $file.Name)
     }
     Copy-Item -LiteralPath (Join-Path $sourceEngine 'licenses') -Destination $engineDestination -Recurse -Force
+  }
+  if ($Profile -eq 'vodafone-zapret') {
+    $sourceZapret = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../zapret'))
+    $zapretManifest = Get-Content -LiteralPath (Join-Path $sourceZapret 'manifest.json') -Raw | ConvertFrom-Json
+    foreach ($entry in $zapretManifest.files.PSObject.Properties) {
+      if ((Get-FileHash -LiteralPath (Join-Path $sourceZapret $entry.Name)).Hash -ne $entry.Value) { throw "Zapret integrity check failed: $($entry.Name)" }
+    }
+    $zapretDestination = Join-Path $destination 'zapret'
+    foreach ($file in Get-ChildItem -LiteralPath $sourceZapret -Recurse -File) {
+      $relative = $file.FullName.Substring($sourceZapret.Length + 1)
+      $target = Join-Path $zapretDestination $relative
+      New-Item -ItemType Directory -Force (Split-Path $target) | Out-Null
+      if ($file.FullName -ne $target) { Copy-EngineFile $file.FullName $target }
+    }
   }
   if ($PSScriptRoot -ne $serviceDestination) { Copy-Item -Path (Join-Path $PSScriptRoot '*') -Destination $serviceDestination -Force }
   & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File (Join-Path $serviceDestination 'manage.ps1') -Action install -Profile $Profile

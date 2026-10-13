@@ -50,5 +50,10 @@
   "adguard-1": {
     "label": "AdGuard encrypted DNS / Discord DPI adguard-1",
     "args": "-6 -p --blacklist {discordList}"
+  },
+  "vodafone-zapret": {
+    "args": "zapret",
+    "engine": "zapret",
+    "label": "Vodafone / Zapret2 + AdGuard DoH (web verified; desktop pending)"
   }
 }

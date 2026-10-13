@@ -12,7 +12,7 @@ function Copy-EngineFile([string]$Source, [string]$Destination) {
 function Stop-InstalledEngine([string]$EnginePath) {
   $expected = [IO.Path]::GetFullPath($EnginePath)
   # Only stop this installation's engine, never another application's process.
-  $processes = Get-CimInstance Win32_Process -Filter "Name='goodbyedpi.exe'"
+  $processes = Get-CimInstance Win32_Process -Filter ("Name='" + [IO.Path]::GetFileName($expected) + "'")
   foreach ($process in $processes) {
     if ($process.ExecutablePath -and [IO.Path]::GetFullPath($process.ExecutablePath) -eq $expected) {
       $running = Get-Process -Id $process.ProcessId -ErrorAction SilentlyContinue

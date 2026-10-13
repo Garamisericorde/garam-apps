@@ -1,0 +1,9 @@
+Upstream binary bundle: https://github.com/bol-van/zapret-win-bundle
+Pinned bundle revision: 6eb463a6758fb48cd101bc55dfd057e6e9d98af1
+WinWS2 version: v1.0.5.2, upstream source revision 6b6c63e3385fa73f8af3be4a69171e947f5a319d
+WinWS2 source: https://github.com/bol-van/zapret2/tree/6b6c63e3385fa73f8af3be4a69171e947f5a319d
+Cygwin source and redistribution terms: https://cygwin.com/licensing.html
+Cygwin source distributions: https://cygwin.com/mirrors.html
+WinDivert source: https://github.com/basil00/WinDivert
+This package preserves upstream binaries and Lua scripts without modification.
+The WinWS2 executable is byte-identical to the blockcheck executable tested by the user.
