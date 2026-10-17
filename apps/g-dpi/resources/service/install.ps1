@@ -4,7 +4,7 @@ $ErrorActionPreference = 'Stop'
 try {
   $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
   if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    throw 'Right-click service_install.bat and choose Run as administrator.'
+    throw 'Right-click the provider installation BAT and choose Run as administrator.'
   }
   if (-not [Environment]::Is64BitOperatingSystem) { throw 'G-DPI requires Windows x64.' }
   if (Get-Service GoodbyeDPI -ErrorAction SilentlyContinue) { throw 'Remove the existing GoodbyeDPI service using its own removal script first.' }
@@ -12,6 +12,10 @@ try {
   $manifest = Get-Content -LiteralPath (Join-Path $sourceEngine 'manifest.json') -Raw | ConvertFrom-Json
   foreach ($name in @('goodbyedpi.exe', 'WinDivert.dll', 'WinDivert64.sys')) {
     if ((Get-FileHash -LiteralPath (Join-Path $sourceEngine $name)).Hash -ne $manifest.files.$name) { throw "Engine integrity check failed: $name" }
+  }
+  if ($Profile -eq 'superonline') {
+    . (Join-Path $PSScriptRoot 'superonline-core.ps1')
+    Assert-DiscordDomainList (Join-Path $sourceEngine 'discord-domains.txt')
   }
   $destination = Join-Path ([Environment]::GetFolderPath('ProgramFiles')) 'G-DPI'
   $engineDestination = Join-Path $destination 'engine'

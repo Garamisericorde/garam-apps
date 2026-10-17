@@ -14,7 +14,7 @@ try {
   $proxy = Get-ItemProperty 'HKCU:/Software/Microsoft/Windows/CurrentVersion/Internet Settings' -ErrorAction SilentlyContinue
   Write-Output "User proxy enabled: $($proxy.ProxyEnable); automatic proxy script configured: $([bool]$proxy.AutoConfigURL)"
   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-  foreach ($uri in @('https://discord.com/api/v10/gateway', 'https://discord.com/api/updates/stable?platform=win', 'https://updates.discord.com/distributions/app/manifests/latest?channel=stable&platform=win&arch=x64', 'https://cdn.discordapp.com/')) {
+  foreach ($uri in @('https://discord.com/api/v10/gateway', 'https://discord.com/api/updates/stable?platform=win', 'https://updates.discord.com/distributions/app/manifests/latest?channel=stable&platform=win&arch=x64', 'https://cdn.discordapp.com/', 'https://www.google.com/', 'https://www.curseforge.com/', 'https://www.speedtest.com/', 'https://www.speedtest.net/')) {
     $hostName = ([uri]$uri).DnsSafeHost
     try { Resolve-DnsName $hostName -Type A -ErrorAction Stop | Where-Object IPAddress | Select-Object Name,IPAddress | Format-Table } catch { Write-Output "DNS failed for ${hostName}: $($_.Exception.Message)" }
     try {

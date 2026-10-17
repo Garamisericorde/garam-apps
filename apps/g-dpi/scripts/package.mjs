@@ -9,7 +9,7 @@ const output = join(root, 'release', name)
 await mkdir(join(output, 'engine'), { recursive: true })
 await cp(join(root, 'resources/service'), join(output, 'service'), { recursive: true })
 await cp(join(root, 'resources/zapret'), join(output, 'zapret'), { recursive: true })
-for (const name of ['goodbyedpi.exe', 'WinDivert.dll', 'WinDivert64.sys', 'manifest.json', 'licenses']) {
+for (const name of ['goodbyedpi.exe', 'WinDivert.dll', 'WinDivert64.sys', 'manifest.json', 'discord-domains.txt', 'licenses']) {
   await cp(join(root, 'resources/engine', name), join(output, 'engine', name), { recursive: true })
 }
 const installers = { 'install_superonline.bat': 'superonline', 'install_vodafone.bat': 'vodafone-zapret' }

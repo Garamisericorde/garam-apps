@@ -38,6 +38,10 @@ try {
       if ($LASTEXITCODE -ne 0) { throw 'Encrypted DNS configuration failed; service was not started.' }
     }
     $arguments = $selected.args
+    if ($Profile -eq 'superonline') {
+      . (Join-Path $PSScriptRoot 'superonline-core.ps1')
+      $arguments = Get-SuperonlineServiceArguments (Split-Path $engine) $selected.args
+    }
     if ($Profile -eq 'vodafone-zapret') {
       . (Join-Path $PSScriptRoot 'zapret-core.ps1')
       $arguments = Get-ZapretServiceArguments (Split-Path $engine)
