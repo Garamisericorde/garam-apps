@@ -20,6 +20,54 @@ use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+const PANEL_ORIGIN: &str = "https://desktop-37qbede.tailf55a8f.ts.net";
+
+fn invite_code() -> Option<String> {
+    let exe = std::env::current_exe().ok()?;
+    let code = exe.file_stem()?.to_str()?.rsplit_once(".invite-")?.1;
+    (code.len() == 43 && code.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_'))
+        .then(|| code.to_owned())
+}
+
+#[tauri::command]
+fn enrollment_available() -> bool {
+    invite_code().is_some()
+}
+
+#[cfg(windows)]
+fn queue_enrollment(app: &str, code: &str) -> Result<(), String> {
+    use std::os::windows::fs::MetadataExt;
+    let (variable, relative) = match app {
+        "g-snap" => ("ProgramFiles", "Garam Management/g-snap"),
+        "g-dpi" => ("ProgramData", "G-DPI/management"),
+        "g-note" | "g-recorder" | "g-vector" | "g-presets" => ("LOCALAPPDATA", "Garam/Management"),
+        _ => return Err("Unsupported application".into()),
+    };
+    let mut home = std::path::PathBuf::from(std::env::var_os(variable).ok_or("Windows app directory unavailable")?);
+    home.push(relative);
+    if variable == "LOCALAPPDATA" { home.push(app); }
+    for directory in home.ancestors() {
+        match std::fs::symlink_metadata(directory) {
+            Ok(meta) if !meta.is_dir() || meta.file_attributes() & 0x400 != 0 => {
+                return Err("The enrollment directory is not a regular directory".into());
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.to_string()),
+        }
+    }
+    std::fs::create_dir_all(&home).map_err(|e| e.to_string())?;
+    let payload = serde_json::json!({ "server": format!("{PANEL_ORIGIN}/"), "code": code, "label": "" });
+    let temporary = home.join("enrollment.setup.tmp");
+    let mut file = std::fs::OpenOptions::new().write(true).create_new(true)
+        .open(&temporary).map_err(|e| e.to_string())?;
+    let result = file.write_all(payload.to_string().as_bytes());
+    drop(file);
+    let result = result.and_then(|_| std::fs::rename(&temporary, home.join("enrollment.json")));
+    if result.is_err() { let _ = std::fs::remove_file(&temporary); }
+    result.map_err(|e| e.to_string())
+}
+
 /// Default catalog.json URL.
 ///
 /// Overridden at build time with the GARAM_CATALOG_URL environment variable.
@@ -85,6 +133,8 @@ struct SetupState { catalog: Mutex<Option<Catalog>>, busy: Mutex<bool> }
 struct InstallReport {
     installed: Vec<String>,
     failed: Vec<InstallFailure>,
+    enrollment_queued: Vec<String>,
+    enrollment_failed: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -150,13 +200,24 @@ async fn fetch_catalog(state: tauri::State<'_, SetupState>) -> Result<Catalog, S
 
 /// Downloads, verifies and installs the selected apps one after another.
 #[tauri::command]
-async fn install_apps(window: tauri::Window, ids: Vec<String>, dpi_profile: String, state: tauri::State<'_, SetupState>) -> Result<InstallReport, String> {
+async fn install_apps(window: tauri::Window, ids: Vec<String>, dpi_profile: String, enroll: bool, state: tauri::State<'_, SetupState>) -> Result<InstallReport, String> {
     {
         let mut busy = state.busy.lock().map_err(|_| "Setup state unavailable")?;
         if *busy { return Err("Installation already running".into()); }
         *busy = true;
     }
-    let result = install_selected(&window, ids, &dpi_profile, &state).await;
+    let mut result = install_selected(&window, ids, &dpi_profile, &state).await;
+    #[cfg(windows)]
+    if enroll {
+        if let (Some(code), Ok(report)) = (invite_code(), &mut result) {
+            for app in &report.installed {
+                match queue_enrollment(app, &code) {
+                    Ok(()) => report.enrollment_queued.push(app.clone()),
+                    Err(_) => report.enrollment_failed.push(app.clone()),
+                }
+            }
+        }
+    }
     if let Ok(mut busy) = state.busy.lock() { *busy = false; }
     result
 }
@@ -195,7 +256,7 @@ async fn install_selected(window: &tauri::Window, ids: Vec<String>, dpi_profile:
                 failed.push(InstallFailure { app_id: app.id.clone(), name: app.name.clone(), message });
             }
         }
-        InstallReport { installed: vec![], failed }
+        InstallReport { failed, ..InstallReport::default() }
     } else {
         install_batch(apps, |app| async move {
             emit(window, Progress { app_id: app.id.clone(), phase: "installing".into(), ratio: -1.0, message: format!("Installing {}...", app.name) });
@@ -473,7 +534,7 @@ fn run_installer(path: &Path, silent_args: &[String]) -> Result<(), String> {
 fn main() {
     tauri::Builder::default()
         .manage(SetupState { catalog: Mutex::new(None), busy: Mutex::new(false) })
-        .invoke_handler(tauri::generate_handler![fetch_catalog, install_apps])
+        .invoke_handler(tauri::generate_handler![fetch_catalog, install_apps, enrollment_available])
         .run(tauri::generate_context!())
         .expect("failed to start the Tauri application");
 }

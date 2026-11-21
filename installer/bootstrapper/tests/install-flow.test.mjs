@@ -45,7 +45,7 @@ function fixture(report, { events = [], listenError, commandError } = {}) {
       return () => { unsubscribed = true }
     },
     async invoke(name, args) {
-      calls.push({ name, ids: Array.from(args.ids), dpiProfile: args.dpiProfile })
+      calls.push({ name, ids: Array.from(args.ids), dpiProfile: args.dpiProfile, enroll: args.enroll })
       for (const payload of events) {
         callback({ payload })
         progress.push(root.children[0]._parts.fill.style.width)
@@ -66,6 +66,10 @@ function fixture(report, { events = [], listenError, commandError } = {}) {
   return {
     root, calls, progress,
     start: () => vm.runInContext('startInstall()', context),
+    showInvitation() {
+      vm.runInContext('enrollmentAvailable = true; render(viewPicker())', context)
+      return descendants(root).filter(element => element.tag === 'input').at(-1)
+    },
     selectProvider(value) {
       vm.runInContext('render(viewPicker())', context)
       const select = descendants(root).find(element => element.tag === 'select')
@@ -96,7 +100,7 @@ test('G-DPI conflict shows G-Snap success and only retries G-DPI', async () => {
   assert.equal(ui.state().installing, false)
   assert.equal(ui.unsubscribed, true)
   elements.find((el) => el.textContent === 'Choose apps / retry').click()
-  const boxes = descendants(ui.root).filter((el) => el.tag === 'input')
+  const boxes = descendants(ui.root).filter((el) => el.tag === 'input').slice(0, 2)
   assert.deepEqual(boxes.map((el) => el.checked), [true, false])
   await ui.start()
   assert.deepEqual(ui.calls.map((call) => call.ids), [['g-dpi', 'g-snap'], ['g-dpi']])
@@ -148,4 +152,22 @@ test('explicit Vodafone choice reaches the installer command', async () => {
   ui.selectProvider('vodafone-zapret')
   await ui.start()
   assert.equal(ui.calls[0].dpiProfile, 'vodafone-zapret')
+})
+
+test('setup starts without device access consent', async () => {
+  const ui = fixture({ installed: [], failed: [] })
+  await ui.start()
+  assert.equal(ui.calls.length, 1)
+  assert.equal(ui.calls[0].enroll, false)
+})
+
+test('invited installation sends enrollment consent only after opt-in', async () => {
+  const ui = fixture({ installed: ['g-snap'], failed: [], enrollment_queued: ['g-snap'] })
+  const consent = ui.showInvitation()
+  assert.equal(consent.checked, false)
+  consent.checked = true
+  consent.listeners.change()
+  await ui.start()
+  assert.equal(ui.calls[0].enroll, true)
+  assert.ok(descendants(ui.root).some(el => el.textContent.includes('Panel registration will run')))
 })

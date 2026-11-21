@@ -15,6 +15,8 @@ let catalog = null
 const selected = new Set()
 let installing = false
 let dpiProfile = 'keep'
+let enrollmentAvailable = false
+let enrollmentConsent = false
 
 boot()
 
@@ -23,6 +25,7 @@ async function boot() {
 
   try {
     catalog = await invoke('fetch_catalog')
+    enrollmentAvailable = await invoke('enrollment_available')
     for (const a of catalog.apps) if (a.default) selected.add(a.id)
     render(viewPicker())
   } catch (err) {
@@ -81,6 +84,17 @@ function viewPicker() {
   provider.append(providerLabel, providerSelect)
   provider.append(node('p', 'muted', 'Existing G-DPI services are preserved. New installations require a provider and run after all downloads and other apps.'))
   el.append(provider)
+
+  if (enrollmentAvailable) {
+    const consent = node('label', 'row')
+    const box = document.createElement('input')
+    box.type = 'checkbox'
+    box.className = 'checkbox'
+    box.checked = enrollmentConsent
+    box.addEventListener('change', () => { enrollmentConsent = box.checked })
+    consent.append(box, node('span', '', 'Register this PC and the installed Garam apps with Garam Device Management. The panel can view app status and enable or disable registered apps.'))
+    el.append(consent)
+  }
 
   const footer = node('div', 'footer')
   const total = node('span', 'muted total')
@@ -144,11 +158,12 @@ function viewProgress() {
   return el
 }
 
-function viewDone(installedNames) {
+function viewDone(installedNames, report) {
   const el = node('div', 'screen')
   el.append(node('div', 'tick', '✓'))
   el.append(node('h1', '', 'Installation complete'))
   el.append(node('p', 'muted', installedNames.join(', ')))
+  showEnrollmentResult(el, report)
 
   const actions = node('div', 'actions')
   actions.append(button('Close', 'primary', () => window.close()))
@@ -156,13 +171,24 @@ function viewDone(installedNames) {
   return el
 }
 
+function showEnrollmentResult(el, report) {
+  const names = ids => catalog.apps.filter(app => ids.includes(app.id)).map(app => app.name).join(', ')
+  if (report.enrollment_queued?.length) {
+    el.append(node('p', 'muted', `Panel registration will run on the next app contact: ${names(report.enrollment_queued)}`))
+  }
+  if (report.enrollment_failed?.length) {
+    el.append(node('p', 'error-text', `Could not prepare panel registration: ${names(report.enrollment_failed)}`))
+  }
+}
+
 function viewResults(report) {
   const names = catalog.apps.filter((a) => report.installed.includes(a.id)).map((a) => a.name)
-  if (!report.failed.length) return viewDone(names)
+  if (!report.failed.length) return viewDone(names, report)
 
   const el = node('div', 'screen')
   el.append(node('h1', '', names.length ? 'Installation partially complete' : 'Installation failed'))
   if (names.length) el.append(node('p', 'muted', `Installed: ${names.join(', ')}`))
+  showEnrollmentResult(el, report)
 
   const list = node('div', 'result-list')
   for (const failure of report.failed) {
@@ -215,7 +241,7 @@ async function startInstall() {
       }
     })
 
-    const report = await invoke('install_apps', { ids: chosen.map(a => a.id), dpiProfile })
+    const report = await invoke('install_apps', { ids: chosen.map(a => a.id), dpiProfile, enroll: enrollmentConsent })
     for (const id of report.installed) selected.delete(id)
     render(viewResults(report))
   } catch (err) {
