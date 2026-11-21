@@ -22,20 +22,10 @@ use sha2::{Digest, Sha256};
 
 const PANEL_ORIGIN: &str = "https://desktop-37qbede.tailf55a8f.ts.net";
 
-fn invite_code() -> Option<String> {
-    let exe = std::env::current_exe().ok()?;
-    let code = exe.file_stem()?.to_str()?.rsplit_once(".invite-")?.1;
-    (code.len() == 43 && code.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_'))
-        .then(|| code.to_owned())
-}
-
-#[tauri::command]
-fn enrollment_available() -> bool {
-    invite_code().is_some()
-}
+const SETUP_ENROLLMENT_MODE: &str = "garam-setup-public-enrollment-v1___________";
 
 #[cfg(windows)]
-fn queue_enrollment(app: &str, code: &str) -> Result<(), String> {
+fn queue_enrollment(app: &str) -> Result<(), String> {
     use std::os::windows::fs::MetadataExt;
     let (variable, relative) = match app {
         "g-snap" => ("ProgramFiles", "Garam Management/g-snap"),
@@ -57,7 +47,7 @@ fn queue_enrollment(app: &str, code: &str) -> Result<(), String> {
         }
     }
     std::fs::create_dir_all(&home).map_err(|e| e.to_string())?;
-    let payload = serde_json::json!({ "server": format!("{PANEL_ORIGIN}/"), "code": code, "label": "" });
+    let payload = serde_json::json!({ "server": format!("{PANEL_ORIGIN}/"), "code": SETUP_ENROLLMENT_MODE, "label": "" });
     let temporary = home.join("enrollment.setup.tmp");
     let mut file = std::fs::OpenOptions::new().write(true).create_new(true)
         .open(&temporary).map_err(|e| e.to_string())?;
@@ -209,9 +199,9 @@ async fn install_apps(window: tauri::Window, ids: Vec<String>, dpi_profile: Stri
     let mut result = install_selected(&window, ids, &dpi_profile, &state).await;
     #[cfg(windows)]
     if enroll {
-        if let (Some(code), Ok(report)) = (invite_code(), &mut result) {
+        if let Ok(report) = &mut result {
             for app in &report.installed {
-                match queue_enrollment(app, &code) {
+                match queue_enrollment(app) {
                     Ok(()) => report.enrollment_queued.push(app.clone()),
                     Err(_) => report.enrollment_failed.push(app.clone()),
                 }
@@ -534,7 +524,7 @@ fn run_installer(path: &Path, silent_args: &[String]) -> Result<(), String> {
 fn main() {
     tauri::Builder::default()
         .manage(SetupState { catalog: Mutex::new(None), busy: Mutex::new(false) })
-        .invoke_handler(tauri::generate_handler![fetch_catalog, install_apps, enrollment_available])
+        .invoke_handler(tauri::generate_handler![fetch_catalog, install_apps])
         .run(tauri::generate_context!())
         .expect("failed to start the Tauri application");
 }

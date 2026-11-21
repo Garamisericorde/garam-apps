@@ -1,4 +1,4 @@
-# Garam Setup 0.3.1
+# Garam Setup 0.3.2
 
 A single downloadable EXE with a selectable list of all six Garam Windows applications.
 It downloads selected packages from GitHub Releases, verifies SHA-256 hashes,
@@ -7,12 +7,11 @@ packages use their PowerShell entry points without interactive BAT pauses.
 
 ## Share a setup with panel enrollment
 
-In Garam Device Management, click **New enrollment code**. Make a copy of the
-setup EXE and name it `Garam-Setup-0.3.1.invite-CODE.exe`, replacing `CODE` with
-the generated code. Share the copy privately and keep its filename. The code
-expires after 30 minutes. The recipient selects their apps and can opt in to
-device management in Setup. Successfully installed apps register on their next
-contact with the panel. The panel PC and its HTTPS tunnel must be running.
+Share the regular Setup EXE. In Setup, the recipient can opt in to device
+management. Successfully installed apps register on their next contact with
+the panel. The panel PC and its HTTPS tunnel must be running. The panel server
+accepts registrations from Setup when its data directory contains an
+`allow-setup-enrollment` file. This permits anyone running Setup to opt in.
 
 The runtime catalog is published at:
 https://github.com/Garamisericorde/garam-apps/releases/download/catalog/catalog.json
@@ -33,7 +32,7 @@ G-DPI unchecked. Other selected apps, including G-Snap, still install.
 
 The Windows workflow `.github/workflows/build-setup.yml` installs Rust, runs
 installer validation tests and publishes the standalone executable. Download
-[Garam-Setup-0.3.1.exe](https://github.com/Garamisericorde/garam-apps/releases/download/setup-v0.3.1/Garam-Setup-0.3.1.exe).
+[Garam-Setup-0.3.2.exe](https://github.com/Garamisericorde/garam-apps/releases/download/setup-v0.3.2/Garam-Setup-0.3.2.exe).
 
 For local builds install Rust and Visual C++ build tools, then run npm ci and
 npm run build in this directory. npm run ui:build checks the UI without Rust.

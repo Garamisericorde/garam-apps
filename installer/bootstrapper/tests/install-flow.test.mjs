@@ -67,7 +67,7 @@ function fixture(report, { events = [], listenError, commandError } = {}) {
     root, calls, progress,
     start: () => vm.runInContext('startInstall()', context),
     showInvitation() {
-      vm.runInContext('enrollmentAvailable = true; render(viewPicker())', context)
+      vm.runInContext('render(viewPicker())', context)
       return descendants(root).filter(element => element.tag === 'input').at(-1)
     },
     selectProvider(value) {

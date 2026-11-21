@@ -15,7 +15,6 @@ let catalog = null
 const selected = new Set()
 let installing = false
 let dpiProfile = 'keep'
-let enrollmentAvailable = false
 let enrollmentConsent = false
 
 boot()
@@ -25,7 +24,6 @@ async function boot() {
 
   try {
     catalog = await invoke('fetch_catalog')
-    enrollmentAvailable = await invoke('enrollment_available')
     for (const a of catalog.apps) if (a.default) selected.add(a.id)
     render(viewPicker())
   } catch (err) {
@@ -85,7 +83,7 @@ function viewPicker() {
   provider.append(node('p', 'muted', 'Existing G-DPI services are preserved. New installations require a provider and run after all downloads and other apps.'))
   el.append(provider)
 
-  if (enrollmentAvailable) {
+  {
     const consent = node('label', 'row')
     const box = document.createElement('input')
     box.type = 'checkbox'
