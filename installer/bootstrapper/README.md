@@ -1,6 +1,6 @@
-# Garam Setup 0.2.1
+# Garam Setup 0.3.0
 
-A single downloadable EXE with a selectable list of all six Garam applications.
+A single downloadable EXE with a selectable list of all six Garam Windows applications.
 It downloads selected packages from GitHub Releases, verifies SHA-256 hashes,
 and runs the appropriate installer. EXEs run silently; ZIP service and plugin
 packages use their PowerShell entry points without interactive BAT pauses.
@@ -22,9 +22,9 @@ G-DPI unchecked. Other selected apps, including G-Snap, still install.
 
 ## Build and publish
 
-The Windows workflow .github/workflows/build-setup.yml installs Rust, runs
-installer validation tests and builds the standalone executable. It publishes
-Garam-Setup-0.2.1.exe on setup-v0.2.1. Download that EXE directly.
+The Windows workflow `.github/workflows/build-setup.yml` installs Rust, runs
+installer validation tests and publishes the standalone executable. Download
+[Garam-Setup-0.3.0.exe](https://github.com/Garamisericorde/garam-apps/releases/download/setup-v0.3.0/Garam-Setup-0.3.0.exe).
 
 For local builds install Rust and Visual C++ build tools, then run npm ci and
 npm run build in this directory. npm run ui:build checks the UI without Rust.
@@ -39,9 +39,8 @@ Rust validates release URLs, filenames, checksums and archive entry points. ZIP
 extraction rejects escaping paths and symlinks and limits file count and size.
 
 Version 0.1.x supports only the earlier EXE-only schema and raw-branch catalog.
-Use version 0.2.1 for the complete application list.
 
-## Network-safe installation flow (0.2.1)
+## Network-safe installation flow
 
 All selected packages are downloaded and verified before any installer runs.
 If a download or checksum fails, no new applications or network profiles are
@@ -58,3 +57,9 @@ arguments cannot override this explicit choice. G-DPI packages older than
 setup invokes that package's service removal script to restore its DNS policy.
 
 Version 0.2.0 should no longer be used on a working Vodafone configuration.
+
+G-DPI packages starting at app version 0.2.0 install their own signed automatic
+update and provider-support checks. The picker explains this behavior before
+installation. A discontinued provider is stopped with a user notice and DNS
+restoration. Existing services are still preserved by Setup; users upgrading
+an older G-DPI package must run the new provider BAT explicitly.

@@ -560,6 +560,13 @@ mod tests {
         assert_eq!(result.failed.len(), 2);
     }
     #[test]
+    fn dpi_receives_only_the_selected_profile() {
+        let mut apps = vec![app("g-dpi")];
+        apps[0].version = "0.3.0".into();
+        configure_dpi_choice(&mut apps, "vodafone-zapret", false).unwrap();
+        assert_eq!(apps[0].installer.silent_args, ["-Profile", "vodafone-zapret"]);
+    }
+    #[test]
     fn rejects_escaping_paths() {
         for path in ["../evil.ps1", "/evil.ps1", "C:/evil.ps1", "folder\\evil.ps1", ""] { assert!(!safe_relative(path)); }
         assert!(safe_relative("G-DPI-0.1.0/service/install.ps1"));

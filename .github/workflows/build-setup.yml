@@ -38,13 +38,26 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          $version = (Get-Content 'installer/bootstrapper/src-tauri/tauri.conf.json' -Raw | ConvertFrom-Json).package.version
+          $tag = "setup-v$version"
+          $asset = "Garam-Setup-$version.exe"
           $binary = 'installer/bootstrapper/src-tauri/target/release/Garam Setup.exe'
           if (!(Test-Path $binary)) { $binary = 'installer/bootstrapper/src-tauri/target/release/garam-setup.exe' }
-          Copy-Item $binary 'Garam-Setup-0.2.1.exe'
-          gh release view setup-v0.2.1 --repo $env:GITHUB_REPOSITORY
+          Copy-Item -LiteralPath $binary -Destination $asset
+
+          $releaseJson = gh release view $tag --repo $env:GITHUB_REPOSITORY --json assets,isDraft
           if ($LASTEXITCODE -ne 0) {
-            gh release create setup-v0.2.1 --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title 'Garam Setup 0.2.1' --notes 'Downloads and verifies all packages before installation. Preserves existing G-DPI profiles and requires a provider for new G-DPI installations.'
-            if ($LASTEXITCODE -ne 0) { throw 'Release creation failed' }
+            gh release create $tag $asset --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "Garam Setup $version" --latest --notes 'Installs selected Windows apps from the live catalog and preserves existing G-DPI service profiles.'
+            if ($LASTEXITCODE -ne 0) { throw 'Setup release creation failed' }
+            return
           }
-          gh release upload setup-v0.2.1 Garam-Setup-0.2.1.exe --repo $env:GITHUB_REPOSITORY --clobber
-          if ($LASTEXITCODE -ne 0) { throw 'Setup upload failed' }
+
+          $release = $releaseJson | ConvertFrom-Json
+          if ($asset -notin $release.assets.name) {
+            gh release upload $tag $asset --repo $env:GITHUB_REPOSITORY
+            if ($LASTEXITCODE -ne 0) { throw 'Setup upload failed' }
+          }
+          if ($release.isDraft) {
+            gh release edit $tag --repo $env:GITHUB_REPOSITORY --draft=false --latest
+            if ($LASTEXITCODE -ne 0) { throw 'Setup release publication failed' }
+          }
